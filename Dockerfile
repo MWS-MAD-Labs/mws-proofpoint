@@ -29,7 +29,8 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 # Copy built application from builder
-COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
@@ -45,4 +46,4 @@ ENV HOSTNAME="0.0.0.0"
 EXPOSE 3000
 
 # Start the application (run migrations first, then start)
-CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
