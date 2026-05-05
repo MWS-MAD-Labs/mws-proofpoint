@@ -416,16 +416,25 @@ function PlanCreateWizard({
   defaultDepartmentId?: string;
   onSaved: (id: string) => void;
 }) {
-  const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
+  const defaultStartYear = new Date().getFullYear() + 1;
   const [form, setForm] = useState({
-    departmentId: defaultDepartmentId ?? "",
+    departmentId: defaultDepartmentId ?? departments[0]?.id ?? "",
     name: "",
-    startYear: new Date().getFullYear() + 1,
+    startYear: defaultStartYear,
     description: "",
     vision: "",
     mission: "",
   });
+
+  useEffect(() => {
+    const autoDepartmentId = defaultDepartmentId ?? departments[0]?.id ?? "";
+    setForm((current) => ({
+      ...current,
+      departmentId: current.departmentId || autoDepartmentId,
+      startYear: current.startYear || defaultStartYear,
+    }));
+  }, [defaultDepartmentId, departments, defaultStartYear]);
 
   const save = async () => {
     setSaving(true);
@@ -459,171 +468,72 @@ function PlanCreateWizard({
         </Link>
         <h1 className="text-4xl font-bold mt-2">Create strategic plan</h1>
         <p className="text-muted-foreground mt-2">
-          A short setup wizard creates the plan shell. The document builder
-          handles the deeper structure after creation.
+          Department and 5-year horizon are selected automatically. Add the
+          vision and mission to create the plan shell.
         </p>
       </div>
 
-      <div className="grid md:grid-cols-[240px_1fr] gap-6">
-        <Card className="glass-panel h-fit">
-          <CardContent className="p-4 space-y-2">
-            {["Basics", "Vision & Mission", "Review"].map((label, index) => (
-              <button
-                key={label}
-                onClick={() => setStep(index + 1)}
-                className={`w-full text-left rounded-lg px-3 py-2 text-sm ${step === index + 1 ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
-              >
-                Step {index + 1}: {label}
-              </button>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card className="glass-panel">
-          <CardHeader>
-            <CardTitle>
-              {step === 1
-                ? "Plan basics"
-                : step === 2
-                  ? "Vision and mission"
-                  : "Review and create"}
-            </CardTitle>
-            <CardDescription>
-              {step === 1
-                ? "Choose the owning department and fixed 5-year start year."
-                : step === 2
-                  ? "Capture the strategic narrative before adding detailed structure."
-                  : "Confirm the plan shell before moving into the document builder."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {step === 1 && (
-              <>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Department</Label>
-                    <Select
-                      value={form.departmentId}
-                      onValueChange={(departmentId) =>
-                        setForm({ ...form, departmentId })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select department" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {departments.map((department) => (
-                          <SelectItem key={department.id} value={department.id}>
-                            {department.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Start year</Label>
-                    <Input
-                      type="number"
-                      value={form.startYear}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          startYear: Number(event.target.value),
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label>Plan name</Label>
-                  <Input
-                    value={form.name}
-                    onChange={(event) =>
-                      setForm({ ...form, name: event.target.value })
-                    }
-                    placeholder="2026–2030 Strategic Plan"
-                  />
-                </div>
-                <div>
-                  <Label>Description</Label>
-                  <Textarea
-                    value={form.description}
-                    onChange={(event) =>
-                      setForm({ ...form, description: event.target.value })
-                    }
-                    placeholder="Short planning context"
-                  />
-                </div>
-              </>
-            )}
-
-            {step === 2 && (
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Vision</Label>
-                  <Textarea
-                    className="min-h-48"
-                    value={form.vision}
-                    onChange={(event) =>
-                      setForm({ ...form, vision: event.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Mission</Label>
-                  <Textarea
-                    className="min-h-48"
-                    value={form.mission}
-                    onChange={(event) =>
-                      setForm({ ...form, mission: event.target.value })
-                    }
-                  />
-                </div>
-              </div>
-            )}
-
-            {step === 3 && (
-              <div className="rounded-xl border bg-muted/30 p-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="h-5 w-5 text-primary" />
-                  <b>{form.name || "Untitled strategic plan"}</b>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Department:{" "}
-                  {departments.find(
-                    (department) => department.id === form.departmentId,
-                  )?.name ?? "Not selected"}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Horizon: {form.startYear}–{Number(form.startYear) + 4}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  After creation, the next screen gives you a left outline and
-                  focused editor instead of a deep tree.
-                </p>
-              </div>
-            )}
-
-            <div className="flex justify-between pt-4">
-              <Button
-                variant="outline"
-                disabled={step === 1}
-                onClick={() => setStep(step - 1)}
-              >
-                Back
-              </Button>
-              {step < 3 ? (
-                <Button onClick={() => setStep(step + 1)}>Continue</Button>
-              ) : (
-                <Button disabled={saving} onClick={save}>
-                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Create and open builder
-                </Button>
-              )}
+      <Card className="glass-panel">
+        <CardHeader>
+          <CardTitle>Vision and mission</CardTitle>
+          <CardDescription>
+            The plan will be created for{" "}
+            <span className="font-medium text-foreground">
+              {departments.find(
+                (department) => department.id === form.departmentId,
+              )?.name ?? "your department"}
+            </span>{" "}
+            with a fixed horizon of {form.startYear}–
+            {Number(form.startYear) + 4}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <Label>Vision</Label>
+              <Textarea
+                className="min-h-48"
+                value={form.vision}
+                onChange={(event) =>
+                  setForm({ ...form, vision: event.target.value })
+                }
+                placeholder="Describe the future state this department is working toward."
+              />
             </div>
-          </CardContent>
-        </Card>
-      </div>
+            <div>
+              <Label>Mission</Label>
+              <Textarea
+                className="min-h-48"
+                value={form.mission}
+                onChange={(event) =>
+                  setForm({ ...form, mission: event.target.value })
+                }
+                placeholder="Describe how the department will achieve the vision."
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-muted/30 p-4 space-y-2">
+            <div className="flex items-center gap-2 font-medium">
+              <BookOpen className="h-5 w-5 text-primary" />
+              {form.startYear}–{Number(form.startYear) + 4} Strategic Plan
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Department:{" "}
+              {departments.find(
+                (department) => department.id === form.departmentId,
+              )?.name ?? "Automatically selected"}
+            </p>
+          </div>
+
+          <div className="flex justify-end pt-4">
+            <Button disabled={saving || !form.departmentId} onClick={save}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Create and open builder
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
