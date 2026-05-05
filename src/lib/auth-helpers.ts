@@ -17,19 +17,19 @@ interface AuthResult {
 }
 
 /**
- * Periksa apakah user sudah login.
- * Return { user, response: null } jika ok.
- * Return { user: null, response: 401 } jika belum login.
+ * Check whether the user is logged in.
+ * Returns { user, response: null } if authenticated.
+ * Returns { user: null, response: 401 } if not logged in.
  */
 export async function requireAuth(): Promise<AuthResult> {
-  // ✅ auth() adalah pengganti getServerSession di Next Auth v5
+  // auth() replaces getServerSession in Next Auth v5
   const session = await auth();
 
   if (!session?.user) {
     return {
       user: null,
       response: NextResponse.json(
-        { error: "Unauthorized. Silakan login terlebih dahulu." },
+        { error: "Unauthorized. Please log in first." },
         { status: 401 }
       ),
     };
@@ -39,14 +39,14 @@ export async function requireAuth(): Promise<AuthResult> {
 }
 
 /**
- * Periksa login + kepemilikan role.
+ * Check login status and role ownership.
  *
- * Contoh:
- *   requireRole("admin")             → hanya admin
- *   requireRole("manager", "admin")  → manager ATAU admin
- *   requireRole("staff", "admin")    → staff ATAU admin
+ * Examples:
+ *   requireRole("admin")             → admin only
+ *   requireRole("manager", "admin")  → manager OR admin
+ *   requireRole("staff", "admin")    → staff OR admin
  *
- * ✅ Admin selalu lolos semua requireRole secara otomatis.
+ * Admin always passes all requireRole checks automatically.
  */
 export async function requireRole(...roles: string[]): Promise<AuthResult> {
   const { user, response } = await requireAuth();
@@ -60,7 +60,7 @@ export async function requireRole(...roles: string[]): Promise<AuthResult> {
     return {
       user: null,
       response: NextResponse.json(
-        { error: `Forbidden. Akses memerlukan salah satu role: ${roles.join(", ")}.` },
+        { error: `Forbidden. One of the following roles is required: ${roles.join(", ")}.` },
         { status: 403 }
       ),
     };

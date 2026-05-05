@@ -103,11 +103,15 @@ export async function POST(request: Request) {
         const body = await request.json();
         const { name, description, department_id, is_global } = body;
 
+        const { template_type } = body;
+        const validTemplateTypes = ["KPI_APPRAISAL", "CLASSROOM_OBSERVATION", "GENERIC"];
+        const finalTemplateType = validTemplateTypes.includes(template_type) ? template_type : "KPI_APPRAISAL";
+
         const newTemplate = await queryOne(
-            `INSERT INTO rubric_templates (name, description, department_id, is_global, created_by)
-       VALUES ($1, $2, $3, $4, $5)
+            `INSERT INTO rubric_templates (name, description, department_id, is_global, created_by, template_type)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-            [name, description ?? null, department_id ?? null, is_global ?? false, session.user.id]
+            [name, description ?? null, department_id ?? null, is_global ?? false, session.user.id, finalTemplateType]
         );
 
         return NextResponse.json({ data: newTemplate }, { status: 201 });

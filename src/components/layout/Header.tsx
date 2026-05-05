@@ -17,6 +17,7 @@ import {
   Moon,
   Sun,
   Settings,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,7 +40,6 @@ export function Header({ className }: HeaderProps) {
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
-    // Check initial theme from localStorage or document
     const savedTheme = localStorage.getItem("theme");
     const isDarkMode = savedTheme
       ? savedTheme === "dark"
@@ -47,7 +47,6 @@ export function Header({ className }: HeaderProps) {
 
     setIsDark(isDarkMode);
 
-    // Ensure class is applied if it was missing
     if (isDarkMode) {
       document.documentElement.classList.add("dark");
     } else {
@@ -78,6 +77,12 @@ export function Header({ className }: HeaderProps) {
       show: true,
     },
     {
+      path: "/observations",
+      label: "Observations",
+      icon: Eye,
+      show: true,
+    },
+    {
       path: "/manager",
       label: "Team",
       icon: Users,
@@ -85,7 +90,7 @@ export function Header({ className }: HeaderProps) {
     },
     {
       path: "/director",
-      label: "Organization",
+      label: "Organisation",
       icon: Building2,
       show: isDirector || isAdmin,
     },
@@ -225,10 +230,7 @@ export function Header({ className }: HeaderProps) {
                 </div>
 
                 <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
-                  <Link
-                    href="/dashboard"
-                    className="flex items-center gap-2 p-2"
-                  >
+                  <Link href="/dashboard" className="flex items-center gap-2 p-2">
                     <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center">
                       <LayoutDashboard className="h-4 w-4 text-foreground" />
                     </div>

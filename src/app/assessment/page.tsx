@@ -257,7 +257,12 @@ function AssessmentContent() {
                                                     <SelectItem key={t.id} value={t.id} className="focus:bg-primary focus:text-white">
                                                         <div className="flex flex-col py-1">
                                                             <span className="font-bold">{t.name}</span>
-                                                            <span className="text-[10px] opacity-70">Comprehensive KPI Framework</span>
+                                                            <span className="text-[10px] opacity-70">
+                                                                {t.template_type === 'KPI_APPRAISAL' ? 'KPI Appraisal'
+                                                                    : t.template_type === 'CLASSROOM_OBSERVATION' ? 'Classroom Observation'
+                                                                    : t.template_type === 'GENERIC' ? 'General Framework'
+                                                                    : 'Comprehensive KPI Framework'}
+                                                            </span>
                                                         </div>
                                                     </SelectItem>
                                                 ))

@@ -81,6 +81,7 @@ interface RubricTemplate {
   id: string;
   name: string;
   description: string | null;
+  template_type: 'KPI_APPRAISAL' | 'CLASSROOM_OBSERVATION' | 'GENERIC' | null;
   domains: {
     id: string;
     name: string;

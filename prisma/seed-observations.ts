@@ -113,7 +113,7 @@ async function main() {
             break;
           }
         }
-      }
+      }git branch -M feature/obs-from-staging
 
       if (!rubric) {
         console.log(`⚠️  Skip obs ${obs.id}: rubric "${obs.staffName}" tidak ditemukan`);

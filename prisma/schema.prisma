@@ -23,31 +23,31 @@ model Department {
 }
 
 model User {
-  id                      String                  @id @default(dbgenerated("gen_random_uuid()"))
-  email                   String                  @unique
-  passwordHash            String                  @map("password_hash")
-  emailVerified           Boolean                 @default(false) @map("email_verified")
-  status                  UserStatus              @default(active)
-  createdAt               DateTime                @default(now()) @map("created_at")
-  updatedAt               DateTime                @default(now()) @map("updated_at")
-  askedQuestions          AssessmentQuestion[]    @relation("AskedQuestions")
-  answeredQuestions       AssessmentQuestion[]    @relation("AnsweredQuestions")
-  directorAssessments     Assessment[]            @relation("DirectorAssessments")
-  managerAssessments      Assessment[]            @relation("ManagerAssessments")
-  returnedAssessments     Assessment[]            @relation("ReturnedAssessments")
-  assessments             Assessment[]            @relation("StaffAssessments")
-  notificationPreferences NotificationPreference?
-  notifications           Notification[]
-  profile                 Profile?
-  createdTemplates        RubricTemplate[]        @relation("TemplateCreator")
-  roles                   UserRole[]
-  observations            Observation[]           @relation("StaffObservations")
-  observationsAsManager   Observation[]           @relation("ManagerObservations")
-  observationsAsDirector  Observation[]           @relation("DirectorObservations")
-  directorId              String?                 @map("director_id")
-  director                User?                   @relation("UserHierarchy", fields: [directorId], references: [id])
-  managers                User[]                  @relation("UserHierarchy")
-  observationUpdates      ObservationUpdate[]     @relation("UpdatedByUser")
+  id                                         String                  @id @default(dbgenerated("gen_random_uuid()"))
+  email                                      String                  @unique
+  passwordHash                               String                  @map("password_hash")
+  emailVerified                              Boolean                 @default(false) @map("email_verified")
+  status                                     UserStatus              @default(active)
+  createdAt                                  DateTime                @default(now()) @map("created_at")
+  updatedAt                                  DateTime                @default(now()) @map("updated_at")
+  directorId                                 String?
+  askedQuestions                             AssessmentQuestion[]    @relation("AskedQuestions")
+  answeredQuestions                          AssessmentQuestion[]    @relation("AnsweredQuestions")
+  directorAssessments                        Assessment[]            @relation("DirectorAssessments")
+  managerAssessments                         Assessment[]            @relation("ManagerAssessments")
+  returnedAssessments                        Assessment[]            @relation("ReturnedAssessments")
+  assessments                                Assessment[]            @relation("StaffAssessments")
+  notificationPreferences                    NotificationPreference?
+  notifications                              Notification[]
+  observationUpdates                         ObservationUpdate[]     @relation("UpdatedByUser")
+  observationsAsDirector                     Observation[]           @relation("DirectorObservations")
+  observations_observations_managerIdTousers Observation[]           @relation("observations_managerIdTousers")
+  observations_observations_staffIdTousers   Observation[]           @relation("observations_staffIdTousers")
+  profile                                    Profile?
+  createdTemplates                           RubricTemplate[]        @relation("TemplateCreator")
+  roles                                      UserRole[]
+  users                                      User?                   @relation("usersTousers", fields: [directorId], references: [id])
+  other_users                                User[]                  @relation("usersTousers")
 
   @@index([status])
   @@map("users")
@@ -84,27 +84,29 @@ model UserRole {
 }
 
 model RubricTemplate {
-  id String @id @default(dbgenerated("gen_random_uuid()"))
-  name            String
-  description     String?
-  departmentId    String?          @map("department_id")
-  isGlobal        Boolean          @default(false) @map("is_global")
-  createdById     String?          @map("created_by")
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime         @default(now()) @map("updated_at")
-  assessments     Assessment[]
-  departmentRoles DepartmentRole[]
-  domains         KpiDomain[]
-  sections        RubricSection[]
-  createdBy       User?            @relation("TemplateCreator", fields: [createdById], references: [id])
-  department      Department?      @relation(fields: [departmentId], references: [id])
-  observations    Observation[]
+  id                  String                   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  name                String
+  description         String?
+  departmentId        String?                  @map("department_id")
+  isGlobal            Boolean                  @default(false) @map("is_global")
+  createdById         String?                  @map("created_by")
+  createdAt           DateTime                 @default(now()) @map("created_at")
+  updatedAt           DateTime                 @default(now()) @map("updated_at")
+  templateType        TemplateType             @default(KPI_APPRAISAL) @map("template_type")
+  assessments         Assessment[]
+  departmentRoles     DepartmentRole[]
+  domains             KpiDomain[]
+  observations        Observation[]
+  workflowAssignments RoleWorkflowAssignment[]
+  sections            RubricSection[]
+  createdBy           User?                    @relation("TemplateCreator", fields: [createdById], references: [id])
+  department          Department?              @relation(fields: [departmentId], references: [id])
 
   @@map("rubric_templates")
 }
 
 model RubricSection {
-  id         String            @id @default(dbgenerated("gen_random_uuid()")) // ✅ FIX #4: uuid() → gen_random_uuid()
+  id         String            @id
   templateId String            @map("template_id")
   name       String
   weight     Decimal?          @db.Decimal(5, 2)
@@ -117,7 +119,7 @@ model RubricSection {
 }
 
 model RubricIndicator {
-  id               String               @id @default(dbgenerated("gen_random_uuid()")) // ✅ FIX #4: uuid() → gen_random_uuid()
+  id               String               @id
   sectionId        String               @map("section_id")
   name             String
   description      String?
@@ -125,8 +127,8 @@ model RubricIndicator {
   evidenceGuidance String?              @map("evidence_guidance")
   scoreOptions     Json?                @map("score_options")
   createdAt        DateTime             @default(now()) @map("created_at")
-  answers          ObservationAnswer[]
   questions        AssessmentQuestion[]
+  answers          ObservationAnswer[]
   section          RubricSection        @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
   @@map("rubric_indicators")
@@ -219,60 +221,45 @@ model Assessment {
   @@map("assessments")
 }
 
-enum ObservationStatus {
-  draft
-  pending
-  submitted
-  reviewed
-  acknowledged
-}
-
-enum ObservationType {
-  SELF
-  MANAGER
-}
-
 model Observation {
-  id             String              @id @default(dbgenerated("gen_random_uuid()")) // ✅ FIX #4: uuid() → gen_random_uuid()
-  staffId        String              @map("staff_id")
-  managerId      String?             @map("manager_id")
-  directorId     String?             @map("director_id")
-  rubricId       String              @map("rubric_id")
-  status         ObservationStatus   @default(draft)
-  type           ObservationType     @default(MANAGER)
-  title          String?
-  description    String?
-  submittedAt    DateTime?           @map("submitted_at")
-  acknowledgedAt DateTime?           @map("acknowledged_at")
-  acknowledgedBy String?             @map("acknowledged_by")
-  createdAt      DateTime            @default(now()) @map("created_at")
-  updatedAt      DateTime            @updatedAt @map("updated_at")
-  updates        ObservationUpdate[]
+  id                                  String              @id
+  staffId                             String
+  managerId                           String?
+  directorId                          String?             @map("director_id")
+  rubricId                            String
+  status                              ObservationStatus   @default(draft)
+  type                                ObservationType     @default(MANAGER)
+  title                               String?
+  description                         String?
+  submittedAt                         DateTime?           @map("submitted_at")
+  acknowledgedAt                      DateTime?           @map("acknowledged_at")
+  acknowledgedBy                      String?             @map("acknowledged_by")
+  createdAt                           DateTime            @default(now()) @map("created_at")
+  updatedAt                           DateTime            @updatedAt @map("updated_at")
+  answers                             ObservationAnswer[]
+  updates                             ObservationUpdate[]
+  director                            User?               @relation("DirectorObservations", fields: [directorId], references: [id])
+  users_observations_managerIdTousers User?               @relation("observations_managerIdTousers", fields: [managerId], references: [id])
+  rubric_templates                    RubricTemplate      @relation(fields: [rubricId], references: [id])
+  users_observations_staffIdTousers   User                @relation("observations_staffIdTousers", fields: [staffId], references: [id], onDelete: Cascade)
 
-  staff    User           @relation("StaffObservations", fields: [staffId], references: [id], onDelete: Cascade)
-  manager  User?          @relation("ManagerObservations", fields: [managerId], references: [id])
-  director User?          @relation("DirectorObservations", fields: [directorId], references: [id])
-  rubric   RubricTemplate @relation(fields: [rubricId], references: [id])
-  answers  ObservationAnswer[]
-
-  @@index([staffId])
-  @@index([managerId])
   @@index([status])
   @@index([createdAt])
+  @@index([managerId])
+  @@index([staffId])
   @@map("observations")
 }
 
 model ObservationUpdate {
-  id            String            @id @default(dbgenerated("gen_random_uuid()")) // ✅ FIX #4: uuid() → gen_random_uuid()
+  id            String            @id
   observationId String            @map("observation_id")
   updatedById   String            @map("updated_by")
-  statusFrom    ObservationStatus @map("status_from")
-  statusTo      ObservationStatus @map("status_to")
+  statusFrom    ObservationStatus
+  statusTo      ObservationStatus
   notes         String?
   createdAt     DateTime          @default(now()) @map("created_at")
-
-  observation Observation @relation(fields: [observationId], references: [id], onDelete: Cascade)
-  updatedBy   User        @relation("UpdatedByUser", fields: [updatedById], references: [id])
+  observation   Observation       @relation(fields: [observationId], references: [id], onDelete: Cascade)
+  updatedBy     User              @relation("UpdatedByUser", fields: [updatedById], references: [id])
 
   @@index([observationId])
   @@index([updatedById])
@@ -280,18 +267,17 @@ model ObservationUpdate {
 }
 
 model ObservationAnswer {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) // ✅ FIX #4: uuid() → gen_random_uuid()
-  observationId String   @map("observation_id")
-  indicatorId   String   @map("indicator_id")
+  id            String          @id
+  observationId String          @map("observation_id")
+  indicatorId   String          @map("indicator_id")
   score         Int
-  note          String?  @db.VarChar(1000)
+  note          String?         @db.VarChar(1000)
   evidence      String?
-  evidenceFile  String?  @map("evidence_file")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  observation Observation     @relation(fields: [observationId], references: [id], onDelete: Cascade)
-  indicator   RubricIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  evidenceFile  String?         @map("evidence_file")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  indicator     RubricIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  observation   Observation     @relation(fields: [observationId], references: [id], onDelete: Cascade)
 
   @@unique([observationId, indicatorId])
   @@index([observationId])
@@ -300,37 +286,38 @@ model ObservationAnswer {
 }
 
 model AssessmentQuestion {
-  id            String           @id @default(dbgenerated("gen_random_uuid()")) // ✅ FIX #4: uuid() → gen_random_uuid()
-  assessmentId  String           @map("assessment_id")
-  indicatorId   String?          @map("indicator_id")
-  askedBy       String           @map("asked_by")
-  question      String
-  response      String?
-  respondedById String?          @map("responded_by")
-  respondedAt   DateTime?        @map("responded_at")
-  status        QuestionStatus
-  createdAt     DateTime         @default(now()) @map("created_at")
-  updatedAt     DateTime         @default(now()) @map("updated_at")
-  askedByUser   User             @relation("AskedQuestions", fields: [askedBy], references: [id])
-  assessment    Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  indicator     RubricIndicator? @relation(fields: [indicatorId], references: [id])
-  respondedByUser User?          @relation("AnsweredQuestions", fields: [respondedById], references: [id])
+  id              String           @id
+  assessmentId    String           @map("assessment_id")
+  indicatorId     String?          @map("indicator_id")
+  askedBy         String           @map("asked_by")
+  question        String
+  response        String?
+  respondedById   String?          @map("responded_by")
+  respondedAt     DateTime?        @map("responded_at")
+  status          QuestionStatus
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @default(now()) @map("updated_at")
+  askedByUser     User             @relation("AskedQuestions", fields: [askedBy], references: [id])
+  assessment      Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  indicator       RubricIndicator? @relation(fields: [indicatorId], references: [id])
+  respondedByUser User?            @relation("AnsweredQuestions", fields: [respondedById], references: [id])
 
   @@index([assessmentId])
   @@map("assessment_questions")
 }
 
 model DepartmentRole {
-  id                String             @id @default(dbgenerated("gen_random_uuid()"))
-  departmentId      String?            @map("department_id")
-  role              app_role
-  defaultTemplateId String?            @map("default_template_id")
-  name              String?
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @default(now()) @map("updated_at")
-  approvalWorkflows ApprovalWorkflow[]
-  defaultTemplate   RubricTemplate?    @relation(fields: [defaultTemplateId], references: [id])
-  department        Department?        @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  id                  String                   @id @default(dbgenerated("gen_random_uuid()"))
+  departmentId        String?                  @map("department_id")
+  role                app_role
+  defaultTemplateId   String?                  @map("default_template_id")
+  name                String?
+  createdAt           DateTime                 @default(now()) @map("created_at")
+  updatedAt           DateTime                 @default(now()) @map("updated_at")
+  approvalWorkflows   ApprovalWorkflow[]
+  defaultTemplate     RubricTemplate?          @relation(fields: [defaultTemplateId], references: [id])
+  department          Department?              @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  workflowAssignments RoleWorkflowAssignment[]
 
   @@unique([departmentId, role])
   @@index([departmentId])
@@ -385,6 +372,59 @@ model NotificationPreference {
 
   @@index([userId])
   @@map("notification_preferences")
+}
+
+model WorkflowDefinition {
+  id          String                   @id @default(dbgenerated("gen_random_uuid()"))
+  name        String
+  type        TemplateType
+  description String?
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  assignments RoleWorkflowAssignment[]
+  steps       WorkflowStep[]
+
+  @@map("workflow_definitions")
+}
+
+model WorkflowStep {
+  id          String             @id @default(dbgenerated("gen_random_uuid()"))
+  workflowId  String             @map("workflow_id")
+  stepOrder   Int                @map("step_order")
+  actorRole   app_role           @map("actor_role")
+  actionType  WorkflowActionType @map("action_type")
+  description String?
+  workflow    WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@map("workflow_steps")
+}
+
+model RoleWorkflowAssignment {
+  id               String             @id @default(dbgenerated("gen_random_uuid()"))
+  departmentRoleId String             @map("department_role_id")
+  workflowId       String             @map("workflow_id")
+  rubricId         String?            @map("rubric_id")
+  isActive         Boolean            @default(true) @map("is_active")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  departmentRole   DepartmentRole     @relation(fields: [departmentRoleId], references: [id], onDelete: Cascade, map: "role_workflow_assignments_dept_role_fkey")
+  rubric           RubricTemplate?    @relation(fields: [rubricId], references: [id], map: "role_workflow_assignments_rubric_fkey")
+  workflow         WorkflowDefinition @relation(fields: [workflowId], references: [id], map: "role_workflow_assignments_workflow_fkey")
+
+  @@index([departmentRoleId], map: "role_workflow_assignments_dept_role_idx")
+  @@map("role_workflow_assignments")
+}
+
+enum ObservationStatus {
+  draft
+  submitted
+  reviewed
+  acknowledged
+  pending
+}
+
+enum ObservationType {
+  SELF
+  MANAGER
 }
 
 enum UserStatus {
@@ -443,4 +483,17 @@ enum app_role {
   manager
   director
   supervisor
+}
+
+enum TemplateType {
+  KPI_APPRAISAL
+  CLASSROOM_OBSERVATION
+  GENERIC
+}
+
+enum WorkflowActionType {
+  FILL_FORM
+  ACKNOWLEDGE
+  REVIEW
+  APPROVE
 }

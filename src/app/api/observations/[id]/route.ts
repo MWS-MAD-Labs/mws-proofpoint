@@ -16,21 +16,21 @@ export async function GET(
     const observation = await prisma.observation.findUnique({
       where: { id },
       include: {
-        staff: {
+        users_observations_staffIdTousers: {
           select: {
-            id: true,
-            email: true,
+            id:      true,
+            email:   true,
             profile: { select: { fullName: true } },
           },
         },
-        manager: {
+        users_observations_managerIdTousers: {
           select: {
-            id: true,
-            email: true,
+            id:      true,
+            email:   true,
             profile: { select: { fullName: true } },
           },
         },
-        rubric: {
+        rubric_templates: {
           include: {
             sections: {
               orderBy: { sortOrder: "asc" },
@@ -45,8 +45,8 @@ export async function GET(
           include: {
             updatedBy: {
               select: {
-                id: true,
-                email: true,
+                id:      true,
+                email:   true,
                 profile: { select: { fullName: true } },
               },
             },
@@ -58,19 +58,19 @@ export async function GET(
 
     if (!observation) {
       return NextResponse.json(
-        { error: "Observation tidak ditemukan." },
+        { error: "Observation not found." },
         { status: 404 }
       );
     }
 
-    const isAdmin    = user!.roles.includes("admin");
-    const isDirector = user!.roles.includes("director");
+    const isAdmin        = user!.roles.includes("admin");
+    const isDirector     = user!.roles.includes("director");
     const isOwnerManager = observation.managerId === user!.id;
     const isOwnerStaff   = observation.staffId   === user!.id;
 
     if (!isAdmin && !isDirector && !isOwnerManager && !isOwnerStaff) {
       return NextResponse.json(
-        { error: "Forbidden. Anda tidak memiliki akses ke observation ini." },
+        { error: "Forbidden. You do not have access to this observation." },
         { status: 403 }
       );
     }

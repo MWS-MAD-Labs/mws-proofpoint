@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth-helpers";
 import { notifyObservationSubmitted } from "@/lib/notifications/observation-notifications";
+import { randomUUID } from "crypto";
 
 export async function PATCH(
   request: NextRequest,
@@ -19,26 +20,34 @@ export async function PATCH(
       where: { id },
       include: {
         answers: true,
-        staff:   { include: { profile: true } },
-        manager: { include: { profile: true } },
-        rubric:  true,
+        users_observations_staffIdTousers: {
+          include: { profile: true },
+        },
+        users_observations_managerIdTousers: {
+          include: { profile: true },
+        },
+        rubric_templates: true,
       },
     });
 
     if (!observation) {
-      return NextResponse.json({ error: "Observation tidak ditemukan." }, { status: 404 });
+      return NextResponse.json({ error: "Observation not found." }, { status: 404 });
     }
+
+    const staff   = observation.users_observations_staffIdTousers;
+    const manager = observation.users_observations_managerIdTousers;
+    const rubric  = observation.rubric_templates;
 
     if (!isAdmin && observation.managerId !== user!.id) {
       return NextResponse.json(
-        { error: "Forbidden. Anda hanya bisa submit observasi yang ditugaskan kepada Anda." },
+        { error: "Forbidden. You can only submit observations assigned to you." },
         { status: 403 }
       );
     }
 
     if (observation.status !== "draft") {
       return NextResponse.json(
-        { error: "Hanya observation berstatus draft yang bisa disubmit." },
+        { error: "Only observations with status 'draft' can be submitted." },
         { status: 400 }
       );
     }
@@ -46,7 +55,7 @@ export async function PATCH(
     const filledAnswers = observation.answers.filter((a) => a.score > 0);
     if (filledAnswers.length === 0) {
       return NextResponse.json(
-        { error: "Isi minimal satu indikator sebelum submit." },
+        { error: "Please fill in at least one indicator before submitting." },
         { status: 400 }
       );
     }
@@ -54,36 +63,30 @@ export async function PATCH(
     const updated = await prisma.observation.update({
       where: { id },
       data: { status: "submitted", submittedAt: new Date() },
-      include: {
-        staff:   { include: { profile: true } },
-        manager: { include: { profile: true } },
-        rubric:  true,
-      },
     });
 
     await prisma.observationUpdate.create({
       data: {
+        id:            randomUUID(),
         observationId: id,
         updatedById:   user!.id,
         statusFrom:    "draft",
         statusTo:      "submitted",
-        notes:         `Submitted oleh ${isAdmin ? "admin" : "manager"}`,
+        notes:         `Submitted by ${isAdmin ? "admin" : "manager"}`,
       },
-    // ✅ type annotation
     }).catch((err: unknown) => console.error("ObservationUpdate error:", err));
 
     await notifyObservationSubmitted(
-      updated.staff.email,
-      updated.staff.profile?.fullName || updated.staff.email,
-      updated.rubric?.name || "Observation",
+      staff.email,
+      staff.profile?.fullName || staff.email,
+      rubric?.name || "Observation",
       updated.id
-    // ✅ type annotation
-    ).catch((err: unknown) => console.error("Email submit error:", err));
+    ).catch((err: unknown) => console.error("Submit email notification error:", err));
 
     return NextResponse.json(updated);
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const message = error instanceof Error ? error.message : String(error);
     console.error("PATCH /api/observations/[id]/submit error:", error);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
