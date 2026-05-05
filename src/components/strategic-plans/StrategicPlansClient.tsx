@@ -798,7 +798,12 @@ function DocumentBuilder({
       </div>
 
       <div className="grid xl:grid-cols-[320px_1fr_280px] gap-5 items-start">
-        <PlanOutline plan={plan} selected={selected} onSelect={handleSelect} />
+        <PlanOutline
+          plan={plan}
+          selected={selected}
+          onSelect={handleSelect}
+          onReload={onReload}
+        />
         <FocusedEditor
           plan={plan}
           selected={selected}
@@ -816,11 +821,35 @@ function PlanOutline({
   plan,
   selected,
   onSelect,
+  onReload,
 }: {
   plan: any;
   selected: SelectedItem;
   onSelect: (item: SelectedItem) => void;
+  onReload: () => Promise<void>;
 }) {
+  const [goalTitle, setGoalTitle] = useState("");
+
+  const addGoal = async () => {
+    try {
+      const goal = await jsonFetch<any>(
+        `/api/strategic-plans/${plan.id}/goals`,
+        {
+          method: "POST",
+          body: JSON.stringify({ title: goalTitle || "New strategic goal" }),
+        },
+      );
+      setGoalTitle("");
+      await onReload();
+      onSelect({ type: "goal", id: goal.id });
+    } catch (error) {
+      toast({
+        title: "Add goal failed",
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    }
+  };
   return (
     <Card className="glass-panel border-border/30 sticky top-24 max-h-[calc(100vh-8rem)] overflow-hidden flex flex-col">
       <CardHeader className="border-b border-border/40">
@@ -838,6 +867,38 @@ function PlanOutline({
           label="Plan metadata"
           onClick={() => onSelect({ type: "plan", id: plan.id })}
         />
+        {(plan.goals ?? []).length === 0 && (
+          <div className="rounded-lg border border-dashed border-border/60 p-3 space-y-3 bg-muted/20">
+            <div>
+              <p className="text-sm font-medium">No goals yet</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Start by adding the first strategic goal.
+              </p>
+            </div>
+            <Input
+              value={goalTitle}
+              onChange={(event) => setGoalTitle(event.target.value)}
+              placeholder="Goal title"
+            />
+            <Button className="w-full" size="sm" onClick={addGoal}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add first goal
+            </Button>
+          </div>
+        )}
+        {(plan.goals ?? []).length > 0 && (
+          <div className="pt-2 pb-1">
+            <Button
+              className="w-full"
+              size="sm"
+              variant="outline"
+              onClick={addGoal}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add goal
+            </Button>
+          </div>
+        )}
         {(plan.goals ?? []).map((goal: any) => (
           <div key={goal.id}>
             <OutlineButton
@@ -985,7 +1046,9 @@ function FocusedEditor({
     );
 
   if (selected.type === "plan")
-    return <PlanMetadataEditor plan={plan} onReload={onReload} />;
+    return (
+      <PlanMetadataEditor plan={plan} onReload={onReload} onSelect={onSelect} />
+    );
   if (selected.type === "goal")
     return (
       <GoalEditor
@@ -1019,9 +1082,11 @@ function FocusedEditor({
 function PlanMetadataEditor({
   plan,
   onReload,
+  onSelect,
 }: {
   plan: any;
   onReload: () => Promise<void>;
+  onSelect: (item: SelectedItem) => void;
 }) {
   const [form, setForm] = useState({
     name: plan.name ?? "",
@@ -1030,6 +1095,7 @@ function PlanMetadataEditor({
     mission: plan.mission ?? "",
     startYear: plan.start_year,
   });
+  const [goalTitle, setGoalTitle] = useState("");
 
   const save = async () => {
     try {
@@ -1042,6 +1108,27 @@ function PlanMetadataEditor({
     } catch (error) {
       toast({
         title: "Save failed",
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const addGoal = async () => {
+    try {
+      const goal = await jsonFetch<any>(
+        `/api/strategic-plans/${plan.id}/goals`,
+        {
+          method: "POST",
+          body: JSON.stringify({ title: goalTitle || "New strategic goal" }),
+        },
+      );
+      setGoalTitle("");
+      await onReload();
+      onSelect({ type: "goal", id: goal.id });
+    } catch (error) {
+      toast({
+        title: "Add goal failed",
         description: (error as Error).message,
         variant: "destructive",
       });
@@ -1109,7 +1196,33 @@ function PlanMetadataEditor({
             />
           </div>
         </div>
-        <Button onClick={save}>Save metadata</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={save}>Save metadata</Button>
+        </div>
+
+        {(plan.goals ?? []).length === 0 && (
+          <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-5 space-y-3">
+            <div>
+              <h3 className="font-semibold">Next: add your first goal</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Goals are the first level under the plan. After creating a goal,
+                you can add objectives under it, then programs under each
+                objective.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                value={goalTitle}
+                onChange={(event) => setGoalTitle(event.target.value)}
+                placeholder="e.g. Build a thriving innovation culture"
+              />
+              <Button onClick={addGoal}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add first goal
+              </Button>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
