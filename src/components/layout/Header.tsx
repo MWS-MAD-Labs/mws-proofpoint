@@ -17,6 +17,7 @@ import {
   Moon,
   Sun,
   Settings,
+  Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/ui/logo";
@@ -89,6 +90,12 @@ export function Header({ className }: HeaderProps) {
       label: "Organization",
       icon: Building2,
       show: isDirector || isAdmin,
+    },
+    {
+      path: "/strategic-plans",
+      label: "Strategic Plans",
+      icon: Target,
+      show: true,
     },
     {
       path: "/rubrics",
@@ -234,7 +241,10 @@ export function Header({ className }: HeaderProps) {
                 </DropdownMenuItem>
 
                 <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
-                  <Link href="/settings/notifications" className="flex items-center gap-2 p-2">
+                  <Link
+                    href="/settings/notifications"
+                    className="flex items-center gap-2 p-2"
+                  >
                     <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center">
                       <Settings className="h-4 w-4 text-foreground" />
                     </div>
