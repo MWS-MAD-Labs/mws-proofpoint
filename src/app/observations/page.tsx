@@ -243,7 +243,7 @@ function ScoreInput({
 
 export default function ObservationsPage() {
   const {
-    currentUser, roles, isManager, isStaff, isAdmin, isDirector, isLoading: sessionLoading,
+    currentUser, roles, isManager, isAdmin, isDirector, isLoading: sessionLoading,
   } = useCurrentUser();
 
   const [observations,      setObservations]      = useState<Observation[]>([]);
@@ -274,7 +274,8 @@ export default function ObservationsPage() {
       const list: Observation[] = Array.isArray(json) ? json : [];
       setObservations(list);
       if (list.length > 0 && !selected) {
-        loadDetail(list[0].id);
+        const first = list[0];
+      if (first) loadDetail(first.id);
       }
     } catch (err) {
       console.error('fetchObservations error:', err);

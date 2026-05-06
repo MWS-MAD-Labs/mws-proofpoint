@@ -17,7 +17,7 @@ async function verifyHeadOfCareData() {
         // Check Department
         const deptRes = await client.query("SELECT id FROM departments WHERE name = 'CARE'");
         if (deptRes.rows.length === 0) throw new Error('Department CARE not found');
-        const deptId = deptRes.rows[0].id;
+        void deptRes.rows[0].id;
         console.log('✓ Department found');
 
         // Check Template

@@ -43,7 +43,7 @@ function getScoreLabel(score: number | 'X' | null): string {
     4: "Exemplary"
   };
 
-  return labels[score as number];
+  return labels[score as number] ?? "";
 }
 
 function renderEvidenceContent(evidence: string | EvidenceItem[]) {

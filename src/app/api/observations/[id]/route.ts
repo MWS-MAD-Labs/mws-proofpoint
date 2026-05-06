@@ -1,10 +1,11 @@
 // src/app/api/observations/[id]/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth-helpers";
 
 export async function GET(
-  request: NextRequest,
+  // ✅ FIX: request tidak dipakai — prefix _
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -57,10 +58,7 @@ export async function GET(
     });
 
     if (!observation) {
-      return NextResponse.json(
-        { error: "Observation not found." },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Observation not found." }, { status: 404 });
     }
 
     const isAdmin        = user!.roles.includes("admin");
@@ -76,8 +74,9 @@ export async function GET(
     }
 
     return NextResponse.json(observation);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error("GET /api/observations/[id] error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

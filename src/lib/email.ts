@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer';
 
 const SMTP_HOST   = process.env.SMTP_HOST     || 'smtp.gmail.com';
 const SMTP_PORT   = parseInt(process.env.SMTP_PORT || '465');
-const SMTP_SECURE = process.env.SMTP_SECURE   === 'true';   // true untuk port 465
+const SMTP_SECURE = process.env.SMTP_SECURE   === 'true';
 const SMTP_USER   = process.env.SMTP_USER     || '';
 const SMTP_PASS   = process.env.SMTP_PASSWORD || process.env.SMTP_PASS || '';
 
@@ -31,15 +31,16 @@ async function getTransporter(): Promise<nodemailer.Transporter> {
     });
   }
 
-  // Verify sekali saja saat pertama kali digunakan
   if (!_verified) {
     try {
       await _transporter.verify();
       _verified = true;
       console.log(`✅ [EMAIL] SMTP connected: ${SMTP_HOST}:${SMTP_PORT} secure=${SMTP_SECURE}`);
-    } catch (err: any) {
-      _transporter = null; // reset supaya dicoba lagi berikutnya
-      throw new Error(`SMTP verify failed: ${err.message}`);
+    } catch (err: unknown) {
+      // ✅ FIX: err: any → err: unknown
+      const message = err instanceof Error ? err.message : String(err);
+      _transporter = null;
+      throw new Error(`SMTP verify failed: ${message}`);
     }
   }
 
@@ -79,7 +80,6 @@ export async function sendEmail(
     return { success: false, error: 'No recipient' };
   }
 
-  // Jika TEST_MODE aktif, alihkan ke TEST_EMAIL
   let actualTo      = to;
   let actualSubject = finalSubject;
   let actualHtml    = finalHtml;
@@ -111,10 +111,12 @@ export async function sendEmail(
     });
 
     console.log(`✅ [EMAIL] Sent to: ${actualTo} | Message-ID: ${info.messageId}`);
-    return { success: true, messageId: info.messageId };
-  } catch (error: any) {
-    console.error(`❌ [EMAIL] Failed to send to ${actualTo}:`, error.message);
-    return { success: false, error: error.message };
+    return { success: true, messageId: info.messageId as string };
+  } catch (error: unknown) {
+    // ✅ FIX: error: any → error: unknown
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`❌ [EMAIL] Failed to send to ${actualTo}:`, message);
+    return { success: false, error: message };
   }
 }
 
@@ -134,11 +136,15 @@ export function escapeHtml(str: string | null | undefined): string {
 
 const BASE_URL = process.env.NEXTAUTH_URL || 'http://localhost:3000';
 
+// ✅ FIX: observationId tidak dipakai → prefix _observationId (reserved untuk link detail masa depan)
 export async function notifyObservationCreated(
-  managerEmail: string, staffName: string, rubricName: string, observationId: string
+  managerEmail:  string,
+  staffName:     string,
+  rubricName:    string,
+  _observationId:string
 ) {
   return sendEmail({
-    to: managerEmail,
+    to:      managerEmail,
     subject: `Observation Baru: ${rubricName}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:600px;">
       <h2>Observation Baru Ditugaskan</h2>
@@ -159,10 +165,13 @@ export async function notifyObservationCreated(
 }
 
 export async function notifyObservationSubmitted(
-  staffEmail: string, staffName: string, rubricName: string, observationId: string
+  staffEmail:    string,
+  staffName:     string,
+  rubricName:    string,
+  _observationId:string
 ) {
   return sendEmail({
-    to: staffEmail,
+    to:      staffEmail,
     subject: `Hasil Observasi Siap: ${rubricName}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:600px;">
       <h2>Hasil Observasi Siap untuk Ditinjau</h2>
@@ -182,10 +191,14 @@ export async function notifyObservationSubmitted(
 }
 
 export async function notifyObservationAcknowledged(
-  adminEmail: string, staffName: string, managerName: string, rubricName: string, observationId: string
+  adminEmail:    string,
+  staffName:     string,
+  managerName:   string,
+  rubricName:    string,
+  _observationId:string
 ) {
   return sendEmail({
-    to: adminEmail,
+    to:      adminEmail,
     subject: `Staff Acknowledge Observasi: ${rubricName}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:600px;">
       <h2>Observasi Selesai Diakui</h2>
@@ -207,7 +220,7 @@ export async function notifyObservationAcknowledged(
   });
 }
 
-// ─── Assessment Notifications (tidak diubah) ──────────────────────────────────
+// ─── Assessment Notifications ──────────────────────────────────────────────────
 
 export const emailSubjects = {
   assessmentSubmitted:    (staffName: string) => `Assessment Submitted: ${staffName}`,
@@ -219,7 +232,7 @@ export const emailSubjects = {
 };
 
 export const emailTemplates = {
-  assessmentSubmitted: (data: any) => `
+  assessmentSubmitted: (data: Record<string, string>) => `
     <div style="font-family:Arial,sans-serif;max-width:600px;">
       <h2>Assessment Submitted</h2>
       <p>Manager <strong>${escapeHtml(data.managerName)}</strong> has submitted an assessment for <strong>${escapeHtml(data.staffName)}</strong>.</p>
@@ -232,28 +245,28 @@ export const emailTemplates = {
       <a href="${data.actionUrl}" style="display:inline-block;background:#16a34a;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;">Review Assessment</a>
     </div>`,
 
-  managerReviewCompleted: (data: any) => `
+  managerReviewCompleted: (data: Record<string, string>) => `
     <div style="font-family:Arial,sans-serif;max-width:600px;">
       <h2>Manager Review Completed</h2>
       <p>Director <strong>${escapeHtml(data.directorName)}</strong>, manager <strong>${escapeHtml(data.managerName)}</strong> has completed review for <strong>${escapeHtml(data.staffName)}</strong>.</p>
       <a href="${data.actionUrl}" style="display:inline-block;background:#2563eb;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;">Review</a>
     </div>`,
 
-  directorApproved: (data: any) => `
+  directorApproved: (data: Record<string, string>) => `
     <div style="font-family:Arial,sans-serif;max-width:600px;">
       <h2>Director Approved</h2>
       <p>Assessment for <strong>${escapeHtml(data.staffName)}</strong> has been approved.</p>
       <a href="${data.actionUrl}" style="display:inline-block;background:#7c3aed;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;">View Details</a>
     </div>`,
 
-  adminReleased: (data: any) => `
+  adminReleased: (data: Record<string, string>) => `
     <div style="font-family:Arial,sans-serif;max-width:600px;">
       <h2>Assessment Released</h2>
       <p>Dear <strong>${escapeHtml(data.staffName)}</strong>, your assessment has been released.</p>
       <a href="${data.actionUrl}" style="display:inline-block;background:#16a34a;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;">View Assessment</a>
     </div>`,
 
-  assessmentReturned: (data: any) => `
+  assessmentReturned: (data: Record<string, string>) => `
     <div style="font-family:Arial,sans-serif;max-width:600px;">
       <h2>Assessment Returned</h2>
       <p>Your assessment has been returned by <strong>${escapeHtml(data.returnedBy)}</strong>.</p>
@@ -263,7 +276,7 @@ export const emailTemplates = {
       <a href="${data.actionUrl}" style="display:inline-block;background:#f59e0b;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;">Revise Assessment</a>
     </div>`,
 
-  assessmentAcknowledged: (data: any) => `
+  assessmentAcknowledged: (data: Record<string, string>) => `
     <div style="font-family:Arial,sans-serif;max-width:600px;">
       <h2>Assessment Acknowledged</h2>
       <p><strong>${escapeHtml(data.staffName)}</strong> has acknowledged the assessment.</p>

@@ -1,5 +1,5 @@
 // src/lib/observation-workflow.ts
-import { PrismaClient, ObservationStatus, app_role } from '@prisma/client';
+import type { PrismaClient, ObservationStatus, app_role } from '@prisma/client';
 
 export enum WorkflowAction {
   CREATE = 'CREATE',
@@ -72,7 +72,7 @@ export function getTargetStatus(
   const transition = WORKFLOW_TRANSITIONS.find(
     t => t.from === currentStatus && t.action === action
   );
-  return transition?.to || null;
+  return transition?.to ?? null;
 }
 
 export function isTransitionAllowed(
@@ -107,38 +107,41 @@ export class ObservationWorkflowService {
     if (!staff) throw new Error('Staff not found');
 
     const rubric = await this.prisma.rubricTemplate.findUnique({
-      where: { id: rubricId }
+      where: { id: rubricId },
+      include: { sections: { include: { indicators: true } } }
     });
 
     if (!rubric) throw new Error('Rubric not found');
 
     const observation = await this.prisma.$transaction(async (tx) => {
+      // ✅ FIX: id wajib diisi — schema: Observation.id String @id (tanpa @default)
       const obs = await tx.observation.create({
         data: {
+          id:          crypto.randomUUID(),
           staffId,
-          managerId: createdBy,
+          managerId:   createdBy,
           rubricId,
-          status: 'draft',
-          type: 'MANAGER',
-          title: metadata?.title || `Observation - ${staff.profile?.fullName || staff.email}`,
-          description: metadata?.description || ''
+          status:      'draft',
+          type:        'MANAGER',
+          title:       metadata?.title ?? `Observation - ${staff.profile?.fullName ?? staff.email}`,
+          description: metadata?.description ?? ''
         },
         include: {
-          staff: { include: { profile: true } },
-          manager: { include: { profile: true } },
-          rubric: { include: { sections: { include: { indicators: true } } } }
+          users_observations_staffIdTousers:   { include: { profile: true } },
+          users_observations_managerIdTousers: { include: { profile: true } },
         }
       });
 
-      // Create answers untuk setiap indicator
+      // ✅ FIX: pakai rubric yang sudah di-include di atas, bukan dari obs.rubric
       const answers = [];
-      for (const section of obs.rubric.sections) {
+      for (const section of rubric.sections) {
         for (const indicator of section.indicators) {
           answers.push({
+            id:            crypto.randomUUID(), // ✅ ObservationAnswer.id juga wajib diisi
             observationId: obs.id,
-            indicatorId: indicator.id,
-            score: 0,
-            note: ''
+            indicatorId:   indicator.id,
+            score:         0,
+            note:          ''
           });
         }
       }
@@ -161,7 +164,10 @@ export class ObservationWorkflowService {
   ) {
     const observation = await this.prisma.observation.findUnique({
       where: { id: observationId },
-      include: { manager: true, staff: { include: { profile: true } } }
+      include: {
+        users_observations_managerIdTousers: true,
+        users_observations_staffIdTousers:   { include: { profile: true } }
+      }
     });
 
     if (!observation) throw new Error('Observation not found');
@@ -174,10 +180,9 @@ export class ObservationWorkflowService {
       throw new Error('You can only submit your assigned observations');
     }
 
-    const previousStatus = observation.status; // ✅ Simpan status sebelumnya untuk audit trail
+    const previousStatus = observation.status;
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      // Update jawaban tiap indicator
       for (const answer of answers) {
         await tx.observationAnswer.update({
           where: {
@@ -187,21 +192,23 @@ export class ObservationWorkflowService {
         });
       }
 
-      // Update status observation ke submitted
       const obs = await tx.observation.update({
         where: { id: observationId },
-        data: { status: 'submitted', submittedAt: new Date() },
-        include: { staff: { include: { profile: true } } }
+        data:  { status: 'submitted', submittedAt: new Date() },
+        include: {
+          users_observations_staffIdTousers: { include: { profile: true } }
+        }
       });
 
-      // ✅ FIX #2: Simpan riwayat perubahan status (audit trail)
+      // ✅ FIX: id wajib diisi — schema: ObservationUpdate.id String @id (tanpa @default)
       await tx.observationUpdate.create({
         data: {
-          observationId: observationId,
-          updatedById: submittedBy,
-          statusFrom: previousStatus,
-          statusTo: 'submitted',
-          notes: `Observation submitted by ${userRole}`
+          id:            crypto.randomUUID(),
+          observationId,
+          updatedById:   submittedBy,
+          statusFrom:    previousStatus,
+          statusTo:      'submitted',
+          notes:         `Observation submitted by ${userRole}`
         }
       });
 
@@ -219,7 +226,7 @@ export class ObservationWorkflowService {
   ) {
     const observation = await this.prisma.observation.findUnique({
       where: { id: observationId },
-      include: { staff: true }
+      include: { users_observations_staffIdTousers: true }
     });
 
     if (!observation) throw new Error('Observation not found');
@@ -232,28 +239,30 @@ export class ObservationWorkflowService {
       throw new Error('You can only acknowledge observations about yourself');
     }
 
-    const previousStatus = observation.status; // ✅ Simpan status sebelumnya untuk audit trail
+    const previousStatus = observation.status;
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      // Update status observation ke acknowledged
       const obs = await tx.observation.update({
         where: { id: observationId },
         data: {
-          status: 'acknowledged',
+          status:         'acknowledged',
           acknowledgedAt: new Date(),
-          acknowledgedBy: acknowledgedBy
+          acknowledgedBy
         },
-        include: { staff: { include: { profile: true } } }
+        include: {
+          users_observations_staffIdTousers: { include: { profile: true } }
+        }
       });
 
-      // ✅ FIX #2: Simpan riwayat perubahan status (audit trail)
+      // ✅ FIX: id wajib diisi — schema: ObservationUpdate.id String @id (tanpa @default)
       await tx.observationUpdate.create({
         data: {
-          observationId: observationId,
-          updatedById: acknowledgedBy,
-          statusFrom: previousStatus,
-          statusTo: 'acknowledged',
-          notes: feedback || `Observation acknowledged by ${userRole}`
+          id:            crypto.randomUUID(),
+          observationId,
+          updatedById:   acknowledgedBy,
+          statusFrom:    previousStatus,
+          statusTo:      'acknowledged',
+          notes:         feedback ?? `Observation acknowledged by ${userRole}`
         }
       });
 
@@ -265,7 +274,7 @@ export class ObservationWorkflowService {
 
   async getObservationHistory(observationId: string) {
     return await this.prisma.observationUpdate.findMany({
-      where: { observationId },
+      where:   { observationId },
       include: { updatedBy: { include: { profile: true } } },
       orderBy: { createdAt: 'asc' }
     });

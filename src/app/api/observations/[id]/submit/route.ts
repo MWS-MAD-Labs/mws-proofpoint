@@ -1,12 +1,13 @@
 // src/app/api/observations/[id]/submit/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth-helpers";
 import { notifyObservationSubmitted } from "@/lib/notifications/observation-notifications";
 import { randomUUID } from "crypto";
 
 export async function PATCH(
-  request: NextRequest,
+  // ✅ FIX: request tidak dipakai — prefix _
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -20,12 +21,8 @@ export async function PATCH(
       where: { id },
       include: {
         answers: true,
-        users_observations_staffIdTousers: {
-          include: { profile: true },
-        },
-        users_observations_managerIdTousers: {
-          include: { profile: true },
-        },
+        users_observations_staffIdTousers:   { include: { profile: true } },
+        // ✅ FIX: hapus users_observations_managerIdTousers karena tidak dipakai (variable manager dihapus)
         rubric_templates: true,
       },
     });
@@ -34,9 +31,8 @@ export async function PATCH(
       return NextResponse.json({ error: "Observation not found." }, { status: 404 });
     }
 
-    const staff   = observation.users_observations_staffIdTousers;
-    const manager = observation.users_observations_managerIdTousers;
-    const rubric  = observation.rubric_templates;
+    const staff  = observation.users_observations_staffIdTousers;
+    const rubric = observation.rubric_templates;
 
     if (!isAdmin && observation.managerId !== user!.id) {
       return NextResponse.json(
@@ -62,7 +58,7 @@ export async function PATCH(
 
     const updated = await prisma.observation.update({
       where: { id },
-      data: { status: "submitted", submittedAt: new Date() },
+      data:  { status: "submitted", submittedAt: new Date() },
     });
 
     await prisma.observationUpdate.create({
@@ -78,8 +74,8 @@ export async function PATCH(
 
     await notifyObservationSubmitted(
       staff.email,
-      staff.profile?.fullName || staff.email,
-      rubric?.name || "Observation",
+      staff.profile?.fullName ?? staff.email,
+      rubric?.name ?? "Observation",
       updated.id
     ).catch((err: unknown) => console.error("Submit email notification error:", err));
 

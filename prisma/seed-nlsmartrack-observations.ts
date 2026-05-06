@@ -1,147 +1,132 @@
-// =============================================================================
 // prisma/seed-nlsmartrack-observations.ts
 // Milestone 6: Migrasikan data observasi dari NLSmartrack ke database ProofPoint
 //
-// CARA MENJALANKAN:
-//   npx ts-node --project tsconfig.json prisma/seed-nlsmartrack-observations.ts
+// Standalone : npx tsx prisma/seed-nlsmartrack-observations.ts
+// Via seed.ts : import { seedNlsmartackObservations } from "./seed-nlsmartrack-observations.js"
 //
-// CATATAN PENTING tentang struktur data NLSmartrack (observations.json):
-//   - field "staffName"  → isinya NAMA RUBRIK (bukan nama staf!)
-//   - field "rubricName" → isinya NIY STAF (bukan nama rubrik!)
-//   - field "status"     → isinya NAMA STAF (bukan status!)
-//   - field "submittedAt"→ isinya STATUS sebenarnya ("Pending", "Submitted Acknowledged", dll)
+// CATATAN struktur data NLSmartrack (observations.json):
+//   field "staffName"   → isinya NAMA RUBRIK (bukan nama staf!)
+//   field "rubricName"  → isinya NIY STAF    (bukan nama rubrik!)
+//   field "status"      → isinya NAMA STAF   (bukan status!)
+//   field "submittedAt" → isinya STATUS sebenarnya ("Pending", "Submitted Acknowledged", dll)
 //
 // Total data: 82 record
-// =============================================================================
 
 import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "./prisma-client.js";
+import fs   from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-const prisma = new PrismaClient();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
 
-// ─── Import data JSON (pakai require karena resolveJsonModule) ─────────────────
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const dataObservasi = require("./observations.json") as Array<{
+interface NLSRecord {
   id:          string;
-  staffName:   string; // Perhatian: ini nama RUBRIK
-  rubricName:  string; // Perhatian: ini NIY staf
-  status:      string; // Perhatian: ini NAMA STAF
-  submittedAt: string; // Perhatian: ini STATUS sebenarnya
+  staffName:   string; // ← ini nama RUBRIK
+  rubricName:  string; // ← ini NIY staf
+  status:      string; // ← ini NAMA STAF
+  submittedAt: string; // ← ini STATUS sebenarnya
   detailUrl:   string;
-}>;
+}
 
-// ─── Peta nama rubrik dari NLSmartrack ke nama yang dipakai di ProofPoint ─────
+// ── Peta nama rubrik NLSmartrack → ProofPoint ──
 const PETA_RUBRIK: Record<string, string> = {
-  "DETAILED CLASSROOM OBSERVATION":           "DETAILED CLASSROOM OBSERVATION",
-  "CHECKLIST FOR DIRECT INSTRUCTION":         "CHECKLIST FOR DIRECT INSTRUCTION",
-  "CHECKLIST FOR DIFFERENTIATION":            "CHECKLIST FOR DIFFERENTIATION",
-  "CHECKLIST FOR LEARNING AND UNDERSTANDING": "CHECKLIST FOR LEARNING AND UNDERSTANDING",
-  "CLASSROOM DISPLAY CHECKLIST":              "CLASSROOM DISPLAY CHECKLIST",
-  "DELIVERY OF INSTRUCTION":                  "DELIVERY OF INSTRUCTION",
-  "FOCUS ON LEARNERS – SMALL GROUP OR IN PAIRING": "FOCUS ON LEARNERS – SMALL GROUP OR IN PAIRING",
-  "FOCUS ON LEARNERS – STUDENT ENGAGEMENT":   "FOCUS ON LEARNERS – STUDENT ENGAGEMENT",
-  "Lesson Preparation Walkthrough":           "Lesson Preparation Walkthrough",
-  "Special Education Teacher Supervision Instrument": "Special Education Teacher Supervision Instrument",
+  "DETAILED CLASSROOM OBSERVATION":                    "DETAILED CLASSROOM OBSERVATION",
+  "CHECKLIST FOR DIRECT INSTRUCTION":                  "CHECKLIST FOR DIRECT INSTRUCTION",
+  "CHECKLIST FOR DIFFERENTIATION":                     "CHECKLIST FOR DIFFERENTIATION",
+  "CHECKLIST FOR LEARNING AND UNDERSTANDING":          "CHECKLIST FOR LEARNING AND UNDERSTANDING",
+  "CLASSROOM DISPLAY CHECKLIST":                       "CLASSROOM DISPLAY CHECKLIST",
+  "DELIVERY OF INSTRUCTION":                           "DELIVERY OF INSTRUCTION",
+  "FOCUS ON LEARNERS – SMALL GROUP OR IN PAIRING":     "FOCUS ON LEARNERS – SMALL GROUP OR IN PAIRING",
+  "FOCUS ON LEARNERS – STUDENT ENGAGEMENT":            "FOCUS ON LEARNERS – STUDENT ENGAGEMENT",
+  "Lesson Preparation Walkthrough":                    "Lesson Preparation Walkthrough",
+  "Special Education Teacher Supervision Instrument":  "Special Education Teacher Supervision Instrument",
 };
 
-// ─── Helper: tentukan status database dari teks NLSmartrack ───────────────────
 type StatusDB = "draft" | "pending" | "submitted" | "acknowledged";
 
 function petakanStatus(submittedAt: string): StatusDB {
-  const teks = submittedAt.trim().replace(/\xa0/g, " "); // hapus non-breaking space
-
-  if (teks.toLowerCase().includes("acknowledged")) {
-    return "acknowledged";
-  }
-  if (teks.toLowerCase().includes("submitted")) {
-    return "submitted";
-  }
-  if (teks.toLowerCase() === "pending") {
-    return "pending";
-  }
+  const teks = submittedAt.trim().replace(/\xa0/g, " ");
+  if (teks.toLowerCase().includes("acknowledged")) return "acknowledged";
+  if (teks.toLowerCase().includes("submitted"))    return "submitted";
+  if (teks.toLowerCase() === "pending")            return "pending";
   return "draft";
 }
 
-// ─── Helper: apakah data ini adalah data test/dummy? ─────────────────────────
-function adalahDataTest(namaStaf: string): boolean {
-  const namaDummy = [
-    "observer test",
-    "observee tester",
-    "test observation",
-    "obstest",
-    "obsertvertest",
-  ];
-  return namaDummy.some((dummy) =>
-    namaStaf.toLowerCase().includes(dummy)
-  );
+function adalahDataTest(nama: string): boolean {
+  const namaDummy = ["observer test", "observee tester", "test observation", "obstest", "obsertvertest"];
+  return namaDummy.some((dummy) => nama.toLowerCase().includes(dummy));
 }
 
-// ─── Fungsi utama ─────────────────────────────────────────────────────────────
-async function main() {
-  console.log("═══════════════════════════════════════════════════");
-  console.log("  Migrasi Data Observasi dari NLSmartrack");
-  console.log("  Total data yang akan diproses:", dataObservasi.length);
-  console.log("═══════════════════════════════════════════════════\n");
+// ── Export agar bisa dipanggil dari seed.ts utama ──
+export async function seedNlsmartackObservations(prisma: PrismaClient): Promise<void> {
+  console.log("\n🔄 [seed-nlsmartrack] Mulai migrasi data observasi dari NLSmartrack...\n");
 
-  // 1. Cari user Admin (akan dijadikan creator dan default manager)
+  // ── Baca file JSON — pakai fs karena project pakai ESM (require tidak tersedia) ──
+  const jsonPath = path.join(__dirname, "observations.json");
+  if (!fs.existsSync(jsonPath)) {
+    console.warn(`⚠️  [seed-nlsmartrack] File tidak ditemukan: ${jsonPath}`);
+    console.warn(`   Lewati migrasi NLSmartrack. Taruh observations.json di folder prisma/ jika diperlukan.`);
+    return;
+  }
+
+  const dataObservasi: NLSRecord[] = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
+  console.log(`📋 Total data yang akan diproses: ${dataObservasi.length}\n`);
+
+  // ── 1. Pastikan admin ada ──
   const userAdmin = await prisma.user.findFirst({
     where:   { roles: { some: { role: "admin" } } },
     include: { profile: true },
   });
 
   if (!userAdmin) {
-    console.error("❌ Tidak ada user admin ditemukan!");
-    console.error("   Pastikan sudah menjalankan seed user terlebih dahulu.");
-    process.exit(1);
+    throw new Error("Tidak ada user admin. Pastikan seed user sudah dijalankan terlebih dahulu.");
   }
+  console.log(`✅ Admin: ${userAdmin.profile?.fullName || userAdmin.email}\n`);
 
-  console.log(`✅ Admin ditemukan: ${userAdmin.profile?.fullName || userAdmin.email}\n`);
-
-  // 2. Ambil atau buat semua rubrik yang dibutuhkan
+  // ── 2. Siapkan cache rubrik ──
   console.log("📋 Menyiapkan rubrik-rubrik...");
-  const cacheRubrik: Map<string, string> = new Map(); // namaRubrik → id
+  const cacheRubrik = new Map<string, string>(); // namaRubrik → id
 
   for (const namaRubrik of Object.values(PETA_RUBRIK)) {
-    let rubrik = await prisma.rubricTemplate.findFirst({
-      where: { name: namaRubrik },
-    });
+    let rubrik = await prisma.rubricTemplate.findFirst({ where: { name: namaRubrik } });
 
     if (!rubrik) {
-      // Buat rubrik jika belum ada
       rubrik = await prisma.rubricTemplate.create({
         data: {
-          name:        namaRubrik,
-          description: `Formulir observasi diimpor dari NLSmartrack`,
-          isGlobal:    true,
-          createdById: userAdmin.id,
+          name:         namaRubrik,
+          description:  "Formulir observasi diimpor dari NLSmartrack",
+          isGlobal:     true,
+          createdById:  userAdmin.id,
+          templateType: "CLASSROOM_OBSERVATION",
         },
       });
       console.log(`  ✅ Rubrik baru dibuat: "${namaRubrik}"`);
     } else {
-      console.log(`  ℹ️  Rubrik sudah ada: "${namaRubrik}"`);
+      console.log(`  ℹ️  Rubrik sudah ada : "${namaRubrik}"`);
     }
 
     cacheRubrik.set(namaRubrik, rubrik.id);
   }
 
+  // ── 3. Proses setiap record ──
   console.log("\n🔄 Memulai impor data observasi...\n");
 
-  // 3. Proses setiap record observasi
-  let berhasil  = 0;
-  let dilewati  = 0;
-  let tidakAda  = 0; // staf tidak ditemukan
-  let gagal     = 0;
+  let berhasil = 0;
+  let dilewati = 0;
+  let tidakAda = 0;
+  let gagal    = 0;
 
   for (const record of dataObservasi) {
     try {
-      // ── Petakan field (ingat: struktur JSON terbalik!) ──────────────────
-      const namaRubrikAsli = record.staffName.trim();    // ini nama rubrik
-      const niyStaf        = record.rubricName.trim();   // ini NIY staf
-      const namaStaf       = record.status              // ini nama staf
-        .replace(/,$/, "")                              // hapus trailing koma
-        .trim();
-      const statusAsli     = record.submittedAt;        // ini status sebenarnya
+      // Petakan field (struktur JSON NLSmartrack terbalik)
+      const namaRubrikAsli = record.staffName.trim();
+      const niyStaf        = record.rubricName.trim();
+      const namaStaf       = record.status.replace(/,$/, "").trim();
+      const statusAsli     = record.submittedAt;
 
-      // ── Skip data test/dummy ────────────────────────────────────────────
+      // Skip data test/dummy
       if (adalahDataTest(namaStaf) || adalahDataTest(namaRubrikAsli)) {
         console.log(`⏭️  [${record.id}] Dilewati (data test): "${namaStaf}"`);
         dilewati++;
@@ -154,31 +139,21 @@ async function main() {
         continue;
       }
 
-      // ── Cari user staf berdasarkan nama atau NIY ────────────────────────
+      // Cari staff by NIY dulu, lalu by nama
       let userStaf = null;
 
-      // Coba cari berdasarkan NIY dulu
       if (niyStaf && niyStaf !== "-----") {
         userStaf = await prisma.user.findFirst({
-          where: { profile: { niy: niyStaf } },
+          where:   { profile: { niy: niyStaf } },
           include: { profile: true },
         });
       }
 
-      // Jika tidak ketemu by NIY, coba by nama
       if (!userStaf) {
-        const kataNama = namaStaf
-          .split(/[,\s]+/)
-          .filter((k) => k.length > 2)
-          .slice(0, 2); // ambil 2 kata pertama
-
+        const kataNama = namaStaf.split(/[,\s]+/).filter((k) => k.length > 2).slice(0, 2);
         for (const kata of kataNama) {
           userStaf = await prisma.user.findFirst({
-            where: {
-              profile: {
-                fullName: { contains: kata, mode: "insensitive" },
-              },
-            },
+            where:   { profile: { fullName: { contains: kata, mode: "insensitive" } } },
             include: { profile: true },
           });
           if (userStaf) break;
@@ -191,7 +166,7 @@ async function main() {
         continue;
       }
 
-      // ── Tentukan rubrik ─────────────────────────────────────────────────
+      // Tentukan rubrik
       const namaRubrikDB = PETA_RUBRIK[namaRubrikAsli] || namaRubrikAsli;
       const rubrikId     = cacheRubrik.get(namaRubrikDB);
 
@@ -201,10 +176,7 @@ async function main() {
         continue;
       }
 
-      // ── Tentukan status ─────────────────────────────────────────────────
-      const statusDB = petakanStatus(statusAsli);
-
-      // ── Cek duplikat ────────────────────────────────────────────────────
+      // Cek duplikat
       const sudahAda = await prisma.observation.findFirst({
         where: {
           staffId:  userStaf.id,
@@ -219,19 +191,17 @@ async function main() {
         continue;
       }
 
-      // ── Buat observasi ──────────────────────────────────────────────────
-      const tglSubmit = (statusDB === "submitted" || statusDB === "acknowledged")
-        ? new Date()
-        : null;
+      // Buat observasi
+      const statusDB  = petakanStatus(statusAsli);
+      const tglSubmit = (statusDB === "submitted" || statusDB === "acknowledged") ? new Date() : null;
+      const tglAkui   = statusDB === "acknowledged" ? new Date() : null;
 
-      const tglAkui = statusDB === "acknowledged"
-        ? new Date()
-        : null;
-
+      // ✅ id wajib diisi manual — schema production: Observation.id String @id (tanpa @default)
       await prisma.observation.create({
         data: {
+          id:             crypto.randomUUID(),
           staffId:        userStaf.id,
-          managerId:      userAdmin.id,    // default ke admin
+          managerId:      userAdmin.id,
           rubricId:       rubrikId,
           status:         statusDB,
           type:           "MANAGER",
@@ -252,27 +222,31 @@ async function main() {
     }
   }
 
-  // ─── Ringkasan ──────────────────────────────────────────────────────────────
+  // ── Ringkasan ──
   console.log("\n═══════════════════════════════════════════════════");
   console.log("  Hasil Migrasi NLSmartrack");
   console.log("═══════════════════════════════════════════════════");
-  console.log(`  ✅ Berhasil diimpor : ${berhasil}`);
-  console.log(`  ⏭️  Dilewati (duplikat/test): ${dilewati}`);
-  console.log(`  ⚠️  Staf tidak ditemukan: ${tidakAda}`);
-  console.log(`  ❌ Gagal (error)    : ${gagal}`);
-  console.log(`  📋 Total diproses   : ${dataObservasi.length}`);
-  console.log("═══════════════════════════════════════════════════");
+  console.log(`  ✅ Berhasil diimpor          : ${berhasil}`);
+  console.log(`  ⏭️  Dilewati (duplikat/test)  : ${dilewati}`);
+  console.log(`  ⚠️  Staf tidak ditemukan      : ${tidakAda}`);
+  console.log(`  ❌ Gagal (error)              : ${gagal}`);
+  console.log(`  📋 Total diproses             : ${dataObservasi.length}`);
+  console.log("═══════════════════════════════════════════════════\n");
 
   if (tidakAda > 0) {
-    console.log(`\n💡 Tip: ${tidakAda} staf tidak ditemukan.`);
-    console.log("   Pastikan data user sudah di-seed, atau NIY di profil sudah diisi.");
-    console.log("   Anda bisa jalankan ulang script ini setelah data user dilengkapi.\n");
+    console.log(`💡 Tip: ${tidakAda} staf tidak ditemukan.`);
+    console.log(`   Pastikan data user sudah di-seed dan NIY di profil sudah diisi.`);
+    console.log(`   Script ini aman dijalankan ulang setelah data user dilengkapi.\n`);
   }
 }
 
-main()
-  .catch((err) => {
-    console.error("Fatal error:", err);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+// ── Standalone runner ──
+const isMain =
+  process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename);
+
+if (isMain) {
+  const prisma = createPrismaClient();
+  seedNlsmartackObservations(prisma)
+    .catch((e) => { console.error("💥 Fatal error:", e); process.exit(1); })
+    .finally(() => prisma.$disconnect());
+}

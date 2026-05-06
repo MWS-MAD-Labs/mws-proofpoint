@@ -17,7 +17,7 @@ async function verifyHeadOfSafeData() {
         // Check Department
         const deptRes = await client.query("SELECT id FROM departments WHERE name = 'SAFE'");
         if (deptRes.rows.length === 0) throw new Error('Department SAFE not found');
-        const deptId = deptRes.rows[0].id;
+        void deptRes.rows[0].id;
         console.log('✓ Department found');
 
         // Check Template

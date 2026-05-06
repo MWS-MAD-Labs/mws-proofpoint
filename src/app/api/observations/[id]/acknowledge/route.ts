@@ -1,12 +1,13 @@
 // src/app/api/observations/[id]/acknowledge/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth-helpers";
 import { notifyObservationAcknowledged } from "@/lib/notifications/observation-notifications";
 import { randomUUID } from "crypto";
 
 export async function PATCH(
-  request: NextRequest,
+  // ✅ FIX: request tidak dipakai — prefix _ agar tidak error noUnusedParameters
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -19,12 +20,8 @@ export async function PATCH(
     const observation = await prisma.observation.findUnique({
       where: { id },
       include: {
-        users_observations_staffIdTousers: {
-          include: { profile: true },
-        },
-        users_observations_managerIdTousers: {
-          include: { profile: true },
-        },
+        users_observations_staffIdTousers:   { include: { profile: true } },
+        users_observations_managerIdTousers: { include: { profile: true } },
         rubric_templates: true,
       },
     });
@@ -78,9 +75,9 @@ export async function PATCH(
     if (adminUser) {
       await notifyObservationAcknowledged(
         adminUser.email,
-        staff.profile?.fullName  || staff.email,
-        manager?.profile?.fullName || manager?.email || "Manager",
-        rubric?.name || "Observation",
+        staff.profile?.fullName  ?? staff.email,
+        manager?.profile?.fullName ?? manager?.email ?? "Manager",
+        rubric?.name ?? "Observation",
         updated.id
       ).catch((err: unknown) => console.error("Acknowledge email notification error:", err));
     }

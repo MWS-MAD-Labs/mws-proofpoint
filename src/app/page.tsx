@@ -1,7 +1,6 @@
 'use client';
 
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Activity, ArrowRight, Shield, BarChart3, Users, FileCheck, LogIn, Zap, Lock, TrendingUp } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";

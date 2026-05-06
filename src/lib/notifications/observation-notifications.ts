@@ -1,6 +1,4 @@
 // src/lib/notifications/observation-notifications.ts
-// ✅ sendEmail di project ini menerima 1 argumen object: { to, subject, html }
-
 import { sendEmail } from "@/lib/email";
 
 const BASE_URL = process.env.NEXTAUTH_URL || "http://localhost:3000";
@@ -15,15 +13,15 @@ function esc(str: string | null | undefined): string {
     .replace(/'/g, "&#39;");
 }
 
-/** Kirim ke Manager saat Admin membuat observation baru */
+// ✅ FIX: observationId tidak dipakai → prefix _ (reserved untuk link detail masa depan)
 export async function notifyObservationCreated(
-  managerEmail: string,
-  staffName: string,
-  rubricName: string,
-  observationId: string
+  managerEmail:   string,
+  staffName:      string,
+  rubricName:     string,
+  _observationId: string
 ) {
   return sendEmail({
-    to: managerEmail,
+    to:      managerEmail,
     subject: `Observation Baru: ${rubricName}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:600px;">
       <h2>Observation Baru Ditugaskan</h2>
@@ -43,15 +41,14 @@ export async function notifyObservationCreated(
   });
 }
 
-/** Kirim ke Staff saat Manager submit hasil observasi */
 export async function notifyObservationSubmitted(
-  staffEmail: string,
-  staffName: string,
-  rubricName: string,
-  observationId: string
+  staffEmail:     string,
+  staffName:      string,
+  rubricName:     string,
+  _observationId: string
 ) {
   return sendEmail({
-    to: staffEmail,
+    to:      staffEmail,
     subject: `Hasil Observasi Siap: ${rubricName}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:600px;">
       <h2>Hasil Observasi Siap untuk Ditinjau</h2>
@@ -70,16 +67,15 @@ export async function notifyObservationSubmitted(
   });
 }
 
-/** Kirim ke Admin saat Staff acknowledge */
 export async function notifyObservationAcknowledged(
-  adminEmail: string,
-  staffName: string,
-  managerName: string,
-  rubricName: string,
-  observationId: string
+  adminEmail:     string,
+  staffName:      string,
+  managerName:    string,
+  rubricName:     string,
+  _observationId: string
 ) {
   return sendEmail({
-    to: adminEmail,
+    to:      adminEmail,
     subject: `Staff Acknowledge Observasi: ${rubricName}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:600px;">
       <h2>Observasi Selesai Diakui</h2>

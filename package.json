@@ -4,22 +4,29 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "migrate:observations": "ts-node --esm --experimental-specifier-resolution=node scripts/migrate-observations.ts",
-    "dev": "next dev --turbopack",
+    "dev":   "next dev --turbopack",
     "build": "prisma generate && next build",
-    "seed:observations": "ts-node prisma/seed-observations.ts",
     "start": "next start",
-    "lint": "next lint",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate:dev": "prisma migrate dev",
+    "lint":  "next lint",
+
+    "db:generate":      "prisma generate",
+    "db:push":          "prisma db push",
+    "db:studio":        "prisma studio",
+
+    "db:migrate:dev":    "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
-    "db:migrate:reset": "prisma migrate reset",
-    "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:migrate:reset":  "prisma migrate reset",
+
+    "db:seed":                  "tsx prisma/seed.ts",
+    "db:seed:rubrics":          "tsx prisma/seed-rubrics.ts",
+    "db:seed:sections":         "tsx prisma/seed-sections.ts",
+    "db:seed:notifications":    "tsx prisma/seed-notification-preferences.ts",
+    "db:seed:observations":     "tsx prisma/seed-nlsmartrack-observations.ts",
+
+    "deploy": "prisma migrate deploy && npm run db:seed"
   },
   "prisma": {
-    "seed": "node prisma/seed.js"
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@auth/pg-adapter": "^1.11.1",
