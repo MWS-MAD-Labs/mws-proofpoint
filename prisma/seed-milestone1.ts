@@ -1,25 +1,21 @@
 // prisma/seed-milestone1.ts
-// Data migration untuk Milestone 1:
-//   - Buat WorkflowDefinition "Annual Appraisal"
-//   - Assign ke semua DepartmentRole yang ada
-//   - Pastikan semua rubric non-observation bertipe KPI_APPRAISAL
+// Data migration script for Milestone 1
+// Converts existing DepartmentRole configs into "Annual Appraisal" workflow assignments
 //
-// Standalone : npx tsx prisma/seed-milestone1.ts
-// Via seed.ts : import { seedMilestone1 } from "./seed-milestone1.js"
+// Usage: npx tsx prisma/seed-milestone1.ts
 
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
-import { createPrismaClient } from "./prisma-client.js";
-import path from "path";
-import { fileURLToPath } from "url";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-const __filename = fileURLToPath(import.meta.url);
+const connectionString = process.env.DATABASE_URL!;
+const adapter = new PrismaPg({ connectionString });
+const prisma = new PrismaClient({ adapter });
 
-// ✅ FIX: dikonversi jadi export function agar bisa dipanggil dari seed.ts
-//         menggunakan PrismaClient yang diterima sebagai parameter (konsisten)
-export async function seedMilestone1(prisma: PrismaClient): Promise<void> {
-  console.log("\n🚀 [seed-milestone1] Milestone 1 workflow migration...\n");
+async function main() {
+  console.log("🚀 Milestone 1: Running workflow data migration...\n");
 
-  // ── 1. Buat "Annual Appraisal" WorkflowDefinition jika belum ada ──────────
+  // ── 1. Create "Annual Appraisal" WorkflowDefinition if it does not exist ──
   let annualAppraisalWorkflow = await prisma.workflowDefinition.findFirst({
     where: { name: "Annual Appraisal" },
   });
@@ -27,30 +23,53 @@ export async function seedMilestone1(prisma: PrismaClient): Promise<void> {
   if (!annualAppraisalWorkflow) {
     annualAppraisalWorkflow = await prisma.workflowDefinition.create({
       data: {
-        name:        "Annual Appraisal",
-        type:        "KPI_APPRAISAL",
-        description: "Standard annual appraisal: staff self-assessment → manager review → director approval → acknowledgement",
+        name: "Annual Appraisal",
+        type: "KPI_APPRAISAL",
+        description:
+          "Standard annual appraisal workflow: staff self-assessment → manager review → director approval → acknowledgement",
         steps: {
           create: [
-            { stepOrder: 1, actorRole: "staff",    actionType: "FILL_FORM",   description: "Staff fills in self-assessment" },
-            { stepOrder: 2, actorRole: "manager",  actionType: "REVIEW",      description: "Manager performs review and scoring" },
-            { stepOrder: 3, actorRole: "director", actionType: "APPROVE",     description: "Director approves the appraisal result" },
-            { stepOrder: 4, actorRole: "staff",    actionType: "ACKNOWLEDGE", description: "Staff acknowledges the appraisal result" },
+            {
+              stepOrder: 1,
+              actorRole: "staff",
+              actionType: "FILL_FORM",
+              description: "Staff fills in self-assessment",
+            },
+            {
+              stepOrder: 2,
+              actorRole: "manager",
+              actionType: "REVIEW",
+              description: "Manager performs review and scoring",
+            },
+            {
+              stepOrder: 3,
+              actorRole: "director",
+              actionType: "APPROVE",
+              description: "Director approves the appraisal result",
+            },
+            {
+              stepOrder: 4,
+              actorRole: "staff",
+              actionType: "ACKNOWLEDGE",
+              description: "Staff acknowledges the appraisal result",
+            },
           ],
         },
       },
     });
-    console.log(`✅ WorkflowDefinition dibuat: "Annual Appraisal" (id: ${annualAppraisalWorkflow.id})`);
+    console.log(`✅ WorkflowDefinition created: "Annual Appraisal" (id: ${annualAppraisalWorkflow.id})`);
   } else {
-    console.log(`⏭️  WorkflowDefinition sudah ada: "Annual Appraisal" (id: ${annualAppraisalWorkflow.id})`);
+    console.log(`⏭️  WorkflowDefinition already exists: "Annual Appraisal" (id: ${annualAppraisalWorkflow.id})`);
   }
 
-  // ── 2. Assign ke semua DepartmentRole yang belum punya assignment ─────────
+  // ── 2. Fetch all existing DepartmentRoles ─────────────────────────────────
   const departmentRoles = await prisma.departmentRole.findMany({
-    include: { department: { select: { name: true } } },
+    include: {
+      department: { select: { name: true } },
+    },
   });
 
-  console.log(`\n📋 Ditemukan ${departmentRoles.length} DepartmentRole...`);
+  console.log(`\n📋 Found ${departmentRoles.length} DepartmentRole(s) to migrate...\n`);
 
   let created = 0;
   let skipped = 0;
@@ -59,12 +78,12 @@ export async function seedMilestone1(prisma: PrismaClient): Promise<void> {
     const existing = await prisma.roleWorkflowAssignment.findFirst({
       where: {
         departmentRoleId: deptRole.id,
-        workflowId:       annualAppraisalWorkflow.id,
+        workflowId: annualAppraisalWorkflow.id,
       },
     });
 
     if (existing) {
-      console.log(`  ⏭️  Skip: ${deptRole.department?.name ?? "(global)"} — ${deptRole.role}`);
+      console.log(`  ⏭️  Skip: ${deptRole.department?.name ?? "(no dept)"} — ${deptRole.role}`);
       skipped++;
       continue;
     }
@@ -72,30 +91,41 @@ export async function seedMilestone1(prisma: PrismaClient): Promise<void> {
     await prisma.roleWorkflowAssignment.create({
       data: {
         departmentRoleId: deptRole.id,
-        workflowId:       annualAppraisalWorkflow.id,
-        rubricId:         deptRole.defaultTemplateId ?? null,
-        isActive:         true,
+        workflowId: annualAppraisalWorkflow.id,
+        rubricId: deptRole.defaultTemplateId ?? null,
+        isActive: true,
       },
     });
 
     console.log(
-      `  ✅ Assigned: ${deptRole.department?.name ?? "(global)"} — ${deptRole.role}` +
-      (deptRole.defaultTemplateId ? " (with rubric)" : "")
+      `  ✅ Assigned: ${deptRole.department?.name ?? "(no dept)"} — ${deptRole.role}` +
+        (deptRole.defaultTemplateId ? " (with rubric)" : "")
     );
     created++;
   }
 
-  // ── 3. Pastikan rubric non-observation bertipe KPI_APPRAISAL ─────────────
-  console.log("\n📋 Memastikan rubric non-observation bertipe KPI_APPRAISAL...");
+  // ── 3. Ensure all existing rubrics are marked as KPI_APPRAISAL ───────────
+  console.log("\n📋 Confirming existing rubrics are marked as KPI_APPRAISAL...");
 
   const updateResult = await prisma.rubricTemplate.updateMany({
-    where: { NOT: { templateType: "CLASSROOM_OBSERVATION" } },
-    data:  { templateType: "KPI_APPRAISAL" },
+    where: {
+      NOT: { templateType: "CLASSROOM_OBSERVATION" },
+    },
+    data: {
+      templateType: "KPI_APPRAISAL",
+    },
   });
 
-  console.log(`  ✅ ${updateResult.count} rubric diupdate/dikonfirmasi sebagai KPI_APPRAISAL`);
+  console.log(`  ✅ ${updateResult.count} rubric(s) updated/confirmed as KPI_APPRAISAL`);
 
-  // ── 4. Summary ────────────────────────────────────────────────────────────
+  // ── 4. Summary report ─────────────────────────────────────────────────────
+  console.log("\n" + "=".repeat(55));
+  console.log("🎉 Milestone 1 migration complete!");
+  console.log(`   ✅ RoleWorkflowAssignments created : ${created}`);
+  console.log(`   ⏭️  Already existed (skipped)      : ${skipped}`);
+  console.log(`   📝 Rubrics updated to KPI_APPRAISAL: ${updateResult.count}`);
+  console.log("=".repeat(55));
+
   const [totalWorkflows, totalAssignments, kpiRubrics, obsRubrics] =
     await Promise.all([
       prisma.workflowDefinition.count(),
@@ -104,22 +134,17 @@ export async function seedMilestone1(prisma: PrismaClient): Promise<void> {
       prisma.rubricTemplate.count({ where: { templateType: "CLASSROOM_OBSERVATION" } }),
     ]);
 
-  console.log("\n🎉 [seed-milestone1] Selesai!");
-  console.log(`   ✅ RoleWorkflowAssignments dibuat : ${created}`);
-  console.log(`   ⏭️  Sudah ada (skip)              : ${skipped}`);
-  console.log(`   📝 Rubrics KPI_APPRAISAL          : ${kpiRubrics}`);
-  console.log(`   📝 Rubrics CLASSROOM_OBSERVATION  : ${obsRubrics}`);
-  console.log(`   📊 Total WorkflowDefinitions      : ${totalWorkflows}`);
-  console.log(`   📊 Total Assignments               : ${totalAssignments}\n`);
+  console.log("\n📊 Database state after migration:");
+  console.log(`   WorkflowDefinitions        : ${totalWorkflows}`);
+  console.log(`   RoleWorkflowAssignments    : ${totalAssignments}`);
+  console.log(`   Rubrics (KPI_APPRAISAL)    : ${kpiRubrics}`);
+  console.log(`   Rubrics (CLASSROOM_OBS)    : ${obsRubrics}`);
+  console.log("\n✅ Milestone 1 is ready for verification!\n");
 }
 
-// ── Standalone runner ──────────────────────────────────────────────────────────
-const isMain =
-  process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename);
-
-if (isMain) {
-  const prisma = createPrismaClient();
-  seedMilestone1(prisma)
-    .catch((e) => { console.error("💥 Fatal error:", e); process.exit(1); })
-    .finally(() => prisma.$disconnect());
-}
+main()
+  .catch((e) => {
+    console.error("\n💥 Milestone 1 migration error:", e);
+    process.exit(1);
+  })
+  .finally(() => prisma.$disconnect());
