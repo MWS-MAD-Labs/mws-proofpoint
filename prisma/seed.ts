@@ -1,15 +1,15 @@
 // prisma/seed.ts
-// Entry point untuk `prisma db seed` & deployment
+// Entry point for `prisma db seed` & deployment
 //
-// Urutan eksekusi:
+// Execution order:
 //   1. seedRubrics                 → rubric templates
 //   2. seedSections                → sections & indicators
-//   3. seedNotificationPreferences → preferences semua user aktif
-//   4. seedNlsmartackObservations  → migrasi data observasi lama
+//   3. seedNotificationPreferences → preferences for all active users
+//   4. seedNlsmartackObservations  → migrate legacy observation data
 //   5. seedMilestone1              → WorkflowDefinition + RoleWorkflowAssignment migration
 //
-// npm run db:seed            → semua seed (otomatis saat deploy)
-// npm run db:seed:milestone1 → milestone 1 saja
+// npm run db:seed            → run all seeds (automatic on deploy)
+// npm run db:seed:milestone1 → milestone 1 only
 // npm run deploy             → migrate + seed (production)
 
 import { createPrismaClient }            from "./prisma-client.js";
@@ -23,7 +23,7 @@ const prisma = createPrismaClient();
 
 async function main() {
   console.log("🌱 ═══════════════════════════════════════");
-  console.log("🌱  Proofpoint DB Seed — mulai...");
+  console.log("🌱  Proofpoint DB Seed — starting...");
   console.log("🌱 ═══════════════════════════════════════");
 
   await seedRubrics(prisma);
@@ -33,10 +33,10 @@ async function main() {
   await seedMilestone1(prisma);
 
   console.log("✅ ═══════════════════════════════════════");
-  console.log("✅  Semua seed selesai.");
+  console.log("✅  All seeds completed.");
   console.log("✅ ═══════════════════════════════════════");
 }
 
 main()
-  .catch((e) => { console.error("💥 Fatal error saat seeding:", e); process.exit(1); })
+  .catch((e) => { console.error("💥 Fatal error during seeding:", e); process.exit(1); })
   .finally(() => prisma.$disconnect());

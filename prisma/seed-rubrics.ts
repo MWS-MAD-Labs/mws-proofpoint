@@ -1,6 +1,6 @@
 // prisma/seed-rubrics.ts
-// Standalone : npx tsx prisma/seed-rubrics.ts
-// Via seed.ts : import { seedRubrics } from "./seed-rubrics.js"
+// Standalone: npx tsx prisma/seed-rubrics.ts
+// Via seed.ts: import { seedRubrics } from "./seed-rubrics.js"
 
 import { PrismaClient } from "@prisma/client";
 import { createPrismaClient } from "./prisma-client.js";
@@ -10,23 +10,23 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 
 const RUBRICS: { name: string; description: string; isGlobal: boolean }[] = [
-  { name: "DETAILED CLASSROOM OBSERVATION",                   description: "Observasi detail untuk kegiatan belajar mengajar di kelas",    isGlobal: true  },
-  { name: "CHECKLIST FOR DIRECT INSTRUCTION",                 description: "Checklist untuk instruksi langsung dalam pembelajaran",        isGlobal: true  },
-  { name: "Special Education Teacher Supervision Instrument", description: "Instrumen supervisi untuk guru pendidikan khusus",             isGlobal: true  },
-  { name: "CHECKLIST FOR LEARNING AND UNDERSTANDING",         description: "Checklist untuk pembelajaran dan pemahaman siswa",            isGlobal: true  },
-  { name: "FOCUS ON LEARNERS – STUDENT ENGAGEMENT",           description: "Fokus pada keterlibatan siswa dalam pembelajaran",            isGlobal: true  },
-  { name: "CHECKLIST FOR DIFFERENTIATION",                    description: "Checklist untuk diferensiasi pembelajaran",                   isGlobal: true  },
-  { name: "FOCUS ON LEARNERS – SMALL GROUP OR IN PAIRING",    description: "Fokus pada pembelajaran kelompok kecil atau berpasangan",     isGlobal: true  },
-  { name: "CLASSROOM DISPLAY CHECKLIST",                      description: "Checklist untuk display/penataan ruang kelas",                isGlobal: true  },
-  { name: "Lesson Preparation Walkthrough",                   description: "Walkthrough persiapan pembelajaran",                          isGlobal: true  },
-  { name: "DELIVERY OF INSTRUCTION",                          description: "Observasi penyampaian instruksi pembelajaran",                isGlobal: true  },
-  { name: "Test Observation", description: "Observasi untuk testing",                      isGlobal: false },
-  { name: "obstest",          description: "Rubric untuk testing observasi",               isGlobal: false },
-  { name: "obsertvertest",    description: "Rubric untuk testing observasi (alternatif)",  isGlobal: false },
+  { name: "DETAILED CLASSROOM OBSERVATION",                   description: "Detailed observation of classroom teaching and learning activities",          isGlobal: true  },
+  { name: "CHECKLIST FOR DIRECT INSTRUCTION",                 description: "Checklist for direct instruction in learning",                               isGlobal: true  },
+  { name: "Special Education Teacher Supervision Instrument", description: "Supervision instrument for special education teachers",                       isGlobal: true  },
+  { name: "CHECKLIST FOR LEARNING AND UNDERSTANDING",         description: "Checklist for student learning and understanding",                           isGlobal: true  },
+  { name: "FOCUS ON LEARNERS – STUDENT ENGAGEMENT",           description: "Focus on student engagement in learning",                                    isGlobal: true  },
+  { name: "CHECKLIST FOR DIFFERENTIATION",                    description: "Checklist for differentiated learning",                                      isGlobal: true  },
+  { name: "FOCUS ON LEARNERS – SMALL GROUP OR IN PAIRING",    description: "Focus on small group or paired learning",                                   isGlobal: true  },
+  { name: "CLASSROOM DISPLAY CHECKLIST",                      description: "Checklist for classroom display and arrangement",                            isGlobal: true  },
+  { name: "Lesson Preparation Walkthrough",                   description: "Walkthrough for lesson preparation",                                         isGlobal: true  },
+  { name: "DELIVERY OF INSTRUCTION",                          description: "Observation of instructional delivery",                                      isGlobal: true  },
+  { name: "Test Observation", description: "Observation for testing purposes",                    isGlobal: false },
+  { name: "obstest",          description: "Rubric for observation testing",                      isGlobal: false },
+  { name: "obsertvertest",    description: "Rubric for observation testing (alternative)",        isGlobal: false },
 ];
 
 export async function seedRubrics(prisma: PrismaClient): Promise<void> {
-  console.log("\n📚 [seed-rubrics] Mulai seeding rubric templates...\n");
+  console.log("\n📚 [seed-rubrics] Seeding rubric templates...\n");
 
   let successCount  = 0;
   let existingCount = 0;
@@ -61,11 +61,11 @@ export async function seedRubrics(prisma: PrismaClient): Promise<void> {
   }
 
   const total = await prisma.rubricTemplate.count();
-  console.log(`\n🎉 [seed-rubrics] Selesai!`);
-  console.log(`   ✅ Dibuat    : ${successCount}`);
-  console.log(`   ⏭️  Sudah ada : ${existingCount}`);
-  console.log(`   ❌ Error     : ${errorCount}`);
-  console.log(`   Total rubrics di DB: ${total}\n`);
+  console.log(`\n🎉 [seed-rubrics] Done!`);
+  console.log(`   ✅ Created  : ${successCount}`);
+  console.log(`   ⏭️  Existed  : ${existingCount}`);
+  console.log(`   ❌ Errors   : ${errorCount}`);
+  console.log(`   Total rubrics in DB: ${total}\n`);
 }
 
 // ── Standalone runner ──

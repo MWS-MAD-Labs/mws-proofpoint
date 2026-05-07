@@ -1,6 +1,6 @@
 // prisma/seed-notification-preferences.ts
-// Standalone : npx tsx prisma/seed-notification-preferences.ts
-// Via seed.ts : import { seedNotificationPreferences } from "./seed-notification-preferences.js"
+// Standalone: npx tsx prisma/seed-notification-preferences.ts
+// Via seed.ts: import { seedNotificationPreferences } from "./seed-notification-preferences.js"
 
 import { PrismaClient } from "@prisma/client";
 import { createPrismaClient } from "./prisma-client.js";
@@ -10,21 +10,20 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 
 export async function seedNotificationPreferences(prisma: PrismaClient): Promise<void> {
-  console.log("\n🔔 [seed-notification-preferences] Mulai seeding...\n");
+  console.log("\n🔔 [seed-notification-preferences] Seeding notification preferences...\n");
 
   const activeUsers = await prisma.user.findMany({
     where:  { status: "active" },
     select: { id: true },
   });
 
-  console.log(`📋 Ditemukan ${activeUsers.length} user aktif`);
+  console.log(`📋 Found ${activeUsers.length} active users`);
 
   let successCount = 0;
   let errorCount   = 0;
 
   for (const user of activeUsers) {
     try {
-      // ✅ FIX: Hapus assignment ke `result` yang tidak dipakai — langsung await tanpa assign
       await prisma.notificationPreference.upsert({
         where:  { userId: user.id },
         update: {},
@@ -42,16 +41,16 @@ export async function seedNotificationPreferences(prisma: PrismaClient): Promise
       successCount++;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error(`❌ Error user ${user.id}: ${message}`);
+      console.error(`❌ Error for user ${user.id}: ${message}`);
       errorCount++;
     }
   }
 
   const total = await prisma.notificationPreference.count();
-  console.log(`\n🎉 [seed-notification-preferences] Selesai!`);
-  console.log(`   ✅ Diproses  : ${successCount}`);
-  console.log(`   ❌ Error     : ${errorCount}`);
-  console.log(`   Total preferences di DB: ${total}\n`);
+  console.log(`\n🎉 [seed-notification-preferences] Done!`);
+  console.log(`   ✅ Processed : ${successCount}`);
+  console.log(`   ❌ Errors    : ${errorCount}`);
+  console.log(`   Total preferences in DB: ${total}\n`);
 }
 
 // ── Standalone runner ──

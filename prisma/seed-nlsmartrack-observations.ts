@@ -1,16 +1,16 @@
 // prisma/seed-nlsmartrack-observations.ts
-// Milestone 6: Migrasikan data observasi dari NLSmartrack ke database ProofPoint
+// Migrate observation data from NLSmartrack to ProofPoint database
 //
-// Standalone : npx tsx prisma/seed-nlsmartrack-observations.ts
-// Via seed.ts : import { seedNlsmartackObservations } from "./seed-nlsmartrack-observations.js"
+// Standalone: npx tsx prisma/seed-nlsmartrack-observations.ts
+// Via seed.ts: import { seedNlsmartackObservations } from "./seed-nlsmartrack-observations.js"
 //
-// CATATAN struktur data NLSmartrack (observations.json):
-//   field "staffName"   → isinya NAMA RUBRIK (bukan nama staf!)
-//   field "rubricName"  → isinya NIY STAF    (bukan nama rubrik!)
-//   field "status"      → isinya NAMA STAF   (bukan status!)
-//   field "submittedAt" → isinya STATUS sebenarnya ("Pending", "Submitted Acknowledged", dll)
+// NOTE: NLSmartrack data structure in observations.json has swapped fields:
+//   field "staffName"   → actually contains the RUBRIC NAME (not staff name!)
+//   field "rubricName"  → actually contains the STAFF NIY   (not rubric name!)
+//   field "status"      → actually contains the STAFF NAME  (not status!)
+//   field "submittedAt" → actually contains the STATUS      ("Pending", "Submitted Acknowledged", etc.)
 //
-// Total data: 82 record
+// Total records: 82
 
 import { PrismaClient } from "@prisma/client";
 import { createPrismaClient } from "./prisma-client.js";
@@ -23,15 +23,15 @@ const __dirname  = path.dirname(__filename);
 
 interface NLSRecord {
   id:          string;
-  staffName:   string; // ← ini nama RUBRIK
-  rubricName:  string; // ← ini NIY staf
-  status:      string; // ← ini NAMA STAF
-  submittedAt: string; // ← ini STATUS sebenarnya
+  staffName:   string; // ← actually RUBRIC NAME
+  rubricName:  string; // ← actually STAFF NIY
+  status:      string; // ← actually STAFF NAME
+  submittedAt: string; // ← actually the real STATUS
   detailUrl:   string;
 }
 
-// ── Peta nama rubrik NLSmartrack → ProofPoint ──
-const PETA_RUBRIK: Record<string, string> = {
+// ── Rubric name mapping: NLSmartrack → ProofPoint ──
+const RUBRIC_MAP: Record<string, string> = {
   "DETAILED CLASSROOM OBSERVATION":                    "DETAILED CLASSROOM OBSERVATION",
   "CHECKLIST FOR DIRECT INSTRUCTION":                  "CHECKLIST FOR DIRECT INSTRUCTION",
   "CHECKLIST FOR DIFFERENTIATION":                     "CHECKLIST FOR DIFFERENTIATION",
@@ -46,197 +46,189 @@ const PETA_RUBRIK: Record<string, string> = {
 
 type StatusDB = "draft" | "pending" | "submitted" | "acknowledged";
 
-function petakanStatus(submittedAt: string): StatusDB {
-  const teks = submittedAt.trim().replace(/\xa0/g, " ");
-  if (teks.toLowerCase().includes("acknowledged")) return "acknowledged";
-  if (teks.toLowerCase().includes("submitted"))    return "submitted";
-  if (teks.toLowerCase() === "pending")            return "pending";
+function mapStatus(submittedAt: string): StatusDB {
+  const text = submittedAt.trim().replace(/\xa0/g, " ");
+  if (text.toLowerCase().includes("acknowledged")) return "acknowledged";
+  if (text.toLowerCase().includes("submitted"))    return "submitted";
+  if (text.toLowerCase() === "pending")            return "pending";
   return "draft";
 }
 
-function adalahDataTest(nama: string): boolean {
-  const namaDummy = ["observer test", "observee tester", "test observation", "obstest", "obsertvertest"];
-  return namaDummy.some((dummy) => nama.toLowerCase().includes(dummy));
+function isTestData(name: string): boolean {
+  const testNames = ["observer test", "observee tester", "test observation", "obstest", "obsertvertest"];
+  return testNames.some((t) => name.toLowerCase().includes(t));
 }
 
-// ── Export agar bisa dipanggil dari seed.ts utama ──
+// ── Export so it can be called from the main seed.ts ──
 export async function seedNlsmartackObservations(prisma: PrismaClient): Promise<void> {
-  console.log("\n🔄 [seed-nlsmartrack] Mulai migrasi data observasi dari NLSmartrack...\n");
+  console.log("\n🔄 [seed-nlsmartrack] Starting NLSmartrack observation migration...\n");
 
-  // ── Baca file JSON — pakai fs karena project pakai ESM (require tidak tersedia) ──
   const jsonPath = path.join(__dirname, "observations.json");
   if (!fs.existsSync(jsonPath)) {
-    console.warn(`⚠️  [seed-nlsmartrack] File tidak ditemukan: ${jsonPath}`);
-    console.warn(`   Lewati migrasi NLSmartrack. Taruh observations.json di folder prisma/ jika diperlukan.`);
+    console.warn(`⚠️  [seed-nlsmartrack] File not found: ${jsonPath}`);
+    console.warn(`   Skipping NLSmartrack migration. Place observations.json in the prisma/ folder if needed.`);
     return;
   }
 
-  const dataObservasi: NLSRecord[] = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
-  console.log(`📋 Total data yang akan diproses: ${dataObservasi.length}\n`);
+  const records: NLSRecord[] = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
+  console.log(`📋 Total records to process: ${records.length}\n`);
 
-  // ── 1. Pastikan admin ada ──
-  const userAdmin = await prisma.user.findFirst({
+  // ── 1. Ensure admin user exists ──
+  const adminUser = await prisma.user.findFirst({
     where:   { roles: { some: { role: "admin" } } },
     include: { profile: true },
   });
 
-  if (!userAdmin) {
-    throw new Error("Tidak ada user admin. Pastikan seed user sudah dijalankan terlebih dahulu.");
+  if (!adminUser) {
+    throw new Error("No admin user found. Please run the user seed first.");
   }
-  console.log(`✅ Admin: ${userAdmin.profile?.fullName || userAdmin.email}\n`);
+  console.log(`✅ Admin: ${adminUser.profile?.fullName ?? adminUser.email}\n`);
 
-  // ── 2. Siapkan cache rubrik ──
-  console.log("📋 Menyiapkan rubrik-rubrik...");
-  const cacheRubrik = new Map<string, string>(); // namaRubrik → id
+  // ── 2. Prepare rubric cache ──
+  console.log("📋 Preparing rubrics...");
+  const rubricCache = new Map<string, string>();
 
-  for (const namaRubrik of Object.values(PETA_RUBRIK)) {
-    let rubrik = await prisma.rubricTemplate.findFirst({ where: { name: namaRubrik } });
+  for (const rubricName of Object.values(RUBRIC_MAP)) {
+    let rubric = await prisma.rubricTemplate.findFirst({ where: { name: rubricName } });
 
-    if (!rubrik) {
-      rubrik = await prisma.rubricTemplate.create({
+    if (!rubric) {
+      rubric = await prisma.rubricTemplate.create({
         data: {
-          name:         namaRubrik,
-          description:  "Formulir observasi diimpor dari NLSmartrack",
+          name:         rubricName,
+          description:  "Observation form imported from NLSmartrack",
           isGlobal:     true,
-          createdById:  userAdmin.id,
+          createdById:  adminUser.id,
           templateType: "CLASSROOM_OBSERVATION",
         },
       });
-      console.log(`  ✅ Rubrik baru dibuat: "${namaRubrik}"`);
+      console.log(`  ✅ New rubric created: "${rubricName}"`);
     } else {
-      console.log(`  ℹ️  Rubrik sudah ada : "${namaRubrik}"`);
+      console.log(`  ℹ️  Rubric already exists: "${rubricName}"`);
     }
 
-    cacheRubrik.set(namaRubrik, rubrik.id);
+    rubricCache.set(rubricName, rubric.id);
   }
 
-  // ── 3. Proses setiap record ──
-  console.log("\n🔄 Memulai impor data observasi...\n");
+  // ── 3. Process each record ──
+  console.log("\n🔄 Starting observation import...\n");
 
-  let berhasil = 0;
-  let dilewati = 0;
-  let tidakAda = 0;
-  let gagal    = 0;
+  let imported = 0;
+  let skipped  = 0;
+  let notFound = 0;
+  let failed   = 0;
 
-  for (const record of dataObservasi) {
+  for (const record of records) {
     try {
-      // Petakan field (struktur JSON NLSmartrack terbalik)
-      const namaRubrikAsli = record.staffName.trim();
-      const niyStaf        = record.rubricName.trim();
-      const namaStaf       = record.status.replace(/,$/, "").trim();
-      const statusAsli     = record.submittedAt;
+      const rubricNameRaw = record.staffName.trim();
+      const staffNiy      = record.rubricName.trim();
+      const staffName     = record.status.replace(/,$/, "").trim();
+      const statusRaw     = record.submittedAt;
 
-      // Skip data test/dummy
-      if (adalahDataTest(namaStaf) || adalahDataTest(namaRubrikAsli)) {
-        console.log(`⏭️  [${record.id}] Dilewati (data test): "${namaStaf}"`);
-        dilewati++;
+      if (isTestData(staffName) || isTestData(rubricNameRaw)) {
+        console.log(`⏭️  [${record.id}] Skipped (test data): "${staffName}"`);
+        skipped++;
         continue;
       }
 
-      if (!namaStaf || namaStaf.length < 2) {
-        console.log(`⏭️  [${record.id}] Dilewati (nama staf kosong)`);
-        dilewati++;
+      if (!staffName || staffName.length < 2) {
+        console.log(`⏭️  [${record.id}] Skipped (empty staff name)`);
+        skipped++;
         continue;
       }
 
-      // Cari staff by NIY dulu, lalu by nama
-      let userStaf = null;
+      let staffUser = null;
 
-      if (niyStaf && niyStaf !== "-----") {
-        userStaf = await prisma.user.findFirst({
-          where:   { profile: { niy: niyStaf } },
+      if (staffNiy && staffNiy !== "-----") {
+        staffUser = await prisma.user.findFirst({
+          where:   { profile: { niy: staffNiy } },
           include: { profile: true },
         });
       }
 
-      if (!userStaf) {
-        const kataNama = namaStaf.split(/[,\s]+/).filter((k) => k.length > 2).slice(0, 2);
-        for (const kata of kataNama) {
-          userStaf = await prisma.user.findFirst({
-            where:   { profile: { fullName: { contains: kata, mode: "insensitive" } } },
+      if (!staffUser) {
+        const nameTokens = staffName.split(/[,\s]+/).filter((k) => k.length > 2).slice(0, 2);
+        for (const token of nameTokens) {
+          staffUser = await prisma.user.findFirst({
+            where:   { profile: { fullName: { contains: token, mode: "insensitive" } } },
             include: { profile: true },
           });
-          if (userStaf) break;
+          if (staffUser) break;
         }
       }
 
-      if (!userStaf) {
-        console.log(`⚠️  [${record.id}] Staf tidak ditemukan: "${namaStaf}" (NIY: ${niyStaf})`);
-        tidakAda++;
+      if (!staffUser) {
+        console.log(`⚠️  [${record.id}] Staff not found: "${staffName}" (NIY: ${staffNiy})`);
+        notFound++;
         continue;
       }
 
-      // Tentukan rubrik
-      const namaRubrikDB = PETA_RUBRIK[namaRubrikAsli] || namaRubrikAsli;
-      const rubrikId     = cacheRubrik.get(namaRubrikDB);
+      const rubricNameDB = RUBRIC_MAP[rubricNameRaw] ?? rubricNameRaw;
+      const rubricId     = rubricCache.get(rubricNameDB);
 
-      if (!rubrikId) {
-        console.log(`⚠️  [${record.id}] Rubrik tidak ada di cache: "${namaRubrikDB}"`);
-        dilewati++;
+      if (!rubricId) {
+        console.log(`⚠️  [${record.id}] Rubric not in cache: "${rubricNameDB}"`);
+        skipped++;
         continue;
       }
 
-      // Cek duplikat
-      const sudahAda = await prisma.observation.findFirst({
+      const existing = await prisma.observation.findFirst({
         where: {
-          staffId:  userStaf.id,
-          rubricId: rubrikId,
+          staffId:  staffUser.id,
+          rubricId: rubricId,
           title:    { contains: "[NLSmartrack]" },
         },
       });
 
-      if (sudahAda) {
-        console.log(`⏭️  [${record.id}] Sudah ada di DB: "${namaStaf}" + "${namaRubrikDB}"`);
-        dilewati++;
+      if (existing) {
+        console.log(`⏭️  [${record.id}] Already in DB: "${staffName}" + "${rubricNameDB}"`);
+        skipped++;
         continue;
       }
 
-      // Buat observasi
-      const statusDB  = petakanStatus(statusAsli);
-      const tglSubmit = (statusDB === "submitted" || statusDB === "acknowledged") ? new Date() : null;
-      const tglAkui   = statusDB === "acknowledged" ? new Date() : null;
+      const statusDB         = mapStatus(statusRaw);
+      const submittedDate    = (statusDB === "submitted" || statusDB === "acknowledged") ? new Date() : null;
+      const acknowledgedDate = statusDB === "acknowledged" ? new Date() : null;
 
-      // ✅ id wajib diisi manual — schema production: Observation.id String @id (tanpa @default)
       await prisma.observation.create({
         data: {
           id:             crypto.randomUUID(),
-          staffId:        userStaf.id,
-          managerId:      userAdmin.id,
-          rubricId:       rubrikId,
+          staffId:        staffUser.id,
+          managerId:      adminUser.id,
+          rubricId:       rubricId,
           status:         statusDB,
           type:           "MANAGER",
-          title:          `[NLSmartrack] Observasi — ${userStaf.profile?.fullName || namaStaf}`,
-          description:    `Diimpor dari NLSmartrack. ID asli: ${record.id}. NIY: ${niyStaf}.`,
-          submittedAt:    tglSubmit,
-          acknowledgedAt: tglAkui,
-          acknowledgedBy: tglAkui ? userAdmin.id : null,
+          title:          `[NLSmartrack] Observation — ${staffUser.profile?.fullName ?? staffName}`,
+          description:    `Imported from NLSmartrack. Original ID: ${record.id}. NIY: ${staffNiy}.`,
+          submittedAt:    submittedDate,
+          acknowledgedAt: acknowledgedDate,
+          acknowledgedBy: acknowledgedDate ? adminUser.id : null,
         },
       });
 
-      berhasil++;
-      console.log(`✅ [${record.id}] Berhasil: "${namaStaf}" (${statusDB}) — ${namaRubrikDB}`);
+      imported++;
+      console.log(`✅ [${record.id}] Imported: "${staffName}" (${statusDB}) — ${rubricNameDB}`);
 
-    } catch (err) {
-      gagal++;
+    } catch (err: unknown) {
+      failed++;
       console.error(`❌ [${record.id}] Error:`, err instanceof Error ? err.message : err);
     }
   }
 
-  // ── Ringkasan ──
+  // ── Summary ──
   console.log("\n═══════════════════════════════════════════════════");
-  console.log("  Hasil Migrasi NLSmartrack");
+  console.log("  NLSmartrack Migration Result");
   console.log("═══════════════════════════════════════════════════");
-  console.log(`  ✅ Berhasil diimpor          : ${berhasil}`);
-  console.log(`  ⏭️  Dilewati (duplikat/test)  : ${dilewati}`);
-  console.log(`  ⚠️  Staf tidak ditemukan      : ${tidakAda}`);
-  console.log(`  ❌ Gagal (error)              : ${gagal}`);
-  console.log(`  📋 Total diproses             : ${dataObservasi.length}`);
+  console.log(`  ✅ Successfully imported  : ${imported}`);
+  console.log(`  ⏭️  Skipped (dup/test)    : ${skipped}`);
+  console.log(`  ⚠️  Staff not found       : ${notFound}`);
+  console.log(`  ❌ Failed (errors)        : ${failed}`);
+  console.log(`  📋 Total processed        : ${records.length}`);
   console.log("═══════════════════════════════════════════════════\n");
 
-  if (tidakAda > 0) {
-    console.log(`💡 Tip: ${tidakAda} staf tidak ditemukan.`);
-    console.log(`   Pastikan data user sudah di-seed dan NIY di profil sudah diisi.`);
-    console.log(`   Script ini aman dijalankan ulang setelah data user dilengkapi.\n`);
+  if (notFound > 0) {
+    console.log(`💡 Tip: ${notFound} staff member(s) not found.`);
+    console.log(`   Ensure user data is seeded and NIY is filled in their profile.`);
+    console.log(`   This script is safe to re-run after user data is completed.\n`);
   }
 }
 

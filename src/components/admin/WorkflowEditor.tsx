@@ -96,10 +96,10 @@ interface WorkflowEditorProps {
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const ACTION_TYPES = [
-  { value: 'FILL_FORM',   label: 'Fill Form',   icon: FileSearch,    color: 'text-blue-500',   desc: 'Actor mengisi form/assessment' },
-  { value: 'REVIEW',      label: 'Review',       icon: Eye,           color: 'text-green-500',  desc: 'Actor melakukan review' },
-  { value: 'APPROVE',     label: 'Approve',      icon: CheckCircle2,  color: 'text-purple-500', desc: 'Actor memberikan persetujuan' },
-  { value: 'ACKNOWLEDGE', label: 'Acknowledge',  icon: ClipboardCheck,color: 'text-amber-500',  desc: 'Actor mengakui/menandatangani hasil' },
+  { value: 'FILL_FORM',   label: 'Fill Form',   icon: FileSearch,    color: 'text-blue-500',   desc: 'Actor fills in form/assessment' },
+  { value: 'REVIEW',      label: 'Review',       icon: Eye,           color: 'text-green-500',  desc: 'Actor performs review' },
+  { value: 'APPROVE',     label: 'Approve',      icon: CheckCircle2,  color: 'text-purple-500', desc: 'Actor gives approval' },
+  { value: 'ACKNOWLEDGE', label: 'Acknowledge',  icon: ClipboardCheck,color: 'text-amber-500',  desc: 'Actor acknowledges/signs the result' },
 ] as const;
 
 const WORKFLOW_TYPES = [
@@ -119,18 +119,18 @@ const ACTOR_ROLES = [
 // Default steps untuk tiap workflow type
 const DEFAULT_STEPS: Record<string, { actorRole: string; actionType: 'FILL_FORM' | 'ACKNOWLEDGE' | 'REVIEW' | 'APPROVE'; description: string }[]> = {
   KPI_APPRAISAL: [
-    { actorRole: 'staff',    actionType: 'FILL_FORM',   description: 'Staff mengisi self-assessment' },
-    { actorRole: 'manager',  actionType: 'REVIEW',      description: 'Manager melakukan review dan scoring' },
-    { actorRole: 'director', actionType: 'APPROVE',     description: 'Director memberikan persetujuan' },
-    { actorRole: 'staff',    actionType: 'ACKNOWLEDGE', description: 'Staff mengakui hasil appraisal' },
+    { actorRole: 'staff',    actionType: 'FILL_FORM',   description: 'Staff fills in self-assessment' },
+    { actorRole: 'manager',  actionType: 'REVIEW',      description: 'Manager performs review and scoring' },
+    { actorRole: 'director', actionType: 'APPROVE',     description: 'Director approves the result' },
+    { actorRole: 'staff',    actionType: 'ACKNOWLEDGE', description: 'Staff acknowledges appraisal result' },
   ],
   CLASSROOM_OBSERVATION: [
-    { actorRole: 'manager',  actionType: 'FILL_FORM',   description: 'Manager/Observer mengisi form observasi' },
-    { actorRole: 'staff',    actionType: 'ACKNOWLEDGE', description: 'Staff mengakui hasil observasi' },
+    { actorRole: 'manager',  actionType: 'FILL_FORM',   description: 'Manager/Observer fills in observation form' },
+    { actorRole: 'staff',    actionType: 'ACKNOWLEDGE', description: 'Staff acknowledges observation result' },
   ],
   GENERIC: [
-    { actorRole: 'staff',   actionType: 'FILL_FORM',   description: 'Mengisi form' },
-    { actorRole: 'manager', actionType: 'APPROVE',     description: 'Memberikan persetujuan' },
+    { actorRole: 'staff',   actionType: 'FILL_FORM',   description: 'Fill in form' },
+    { actorRole: 'manager', actionType: 'APPROVE',     description: 'Give approval' },
   ],
 };
 
@@ -280,7 +280,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
     const workflow = workflows.find(w => w.id === workflowId);
     if (!workflow) return;
 
-    // ✅ Milestone 2: tidak hardcode step — admin bebas pilih actor dan action
+    // ✅ Milestone 2: no hardcoded step — admin freely chooses actor and action
     const newStep = {
       actorRole:   'manager',
       actionType:  'FILL_FORM' as const,
@@ -324,7 +324,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
   };
 
   // ── Assignment CRUD ──
-  // ✅ Milestone 2: satu role bisa assign MULTIPLE workflows
+  // ✅ Milestone 2: one role can have MULTIPLE workflow assignments
   const handleAssignWorkflow = async () => {
     if (!selectedDeptRoleId || !workflowToAssign) return;
     setSaving(true);
@@ -453,7 +453,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                     {selectedDeptRole?.name ?? `${selectedDeptRole?.department_name ?? 'Global'} — ${selectedDeptRole?.role}`}
                   </Badge>
                 </CardTitle>
-                {/* ✅ Milestone 2: jelaskan bahwa multiple workflows didukung */}
+                {/* ✅ Milestone 2: multiple workflows per role are supported */}
                 <CardDescription>
                   A role can have multiple workflows — e.g. one for KPI Appraisal and one for Classroom Observation
                 </CardDescription>
@@ -529,7 +529,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="none">No rubric linked</SelectItem>
-                                  {/* ✅ Filter rubric sesuai workflow type */}
+                                  {/* ✅ Filter rubrics by workflow type */}
                                   {rubrics
                                     .filter(r => {
                                       if (a.workflow.type === 'CLASSROOM_OBSERVATION') {
@@ -679,7 +679,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                 className="h-16 text-sm resize-none"
               />
               <p className="text-xs text-muted-foreground">
-                Default steps akan dibuat otomatis sesuai tipe workflow. Kamu bisa edit setelah dibuat.
+                Default steps will be created automatically based on the workflow type. You can edit them after creation.
               </p>
               <div className="flex gap-2 justify-end">
                 <Button variant="outline" size="sm" onClick={() => { setShowNewWorkflow(false); setNewWorkflowName(''); setNewWorkflowDesc(''); }}>
@@ -739,7 +739,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                           <p className="text-xs text-muted-foreground italic mb-3">{workflow.description}</p>
                         )}
 
-                        {/* ✅ Milestone 2: tidak ada hardcoded "Self Assessment" step */}
+                        {/* ✅ Milestone 2: no hardcoded first step — all steps are admin-configurable */}
                         {workflow.steps.length === 0 ? (
                           <p className="text-xs text-muted-foreground text-center py-4">No steps yet. Add one below.</p>
                         ) : (
@@ -831,8 +831,8 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                                 setSaving(true);
                                 const { data, error } = await api.updateWorkflowDefinition(workflow.id, {
                                   steps: [
-                                    { actorRole: 'manager', actionType: 'FILL_FORM',   description: 'Manager/Observer mengisi form observasi' },
-                                    { actorRole: 'staff',   actionType: 'ACKNOWLEDGE', description: 'Staff mengakui hasil observasi' },
+                                    { actorRole: 'manager', actionType: 'FILL_FORM',   description: 'Manager/Observer fills in observation form' },
+                                    { actorRole: 'staff',   actionType: 'ACKNOWLEDGE', description: 'Staff acknowledges observation result' },
                                   ],
                                 });
                                 if (!error && data) setWorkflows(prev => prev.map(w => w.id === workflow.id ? data as WorkflowDefinition : w));

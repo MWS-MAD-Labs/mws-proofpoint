@@ -1,11 +1,11 @@
 // prisma/seed-milestone1.ts
-// Data migration untuk Milestone 1:
-//   - Buat WorkflowDefinition "Annual Appraisal"
-//   - Assign ke semua DepartmentRole yang ada
-//   - Pastikan semua rubric non-observation bertipe KPI_APPRAISAL
+// Data migration for Milestone 1:
+//   - Create WorkflowDefinition "Annual Appraisal"
+//   - Assign to all existing DepartmentRoles
+//   - Ensure all non-observation rubrics are typed as KPI_APPRAISAL
 //
-// Standalone : npx tsx prisma/seed-milestone1.ts
-// Via seed.ts : import { seedMilestone1 } from "./seed-milestone1.js"
+// Standalone: npx tsx prisma/seed-milestone1.ts
+// Via seed.ts: import { seedMilestone1 } from "./seed-milestone1.js"
 
 import { PrismaClient } from "@prisma/client";
 import { createPrismaClient } from "./prisma-client.js";
@@ -14,12 +14,12 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 
-// ✅ FIX: dikonversi jadi export function agar bisa dipanggil dari seed.ts
-//         menggunakan PrismaClient yang diterima sebagai parameter (konsisten)
+// ✅ Exported function so it can be called from seed.ts
+//    Uses PrismaClient received as parameter for consistency
 export async function seedMilestone1(prisma: PrismaClient): Promise<void> {
   console.log("\n🚀 [seed-milestone1] Milestone 1 workflow migration...\n");
 
-  // ── 1. Buat "Annual Appraisal" WorkflowDefinition jika belum ada ──────────
+  // ── 1. Create "Annual Appraisal" WorkflowDefinition if it does not exist ──────
   let annualAppraisalWorkflow = await prisma.workflowDefinition.findFirst({
     where: { name: "Annual Appraisal" },
   });
@@ -40,17 +40,17 @@ export async function seedMilestone1(prisma: PrismaClient): Promise<void> {
         },
       },
     });
-    console.log(`✅ WorkflowDefinition dibuat: "Annual Appraisal" (id: ${annualAppraisalWorkflow.id})`);
+    console.log(`✅ WorkflowDefinition created: "Annual Appraisal" (id: ${annualAppraisalWorkflow.id})`);
   } else {
-    console.log(`⏭️  WorkflowDefinition sudah ada: "Annual Appraisal" (id: ${annualAppraisalWorkflow.id})`);
+    console.log(`⏭️  WorkflowDefinition already exists: "Annual Appraisal" (id: ${annualAppraisalWorkflow.id})`);
   }
 
-  // ── 2. Assign ke semua DepartmentRole yang belum punya assignment ─────────
+  // ── 2. Assign to all DepartmentRoles that do not have an assignment yet ────────
   const departmentRoles = await prisma.departmentRole.findMany({
     include: { department: { select: { name: true } } },
   });
 
-  console.log(`\n📋 Ditemukan ${departmentRoles.length} DepartmentRole...`);
+  console.log(`\n📋 Found ${departmentRoles.length} DepartmentRole(s)...`);
 
   let created = 0;
   let skipped = 0;
@@ -64,7 +64,7 @@ export async function seedMilestone1(prisma: PrismaClient): Promise<void> {
     });
 
     if (existing) {
-      console.log(`  ⏭️  Skip: ${deptRole.department?.name ?? "(global)"} — ${deptRole.role}`);
+      console.log(`  ⏭️  Skip: ${deptRole.department?.name ?? "(global/no dept)"} — ${deptRole.role}`);
       skipped++;
       continue;
     }
@@ -79,23 +79,23 @@ export async function seedMilestone1(prisma: PrismaClient): Promise<void> {
     });
 
     console.log(
-      `  ✅ Assigned: ${deptRole.department?.name ?? "(global)"} — ${deptRole.role}` +
+      `  ✅ Assigned: ${deptRole.department?.name ?? "(global/no dept)"} — ${deptRole.role}` +
       (deptRole.defaultTemplateId ? " (with rubric)" : "")
     );
     created++;
   }
 
-  // ── 3. Pastikan rubric non-observation bertipe KPI_APPRAISAL ─────────────
-  console.log("\n📋 Memastikan rubric non-observation bertipe KPI_APPRAISAL...");
+  // ── 3. Ensure non-observation rubrics are typed as KPI_APPRAISAL ───────────────
+  console.log("\n📋 Ensuring non-observation rubrics are typed as KPI_APPRAISAL...");
 
   const updateResult = await prisma.rubricTemplate.updateMany({
     where: { NOT: { templateType: "CLASSROOM_OBSERVATION" } },
     data:  { templateType: "KPI_APPRAISAL" },
   });
 
-  console.log(`  ✅ ${updateResult.count} rubric diupdate/dikonfirmasi sebagai KPI_APPRAISAL`);
+  console.log(`  ✅ ${updateResult.count} rubric(s) updated/confirmed as KPI_APPRAISAL`);
 
-  // ── 4. Summary ────────────────────────────────────────────────────────────
+  // ── 4. Summary ─────────────────────────────────────────────────────────────────
   const [totalWorkflows, totalAssignments, kpiRubrics, obsRubrics] =
     await Promise.all([
       prisma.workflowDefinition.count(),
@@ -104,11 +104,11 @@ export async function seedMilestone1(prisma: PrismaClient): Promise<void> {
       prisma.rubricTemplate.count({ where: { templateType: "CLASSROOM_OBSERVATION" } }),
     ]);
 
-  console.log("\n🎉 [seed-milestone1] Selesai!");
-  console.log(`   ✅ RoleWorkflowAssignments dibuat : ${created}`);
-  console.log(`   ⏭️  Sudah ada (skip)              : ${skipped}`);
-  console.log(`   📝 Rubrics KPI_APPRAISAL          : ${kpiRubrics}`);
-  console.log(`   📝 Rubrics CLASSROOM_OBSERVATION  : ${obsRubrics}`);
+  console.log("\n🎉 [seed-milestone1] Done!");
+  console.log(`   ✅ RoleWorkflowAssignments created : ${created}`);
+  console.log(`   ⏭️  Already existed (skipped)              : ${skipped}`);
+  console.log(`   📝 Rubrics (KPI_APPRAISAL)          : ${kpiRubrics}`);
+  console.log(`   📝 Rubrics (CLASSROOM_OBSERVATION)  : ${obsRubrics}`);
   console.log(`   📊 Total WorkflowDefinitions      : ${totalWorkflows}`);
   console.log(`   📊 Total Assignments               : ${totalAssignments}\n`);
 }
