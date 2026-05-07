@@ -273,7 +273,7 @@ function AdminContent() {
             const roleHoldersByRole: Record<string, RoleHolder[]> = {};
             for (const holder of dept.role_holders) {
                 if (!roleHoldersByRole[holder.role]) roleHoldersByRole[holder.role] = [];
-                roleHoldersByRole[holder.role]?.push(holder);
+                roleHoldersByRole[holder.role].push(holder);
             }
 
             // Stats breakdown

@@ -1,18 +1,24 @@
 import type { NextConfig } from "next";
-import path from "path";
 
 const nextConfig: NextConfig = {
+  // Enable standalone output for Docker deployment
   output: "standalone",
+
+  // Enable strict mode for React
   reactStrictMode: true,
 
+  // Disable ESLint during builds to allow deployment
   eslint: {
     ignoreDuringBuilds: true,
   },
 
+  // Disable TypeScript errors during production builds for Docker deployment
+  // Note: TypeScript checking still runs during development
   typescript: {
     ignoreBuildErrors: true,
   },
 
+  // Configure image optimization
   images: {
     remotePatterns: [
       {
@@ -22,10 +28,8 @@ const nextConfig: NextConfig = {
     ],
   },
 
-  // 🔥 INI FIX NYA
-  turbopack: {
-    root: path.join(__dirname),
-  },
+  // Enable Turbopack for development
+  turbopack: {},
 };
 
 export default nextConfig;

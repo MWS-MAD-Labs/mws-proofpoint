@@ -26,6 +26,7 @@ import {
   ArrowLeft,
   Sparkles,
 } from "lucide-react";
+import { Logo } from "@/components/ui/logo";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -231,11 +232,8 @@ export default function Auth() {
 
           <CardHeader className="text-center space-y-4 pt-8 pb-2">
             {/* Logo */}
-            <div className="mx-auto relative">
-              <div className="absolute inset-0 bg-primary rounded-2xl blur-xl opacity-40 animate-pulse-glow" />
-              <div className="relative w-16 h-16 rounded-2xl bg-primary glow-primary flex items-center justify-center">
-                <Activity className="h-8 w-8 text-primary-foreground" />
-              </div>
+            <div className="mx-auto flex justify-center">
+              <Logo showText={false} />
             </div>
 
             <div className="space-y-1">

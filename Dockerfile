@@ -1,33 +1,48 @@
 # Build stage
 FROM node:20-alpine AS builder
+
 WORKDIR /app
-RUN apk add --no-cache openssl
+
+# Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
-COPY prisma.config.ts ./
+
+# Install dependencies
 RUN npm ci
-RUN npm install prisma@7.8.0 @prisma/client@7.8.0 @prisma/adapter-pg@7.8.0 --save
+
+# Generate Prisma Client
 RUN npx prisma generate
+
+# Copy source code
 COPY . .
-ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+
+# Build application
 RUN npm run build
 
 # Production stage
 FROM node:20-alpine AS runner
+
 WORKDIR /app
-RUN apk add --no-cache openssl
+
+# Install dependencies for production
 COPY package*.json ./
-COPY prisma ./prisma/
-COPY prisma.config.ts ./
 RUN npm ci --omit=dev
-RUN npm install prisma@7.8.0 @prisma/client@7.8.0 @prisma/adapter-pg@7.8.0 --save
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# Copy built application from builder
 COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/next.config.* ./
+COPY --from=builder /app/prisma.config.ts ./
+
+# Set environment
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+# Expose port
 EXPOSE 3000
-CMD ["npm", "start"]
+
+# Start the application (run migrations first, then start)
+CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]

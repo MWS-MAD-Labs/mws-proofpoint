@@ -8,7 +8,6 @@ import {
   markNotificationFailed,
   deleteNotificationLog,
 } from "./logger";
-export * from './observation-notifications';
 import type { NotificationTriggerParams, NotificationType } from "./types";
 
 const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
@@ -208,10 +207,10 @@ function generateEmailContent(
     assessmentId: data.assessmentId,
     staffName: data.staffName,
     period: data.period,
-    templateName: data.templateName ?? "",
-    score:        data.score        ?? "",
-    grade:        data.grade        ?? "",
-    notes:        data.notes        ?? "",
+    templateName: data.templateName,
+    score: data.score,
+    grade: data.grade,
+    notes: data.notes,
     actionUrl: `${baseUrl}/assessment?id=${data.assessmentId}`,
   };
 

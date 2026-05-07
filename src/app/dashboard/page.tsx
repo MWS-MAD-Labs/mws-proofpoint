@@ -173,21 +173,8 @@ function DashboardContent() {
             show: isAdmin,
             gradient: 'from-rose-500/10 to-pink-500/10',
             iconColor: 'text-rose-500'
-        },
-
-        {
-    title: 'Observations',
-    description: 'Manage observation & evaluation',
-    icon: ClipboardList,
-    link: '/observations',
-    buttonText: 'Open Observations',
-    buttonVariant: 'default' as const,
-    show: true,
-    gradient: 'from-indigo-500/10 to-blue-500/10',
-    iconColor: 'text-indigo-500'
-    }
+        }
     ];
-
 
     return (
         <div className="min-h-screen bg-background relative overflow-hidden">

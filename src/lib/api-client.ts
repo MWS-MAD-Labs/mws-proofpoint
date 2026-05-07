@@ -177,58 +177,133 @@ class ApiClient {
   }
 
   // Rubric Sections
-  async createSection(data: Record<string, unknown>): Promise<ApiResponse<unknown>> {
-    return this.request("/rubrics/sections", { method: "POST", body: JSON.stringify(data) });
+  async createSection(
+    data: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/rubrics/sections", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
-  async updateSection(id: string, data: Record<string, unknown>): Promise<ApiResponse<unknown>> {
-    return this.request("/rubrics/sections", { method: "PATCH", body: JSON.stringify({ id, ...data }) });
+
+  async updateSection(
+    id: string,
+    data: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/rubrics/sections", {
+      method: "PATCH",
+      body: JSON.stringify({ id, ...data }),
+    });
   }
+
   async deleteSection(id: string): Promise<ApiResponse<unknown>> {
-    return this.request(`/rubrics/sections?id=${id}`, { method: "DELETE" });
+    return this.request(`/rubrics/sections?id=${id}`, {
+      method: "DELETE",
+    });
   }
 
   // Rubric Indicators
-  async createIndicator(data: Record<string, unknown>): Promise<ApiResponse<unknown>> {
-    return this.request("/rubrics/indicators", { method: "POST", body: JSON.stringify(data) });
+  async createIndicator(
+    data: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/rubrics/indicators", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
-  async updateIndicator(id: string, data: Record<string, unknown>): Promise<ApiResponse<unknown>> {
-    return this.request("/rubrics/indicators", { method: "PATCH", body: JSON.stringify({ id, ...data }) });
+
+  async updateIndicator(
+    id: string,
+    data: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/rubrics/indicators", {
+      method: "PATCH",
+      body: JSON.stringify({ id, ...data }),
+    });
   }
+
   async deleteIndicator(id: string): Promise<ApiResponse<unknown>> {
-    return this.request(`/rubrics/indicators?id=${id}`, { method: "DELETE" });
+    return this.request(`/rubrics/indicators?id=${id}`, {
+      method: "DELETE",
+    });
   }
 
   // KPI Domains
-  async createDomain(data: Record<string, unknown>): Promise<ApiResponse<unknown>> {
-    return this.request("/rubrics/domains", { method: "POST", body: JSON.stringify(data) });
+  async createDomain(
+    data: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/rubrics/domains", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
-  async updateDomain(id: string, data: Record<string, unknown>): Promise<ApiResponse<unknown>> {
-    return this.request("/rubrics/domains", { method: "PATCH", body: JSON.stringify({ id, ...data }) });
+
+  async updateDomain(
+    id: string,
+    data: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/rubrics/domains", {
+      method: "PATCH",
+      body: JSON.stringify({ id, ...data }),
+    });
   }
+
   async deleteDomain(id: string): Promise<ApiResponse<unknown>> {
-    return this.request(`/rubrics/domains?id=${id}`, { method: "DELETE" });
+    return this.request(`/rubrics/domains?id=${id}`, {
+      method: "DELETE",
+    });
   }
 
   // KPI Standards
-  async createStandard(data: Record<string, unknown>): Promise<ApiResponse<unknown>> {
-    return this.request("/rubrics/standards", { method: "POST", body: JSON.stringify(data) });
+  async createStandard(
+    data: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/rubrics/standards", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
-  async updateStandard(id: string, data: Record<string, unknown>): Promise<ApiResponse<unknown>> {
-    return this.request("/rubrics/standards", { method: "PATCH", body: JSON.stringify({ id, ...data }) });
+
+  async updateStandard(
+    id: string,
+    data: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/rubrics/standards", {
+      method: "PATCH",
+      body: JSON.stringify({ id, ...data }),
+    });
   }
+
   async deleteStandard(id: string): Promise<ApiResponse<unknown>> {
-    return this.request(`/rubrics/standards?id=${id}`, { method: "DELETE" });
+    return this.request(`/rubrics/standards?id=${id}`, {
+      method: "DELETE",
+    });
   }
 
   // KPIs
-  async createKPI(data: Record<string, unknown>): Promise<ApiResponse<unknown>> {
-    return this.request("/rubrics/kpis", { method: "POST", body: JSON.stringify(data) });
+  async createKPI(
+    data: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/rubrics/kpis", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
-  async updateKPI(id: string, data: Record<string, unknown>): Promise<ApiResponse<unknown>> {
-    return this.request("/rubrics/kpis", { method: "PATCH", body: JSON.stringify({ id, ...data }) });
+
+  async updateKPI(
+    id: string,
+    data: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/rubrics/kpis", {
+      method: "PATCH",
+      body: JSON.stringify({ id, ...data }),
+    });
   }
+
   async deleteKPI(id: string): Promise<ApiResponse<unknown>> {
-    return this.request(`/rubrics/kpis?id=${id}`, { method: "DELETE" });
+    return this.request(`/rubrics/kpis?id=${id}`, {
+      method: "DELETE",
+    });
   }
 
   // Questions
@@ -236,7 +311,9 @@ class ApiClient {
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) searchParams.set(key, String(value));
+        if (value !== undefined && value !== null) {
+          searchParams.set(key, String(value));
+        }
       });
     }
     const query = searchParams.toString();
@@ -248,11 +325,21 @@ class ApiClient {
     indicator_id?: string;
     question: string;
   }): Promise<ApiResponse<unknown>> {
-    return this.request("/questions", { method: "POST", body: JSON.stringify(data) });
+    return this.request("/questions", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
 
-  async answerQuestion(id: string, response: string, status?: string): Promise<ApiResponse<unknown>> {
-    return this.request("/questions", { method: "PUT", body: JSON.stringify({ id, response, status }) });
+  async answerQuestion(
+    id: string,
+    response: string,
+    status?: string,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/questions", {
+      method: "PUT",
+      body: JSON.stringify({ id, response, status }),
+    });
   }
 
   // User Roles
@@ -261,12 +348,23 @@ class ApiClient {
     return this.request(`/user-roles${query}`);
   }
 
-  async assignRole(userId: string, role: string): Promise<ApiResponse<unknown>> {
-    return this.request("/user-roles", { method: "POST", body: JSON.stringify({ user_id: userId, role }) });
+  async assignRole(
+    userId: string,
+    role: string,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/user-roles", {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId, role }),
+    });
   }
 
-  async removeRole(userId: string, role: string): Promise<ApiResponse<unknown>> {
-    return this.request(`/user-roles?userId=${userId}&role=${role}`, { method: "DELETE" });
+  async removeRole(
+    userId: string,
+    role: string,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request(`/user-roles?userId=${userId}&role=${role}`, {
+      method: "DELETE",
+    });
   }
 
   // ========== Admin API ==========
@@ -286,36 +384,63 @@ class ApiClient {
     department_id?: string;
     roles?: string[];
   }): Promise<ApiResponse<unknown>> {
-    return this.request("/admin/users", { method: "POST", body: JSON.stringify(data) });
+    return this.request("/admin/users", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
 
-  async updateUser(id: string, data: {
-    full_name?: string;
-    niy?: string;
-    job_title?: string;
-    department_id?: string;
-    roles?: string[];
-    password?: string;
-    status?: string;
-  }): Promise<ApiResponse<unknown>> {
-    return this.request("/admin/users", { method: "PUT", body: JSON.stringify({ id, ...data }) });
+  async updateUser(
+    id: string,
+    data: {
+      full_name?: string;
+      niy?: string;
+      job_title?: string;
+      department_id?: string;
+      roles?: string[];
+      password?: string;
+      status?: string;
+    },
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/admin/users", {
+      method: "PUT",
+      body: JSON.stringify({ id, ...data }),
+    });
   }
 
-  async deleteUser(userId: string, permanent = false): Promise<ApiResponse<unknown>> {
-    return this.request(`/admin/users?userId=${userId}${permanent ? "&permanent=true" : ""}`, { method: "DELETE" });
+  async deleteUser(
+    userId: string,
+    permanent = false,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request(
+      `/admin/users?userId=${userId}${permanent ? "&permanent=true" : ""}`,
+      {
+        method: "DELETE",
+      },
+    );
   }
 
   // Admin - Departments (extended)
-  async updateDepartment(id: string, data: { name?: string; parent_id?: string | null }): Promise<ApiResponse<unknown>> {
-    return this.request("/departments", { method: "PUT", body: JSON.stringify({ id, ...data }) });
+  async updateDepartment(
+    id: string,
+    data: { name?: string; parent_id?: string | null },
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/departments", {
+      method: "PUT",
+      body: JSON.stringify({ id, ...data }),
+    });
   }
 
   async deleteDepartment(id: string): Promise<ApiResponse<unknown>> {
-    return this.request(`/departments?id=${id}`, { method: "DELETE" });
+    return this.request(`/departments?id=${id}`, {
+      method: "DELETE",
+    });
   }
 
   // Admin - Department Roles
-  async getDepartmentRoles(departmentId?: string): Promise<ApiResponse<unknown[]>> {
+  async getDepartmentRoles(
+    departmentId?: string,
+  ): Promise<ApiResponse<unknown[]>> {
     const query = departmentId ? `?departmentId=${departmentId}` : "";
     return this.request(`/admin/department-roles${query}`);
   }
@@ -326,94 +451,45 @@ class ApiClient {
     default_template_id?: string;
     name?: string;
   }): Promise<ApiResponse<unknown>> {
-    return this.request("/admin/department-roles", { method: "POST", body: JSON.stringify(data) });
+    return this.request("/admin/department-roles", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
 
-  async updateDepartmentRole(id: string, data: {
-    default_template_id?: string | null;
-    name?: string;
-  }): Promise<ApiResponse<unknown>> {
-    return this.request("/admin/department-roles", { method: "PUT", body: JSON.stringify({ id, ...data }) });
+  async updateDepartmentRole(
+    id: string,
+    data: {
+      default_template_id?: string | null;
+      name?: string;
+    },
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/admin/department-roles", {
+      method: "PUT",
+      body: JSON.stringify({ id, ...data }),
+    });
   }
 
   async deleteDepartmentRole(id: string): Promise<ApiResponse<unknown>> {
-    return this.request(`/admin/department-roles?id=${id}`, { method: "DELETE" });
-  }
-
-  // ── NEW: Workflow Definitions ─────────────────────────────────────────────
-  async getWorkflowDefinitions(): Promise<ApiResponse<unknown[]>> {
-    return this.request("/admin/workflow-definitions");
-  }
-
-  async createWorkflowDefinition(data: {
-    name: string;
-    type: "KPI_APPRAISAL" | "CLASSROOM_OBSERVATION" | "GENERIC";
-    description?: string;
-    steps?: {
-      actorRole: string;
-      actionType: "FILL_FORM" | "ACKNOWLEDGE" | "REVIEW" | "APPROVE";
-      description?: string;
-    }[];
-  }): Promise<ApiResponse<unknown>> {
-    return this.request("/admin/workflow-definitions", {
-      method: "POST",
-      body: JSON.stringify(data),
+    return this.request(`/admin/department-roles?id=${id}`, {
+      method: "DELETE",
     });
   }
 
-  async updateWorkflowDefinition(id: string, data: {
-    name?: string;
-    description?: string;
-    steps?: {
-      actorRole: string;
-      actionType: "FILL_FORM" | "ACKNOWLEDGE" | "REVIEW" | "APPROVE";
-      description?: string;
-    }[];
-  }): Promise<ApiResponse<unknown>> {
-    return this.request("/admin/workflow-definitions", {
-      method: "PUT",
-      body: JSON.stringify({ id, ...data }),
-    });
+  // Public - Workflows (for any authenticated user)
+  async getWorkflows(
+    departmentRoleId: string,
+  ): Promise<ApiResponse<unknown[]>> {
+    return this.request(`/workflows?departmentRoleId=${departmentRoleId}`);
   }
 
-  async deleteWorkflowDefinition(id: string): Promise<ApiResponse<unknown>> {
-    return this.request(`/admin/workflow-definitions?id=${id}`, { method: "DELETE" });
-  }
-
-  // ── NEW: Role Workflow Assignments ────────────────────────────────────────
-  async getRoleWorkflowAssignments(departmentRoleId?: string): Promise<ApiResponse<unknown[]>> {
-    const query = departmentRoleId ? `?departmentRoleId=${departmentRoleId}` : "";
-    return this.request(`/admin/role-workflow-assignments${query}`);
-  }
-
-  async createRoleWorkflowAssignment(data: {
-    departmentRoleId: string;
-    workflowId: string;
-    rubricId?: string;
-  }): Promise<ApiResponse<unknown>> {
-    return this.request("/admin/role-workflow-assignments", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  }
-
-  async updateRoleWorkflowAssignment(id: string, data: {
-    rubricId?: string | null;
-    isActive?: boolean;
-  }): Promise<ApiResponse<unknown>> {
-    return this.request("/admin/role-workflow-assignments", {
-      method: "PUT",
-      body: JSON.stringify({ id, ...data }),
-    });
-  }
-
-  async deleteRoleWorkflowAssignment(id: string): Promise<ApiResponse<unknown>> {
-    return this.request(`/admin/role-workflow-assignments?id=${id}`, { method: "DELETE" });
-  }
-
-  // ── LEGACY: Approval Workflows (dipertahankan untuk backward compat) ──────
-  async getApprovalWorkflows(departmentRoleId?: string): Promise<ApiResponse<unknown[]>> {
-    const query = departmentRoleId ? `?departmentRoleId=${departmentRoleId}` : "";
+  // Admin - Approval Workflows
+  async getApprovalWorkflows(
+    departmentRoleId?: string,
+  ): Promise<ApiResponse<unknown[]>> {
+    const query = departmentRoleId
+      ? `?departmentRoleId=${departmentRoleId}`
+      : "";
     return this.request(`/admin/approval-workflows${query}`);
   }
 
@@ -423,56 +499,90 @@ class ApiClient {
     approver_role: string;
     step_type: string;
   }): Promise<ApiResponse<unknown>> {
-    return this.request("/admin/approval-workflows", { method: "POST", body: JSON.stringify(data) });
+    return this.request("/admin/approval-workflows", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
 
-  async updateApprovalWorkflow(id: string, data: {
-    step_order?: number;
-    approver_role?: string;
-    step_type?: string;
-  }): Promise<ApiResponse<unknown>> {
-    return this.request("/admin/approval-workflows", { method: "PUT", body: JSON.stringify({ id, ...data }) });
+  async updateApprovalWorkflow(
+    id: string,
+    data: {
+      step_order?: number;
+      approver_role?: string;
+      step_type?: string;
+    },
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/admin/approval-workflows", {
+      method: "PUT",
+      body: JSON.stringify({ id, ...data }),
+    });
   }
 
   async deleteApprovalWorkflow(id: string): Promise<ApiResponse<unknown>> {
-    return this.request(`/admin/approval-workflows?id=${id}`, { method: "DELETE" });
+    return this.request(`/admin/approval-workflows?id=${id}`, {
+      method: "DELETE",
+    });
   }
 
-  async deleteAllApprovalWorkflows(departmentRoleId: string): Promise<ApiResponse<unknown>> {
-    return this.request(`/admin/approval-workflows?departmentRoleId=${departmentRoleId}`, { method: "DELETE" });
-  }
-
-  // Public - Workflows
-  async getWorkflows(departmentRoleId: string): Promise<ApiResponse<unknown[]>> {
-    return this.request(`/workflows?departmentRoleId=${departmentRoleId}`);
+  async deleteAllApprovalWorkflows(
+    departmentRoleId: string,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request(
+      `/admin/approval-workflows?departmentRoleId=${departmentRoleId}`,
+      {
+        method: "DELETE",
+      },
+    );
   }
 
   // Generic Methods
-  async get<T>(endpoint: string, params?: QueryParams): Promise<ApiResponse<T>> {
+  async get<T>(
+    endpoint: string,
+    params?: QueryParams,
+  ): Promise<ApiResponse<T>> {
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) searchParams.set(key, String(value));
+        if (value !== undefined && value !== null) {
+          searchParams.set(key, String(value));
+        }
       });
     }
     const query = searchParams.toString();
-    const cleanEndpoint = endpoint.startsWith("/api") ? endpoint.slice(4) : endpoint;
+    const cleanEndpoint = endpoint.startsWith("/api")
+      ? endpoint.slice(4)
+      : endpoint;
     return this.request(`${cleanEndpoint}${query ? `?${query}` : ""}`);
   }
 
   async post<T>(endpoint: string, data?: unknown): Promise<ApiResponse<T>> {
-    const cleanEndpoint = endpoint.startsWith("/api") ? endpoint.slice(4) : endpoint;
-    return this.request(cleanEndpoint, { method: "POST", body: data ? JSON.stringify(data) : undefined });
+    const cleanEndpoint = endpoint.startsWith("/api")
+      ? endpoint.slice(4)
+      : endpoint;
+    return this.request(cleanEndpoint, {
+      method: "POST",
+      body: data ? JSON.stringify(data) : undefined,
+    });
   }
 
   async put<T>(endpoint: string, data?: unknown): Promise<ApiResponse<T>> {
-    const cleanEndpoint = endpoint.startsWith("/api") ? endpoint.slice(4) : endpoint;
-    return this.request(cleanEndpoint, { method: "PUT", body: data ? JSON.stringify(data) : undefined });
+    const cleanEndpoint = endpoint.startsWith("/api")
+      ? endpoint.slice(4)
+      : endpoint;
+    return this.request(cleanEndpoint, {
+      method: "PUT",
+      body: data ? JSON.stringify(data) : undefined,
+    });
   }
 
   async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
-    const cleanEndpoint = endpoint.startsWith("/api") ? endpoint.slice(4) : endpoint;
-    return this.request(cleanEndpoint, { method: "DELETE" });
+    const cleanEndpoint = endpoint.startsWith("/api")
+      ? endpoint.slice(4)
+      : endpoint;
+    return this.request(cleanEndpoint, {
+      method: "DELETE",
+    });
   }
 }
 
