@@ -1,21 +1,19 @@
 'use client';
 
-// WorkflowEditor.tsx — Milestone 2
+// WorkflowEditor.tsx
+// ✅ MIGRATED: dari legacy department_roles/approval_workflow
+//              ke model baru WorkflowDefinition + RoleWorkflowAssignment
 //
-// Perubahan dari Milestone 1:
-//   ✅ Satu dept role bisa punya MULTIPLE workflows (observation + appraisal)
-//   ✅ Step pertama TIDAK lagi hardcode "Self Assessment"
-//   ✅ Support workflow type CLASSROOM_OBSERVATION
-//   ✅ Admin bisa buat workflow "Classroom Observation" dan assign ke role
-//   ✅ Admin bisa link observation rubric per assignment
-//   ✅ Admin bisa konfigurasi: manager fills → staff acknowledges
+// Model baru:
+//   DepartmentRole          → /api/admin/department-roles
+//   WorkflowDefinition      → /api/admin/workflow-definitions
+//   RoleWorkflowAssignment  → /api/admin/role-workflow-assignments
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -29,6 +27,7 @@ import {
   Trash2,
   Loader2,
   GitBranch,
+  User,
   CheckCircle2,
   FileSearch,
   CheckCheck,
@@ -36,8 +35,6 @@ import {
   ShieldCheck,
   Link2,
   Unlink,
-  Eye,
-  ClipboardCheck,
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
 
@@ -84,9 +81,8 @@ interface RoleWorkflowAssignment {
 }
 
 interface RubricTemplate {
-  id:           string;
-  name:         string;
-  templateType?: string;
+  id:   string;
+  name: string;
 }
 
 interface WorkflowEditorProps {
@@ -96,48 +92,23 @@ interface WorkflowEditorProps {
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const ACTION_TYPES = [
-  { value: 'FILL_FORM',   label: 'Fill Form',   icon: FileSearch,    color: 'text-blue-500',   desc: 'Actor mengisi form/assessment' },
-  { value: 'REVIEW',      label: 'Review',       icon: Eye,           color: 'text-green-500',  desc: 'Actor melakukan review' },
-  { value: 'APPROVE',     label: 'Approve',      icon: CheckCircle2,  color: 'text-purple-500', desc: 'Actor memberikan persetujuan' },
-  { value: 'ACKNOWLEDGE', label: 'Acknowledge',  icon: ClipboardCheck,color: 'text-amber-500',  desc: 'Actor mengakui/menandatangani hasil' },
+  { value: 'FILL_FORM',   label: 'Fill Form',   icon: FileSearch,   color: 'text-blue-500'   },
+  { value: 'REVIEW',      label: 'Review',       icon: CheckCircle2, color: 'text-green-500'  },
+  { value: 'APPROVE',     label: 'Approve',      icon: CheckCheck,   color: 'text-purple-500' },
+  { value: 'ACKNOWLEDGE', label: 'Acknowledge',  icon: User,         color: 'text-amber-500'  },
 ] as const;
+
+const ACTOR_ROLES = ['staff', 'supervisor', 'manager', 'director', 'admin'];
 
 const WORKFLOW_TYPES = [
-  { value: 'KPI_APPRAISAL',        label: 'KPI Appraisal',        color: 'bg-blue-100 text-blue-700'   },
-  { value: 'CLASSROOM_OBSERVATION', label: 'Classroom Observation', color: 'bg-green-100 text-green-700' },
-  { value: 'GENERIC',              label: 'Generic',               color: 'bg-gray-100 text-gray-700'   },
+  { value: 'KPI_APPRAISAL',        label: 'KPI Appraisal'        },
+  { value: 'CLASSROOM_OBSERVATION', label: 'Classroom Observation' },
+  { value: 'GENERIC',              label: 'Generic'              },
 ] as const;
-
-const ACTOR_ROLES = [
-  { value: 'staff',      label: 'Staff'      },
-  { value: 'supervisor', label: 'Supervisor' },
-  { value: 'manager',    label: 'Manager'    },
-  { value: 'director',   label: 'Director'   },
-  { value: 'admin',      label: 'Admin'      },
-];
-
-// Default steps untuk tiap workflow type
-const DEFAULT_STEPS: Record<string, { actorRole: string; actionType: 'FILL_FORM' | 'ACKNOWLEDGE' | 'REVIEW' | 'APPROVE'; description: string }[]> = {
-  KPI_APPRAISAL: [
-    { actorRole: 'staff',    actionType: 'FILL_FORM',   description: 'Staff mengisi self-assessment' },
-    { actorRole: 'manager',  actionType: 'REVIEW',      description: 'Manager melakukan review dan scoring' },
-    { actorRole: 'director', actionType: 'APPROVE',     description: 'Director memberikan persetujuan' },
-    { actorRole: 'staff',    actionType: 'ACKNOWLEDGE', description: 'Staff mengakui hasil appraisal' },
-  ],
-  CLASSROOM_OBSERVATION: [
-    { actorRole: 'manager',  actionType: 'FILL_FORM',   description: 'Manager/Observer mengisi form observasi' },
-    { actorRole: 'staff',    actionType: 'ACKNOWLEDGE', description: 'Staff mengakui hasil observasi' },
-  ],
-  GENERIC: [
-    { actorRole: 'staff',   actionType: 'FILL_FORM',   description: 'Mengisi form' },
-    { actorRole: 'manager', actionType: 'APPROVE',     description: 'Memberikan persetujuan' },
-  ],
-};
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function WorkflowEditor({ departments }: WorkflowEditorProps) {
-
   // ── State ──
   const [departmentRoles, setDepartmentRoles]       = useState<DepartmentRole[]>([]);
   const [selectedDeptRoleId, setSelectedDeptRoleId] = useState('');
@@ -146,16 +117,14 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
   const [rubrics, setRubrics]                       = useState<RubricTemplate[]>([]);
   const [loading, setLoading]                       = useState(false);
   const [saving, setSaving]                         = useState(false);
-  const [expandedWorkflowId, setExpandedWorkflowId] = useState<string | null>(null);
 
-  // New workflow form
-  const [showNewWorkflow, setShowNewWorkflow]   = useState(false);
-  const [newWorkflowName, setNewWorkflowName]   = useState('');
-  const [newWorkflowType, setNewWorkflowType]   = useState<'KPI_APPRAISAL' | 'CLASSROOM_OBSERVATION' | 'GENERIC'>('CLASSROOM_OBSERVATION');
-  const [newWorkflowDesc, setNewWorkflowDesc]   = useState('');
+  // For creating new workflow
+  const [newWorkflowName, setNewWorkflowName] = useState('');
+  const [newWorkflowType, setNewWorkflowType] = useState<'KPI_APPRAISAL' | 'CLASSROOM_OBSERVATION' | 'GENERIC'>('KPI_APPRAISAL');
+  const [showNewWorkflow, setShowNewWorkflow] = useState(false);
 
-  // Workflow to assign
-  const [workflowToAssign, setWorkflowToAssign] = useState('');
+  // Selected workflow for editing
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState('');
 
   // ── Fetch initial data ──
   useEffect(() => {
@@ -172,7 +141,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
     void fetchData();
   }, []);
 
-  // ── Fetch assignments for selected dept role ──
+  // ── Fetch assignments when dept role changes ──
   const fetchAssignments = useCallback(async (deptRoleId: string) => {
     if (!deptRoleId) { setAssignments([]); return; }
     setLoading(true);
@@ -186,18 +155,22 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
   }, [selectedDeptRoleId, fetchAssignments]);
 
   // ── Helpers ──
-  const getActionTypeInfo = (actionType: string) =>
-    ACTION_TYPES.find(a => a.value === actionType) ?? ACTION_TYPES[0]!;
-
-  const getWorkflowTypeInfo = (type: string) =>
-    WORKFLOW_TYPES.find(t => t.value === type) ?? WORKFLOW_TYPES[2]!;
+  const getActionTypeInfo = (actionType: string) => {
+    return ACTION_TYPES.find(a => a.value === actionType) ?? ACTION_TYPES[0];
+  };
 
   const selectedDeptRole = departmentRoles.find(dr => dr.id === selectedDeptRoleId);
+  const activeAssignment = assignments.find(a => a.isActive);
+  const selectedWorkflow = workflows.find(w => w.id === selectedWorkflowId)
+    ?? activeAssignment?.workflow;
 
   // ── Dept Role CRUD ──
   const handleCreateDeptRole = async (departmentId: string, role: string) => {
     setSaving(true);
-    const { data, error } = await api.createDepartmentRole({ department_id: departmentId, role });
+    const { data, error } = await api.createDepartmentRole({
+      department_id: departmentId,
+      role,
+    });
     if (!error && data) {
       const newRole = data as DepartmentRole;
       setDepartmentRoles(prev => [...prev, newRole]);
@@ -221,39 +194,39 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
   const handleCreateWorkflow = async () => {
     if (!newWorkflowName.trim()) return;
     setSaving(true);
-
-    const defaultSteps = DEFAULT_STEPS[newWorkflowType] ?? DEFAULT_STEPS['GENERIC']!;
-
     const { data, error } = await api.createWorkflowDefinition({
-      name:        newWorkflowName.trim(),
-      type:        newWorkflowType,
-      description: newWorkflowDesc.trim() || undefined,
-      steps:       defaultSteps,
+      name: newWorkflowName.trim(),
+      type: newWorkflowType,
+      steps: [
+        { actorRole: 'staff',    actionType: 'FILL_FORM',   description: 'Staff fills self-assessment' },
+        { actorRole: 'manager',  actionType: 'REVIEW',      description: 'Manager reviews' },
+        { actorRole: 'director', actionType: 'APPROVE',     description: 'Director approves' },
+        { actorRole: 'admin',    actionType: 'REVIEW',      description: 'Admin releases' },
+        { actorRole: 'staff',    actionType: 'ACKNOWLEDGE', description: 'Staff acknowledges' },
+      ],
     });
-
     if (!error && data) {
       const newWf = data as WorkflowDefinition;
       setWorkflows(prev => [newWf, ...prev]);
-      setExpandedWorkflowId(newWf.id);
+      setSelectedWorkflowId(newWf.id);
       setShowNewWorkflow(false);
       setNewWorkflowName('');
-      setNewWorkflowDesc('');
     }
     setSaving(false);
   };
 
   const handleDeleteWorkflow = async (workflowId: string) => {
-    if (!confirm('Delete this workflow? Assignments using it must be removed first.')) return;
+    if (!confirm('Delete this workflow definition? Assignments using it must be removed first.')) return;
     setSaving(true);
     const { error } = await api.deleteWorkflowDefinition(workflowId);
     if (!error) {
       setWorkflows(prev => prev.filter(w => w.id !== workflowId));
-      if (expandedWorkflowId === workflowId) setExpandedWorkflowId(null);
+      if (selectedWorkflowId === workflowId) setSelectedWorkflowId('');
     }
     setSaving(false);
   };
 
-  // ── Step CRUD ──
+  // ── Step CRUD (update workflow steps inline) ──
   const handleUpdateStep = async (workflowId: string, stepIndex: number, field: 'actorRole' | 'actionType', value: string) => {
     const workflow = workflows.find(w => w.id === workflowId);
     if (!workflow) return;
@@ -265,8 +238,8 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
     setSaving(true);
     const { data, error } = await api.updateWorkflowDefinition(workflowId, {
       steps: updatedSteps.map(s => ({
-        actorRole:   s.actorRole,
-        actionType:  s.actionType,
+        actorRole:  s.actorRole,
+        actionType: s.actionType,
         description: s.description ?? undefined,
       })),
     });
@@ -280,20 +253,12 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
     const workflow = workflows.find(w => w.id === workflowId);
     if (!workflow) return;
 
-    // ✅ Milestone 2: tidak hardcode step — admin bebas pilih actor dan action
-    const newStep = {
-      actorRole:   'manager',
-      actionType:  'FILL_FORM' as const,
-      description: undefined,
-    };
-    const updatedSteps = [
-      ...workflow.steps.map(s => ({
-        actorRole:   s.actorRole,
-        actionType:  s.actionType,
-        description: s.description ?? undefined,
-      })),
-      newStep,
-    ];
+    const newStep = { actorRole: 'manager', actionType: 'REVIEW' as const, description: undefined };
+    const updatedSteps = [...workflow.steps.map(s => ({
+      actorRole:   s.actorRole,
+      actionType:  s.actionType,
+      description: s.description ?? undefined,
+    })), newStep];
 
     setSaving(true);
     const { data, error } = await api.updateWorkflowDefinition(workflowId, { steps: updatedSteps });
@@ -324,17 +289,15 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
   };
 
   // ── Assignment CRUD ──
-  // ✅ Milestone 2: satu role bisa assign MULTIPLE workflows
   const handleAssignWorkflow = async () => {
-    if (!selectedDeptRoleId || !workflowToAssign) return;
+    if (!selectedDeptRoleId || !selectedWorkflowId) return;
     setSaving(true);
     const { data, error } = await api.createRoleWorkflowAssignment({
       departmentRoleId: selectedDeptRoleId,
-      workflowId:       workflowToAssign,
+      workflowId:       selectedWorkflowId,
     });
     if (!error && data) {
       setAssignments(prev => [...prev, data as RoleWorkflowAssignment]);
-      setWorkflowToAssign('');
     }
     setSaving(false);
   };
@@ -343,24 +306,17 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
     if (!confirm('Remove this workflow assignment?')) return;
     setSaving(true);
     const { error } = await api.deleteRoleWorkflowAssignment(assignmentId);
-    if (!error) setAssignments(prev => prev.filter(a => a.id !== assignmentId));
-    setSaving(false);
-  };
-
-  const handleAssignRubric = async (assignmentId: string, rubricId: string) => {
-    setSaving(true);
-    const { data, error } = await api.updateRoleWorkflowAssignment(assignmentId, {
-      rubricId: rubricId === 'none' ? null : rubricId,
-    });
-    if (!error && data) {
-      setAssignments(prev => prev.map(a => a.id === assignmentId ? data as RoleWorkflowAssignment : a));
+    if (!error) {
+      setAssignments(prev => prev.filter(a => a.id !== assignmentId));
     }
     setSaving(false);
   };
 
-  const handleToggleActive = async (assignmentId: string, isActive: boolean) => {
+  const handleAssignRubric = async (assignmentId: string, rubricId: string | null) => {
     setSaving(true);
-    const { data, error } = await api.updateRoleWorkflowAssignment(assignmentId, { isActive });
+    const { data, error } = await api.updateRoleWorkflowAssignment(assignmentId, {
+      rubricId: rubricId === 'none' ? null : rubricId,
+    });
     if (!error && data) {
       setAssignments(prev => prev.map(a => a.id === assignmentId ? data as RoleWorkflowAssignment : a));
     }
@@ -372,7 +328,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
   return (
     <div className="space-y-6">
 
-      {/* ══ Panel 1: Department Role Selector ══════════════════════════════ */}
+      {/* ── Panel 1: Department Role Selector ── */}
       <Card className="glass-panel border-border/30">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -380,11 +336,12 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
             Workflow Configuration
           </CardTitle>
           <CardDescription>
-            Assign one or more workflow definitions to a department role
+            Assign workflow definitions to department roles
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Select existing dept role */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Department Role</label>
               <Select value={selectedDeptRoleId} onValueChange={setSelectedDeptRoleId}>
@@ -394,13 +351,14 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                 <SelectContent className="glass-panel-strong">
                   {departmentRoles.map(dr => (
                     <SelectItem key={dr.id} value={dr.id}>
-                      {dr.name ?? `${dr.department_name ?? 'Global'} — ${dr.role}`}
+                      {dr.name ?? `${dr.department_name ?? 'Global'} - ${dr.role}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
+            {/* Create new dept role */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Or Create New</label>
               <Select
@@ -417,8 +375,8 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                   <SelectValue placeholder="Add role..." />
                 </SelectTrigger>
                 <SelectContent className="glass-panel-strong">
-                  <SelectItem value="none|director">Global — Director</SelectItem>
-                  <SelectItem value="none|admin">Global — Admin</SelectItem>
+                  <SelectItem value="none|director">Global - Director</SelectItem>
+                  <SelectItem value="none|admin">Global - Admin</SelectItem>
                   {departments.flatMap(dept => {
                     const level = dept.hierarchy_level ?? 'root';
                     const rolesForLevel = level === 'subdepartment'
@@ -430,7 +388,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                       ))
                       .map(role => (
                         <SelectItem key={`${dept.id}|${role}`} value={`${dept.id}|${role}`}>
-                          {dept.name} — <span className="capitalize">{role}</span>
+                          {dept.name} - <span className="capitalize">{role}</span>
                         </SelectItem>
                       ));
                   })}
@@ -441,22 +399,19 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
         </CardContent>
       </Card>
 
-      {/* ══ Panel 2: Assignments for selected dept role ═════════════════════ */}
+      {/* ── Panel 2: Assignments for selected dept role ── */}
       {selectedDeptRoleId && (
         <Card className="glass-panel border-border/30">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-lg">
-                  Workflows for{' '}
+                  Assignments for{' '}
                   <Badge variant="secondary" className="ml-1 capitalize">
-                    {selectedDeptRole?.name ?? `${selectedDeptRole?.department_name ?? 'Global'} — ${selectedDeptRole?.role}`}
+                    {selectedDeptRole?.name ?? `${selectedDeptRole?.department_name ?? 'Global'} - ${selectedDeptRole?.role}`}
                   </Badge>
                 </CardTitle>
-                {/* ✅ Milestone 2: jelaskan bahwa multiple workflows didukung */}
-                <CardDescription>
-                  A role can have multiple workflows — e.g. one for KPI Appraisal and one for Classroom Observation
-                </CardDescription>
+                <CardDescription>Workflow definitions assigned to this role</CardDescription>
               </div>
               <Button
                 variant="ghost" size="sm"
@@ -478,140 +433,88 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                 {/* Current assignments */}
                 {assignments.length === 0 ? (
                   <div className="text-center py-6 border border-dashed rounded-lg text-muted-foreground text-sm">
-                    No workflow assigned yet. Assign one below.
+                    No workflow assigned to this role yet.
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {assignments.map(a => {
-                      const typeInfo = getWorkflowTypeInfo(a.workflow.type);
-                      return (
-                        <div key={a.id} className={`p-4 rounded-lg border space-y-3 transition-all ${a.isActive ? 'border-border/50 bg-muted/10' : 'border-border/20 bg-muted/5 opacity-60'}`}>
-                          {/* Header */}
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Link2 className="h-4 w-4 text-primary shrink-0" />
-                              <span className="font-semibold text-sm">{a.workflow.name}</span>
-                              <Badge className={`text-xs ${typeInfo.color}`}>{typeInfo.label}</Badge>
-                              <Badge variant={a.isActive ? 'default' : 'outline'} className="text-xs">
-                                {a.isActive ? 'Active' : 'Inactive'}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="ghost" size="sm"
-                                className="h-7 text-xs"
-                                onClick={() => void handleToggleActive(a.id, !a.isActive)}
-                                disabled={saving}
-                              >
-                                {a.isActive ? 'Deactivate' : 'Activate'}
-                              </Button>
-                              <Button
-                                variant="ghost" size="icon"
-                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                                onClick={() => void handleUnassign(a.id)}
-                                disabled={saving}
-                              >
-                                <Unlink className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
+                    {assignments.map(a => (
+                      <div key={a.id} className="p-4 rounded-lg border border-border/50 bg-muted/20 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Link2 className="h-4 w-4 text-primary" />
+                            <span className="font-semibold">{a.workflow.name}</span>
+                            <Badge variant="outline" className="text-xs">{a.workflow.type}</Badge>
+                            {a.isActive && <Badge className="text-xs bg-green-100 text-green-700">Active</Badge>}
                           </div>
-
-                          {/* Rubric assignment */}
-                          <div className="flex items-center gap-3">
-                            <Layout className="h-4 w-4 text-muted-foreground shrink-0" />
-                            <div className="flex-1">
-                              <Select
-                                value={a.rubricId ?? 'none'}
-                                onValueChange={(val) => void handleAssignRubric(a.id, val)}
-                              >
-                                <SelectTrigger className="h-8 text-sm bg-background border-border/50">
-                                  <SelectValue placeholder="Link rubric..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="none">No rubric linked</SelectItem>
-                                  {/* ✅ Filter rubric sesuai workflow type */}
-                                  {rubrics
-                                    .filter(r => {
-                                      if (a.workflow.type === 'CLASSROOM_OBSERVATION') {
-                                        return r.templateType === 'CLASSROOM_OBSERVATION';
-                                      }
-                                      if (a.workflow.type === 'KPI_APPRAISAL') {
-                                        return r.templateType === 'KPI_APPRAISAL';
-                                      }
-                                      return true;
-                                    })
-                                    .map(r => (
-                                      <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                                    ))
-                                  }
-                                </SelectContent>
-                              </Select>
-                              {a.rubric && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Linked: <span className="font-medium text-foreground">{a.rubric.name}</span>
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Steps preview */}
-                          <div className="ml-6 space-y-1 pt-1 border-t border-border/30">
-                            <p className="text-xs font-medium text-muted-foreground mb-2">Steps:</p>
-                            {a.workflow.steps.map((step, i) => {
-                              const info = getActionTypeInfo(step.actionType);
-                              return (
-                                <div key={step.id} className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <span className="font-mono w-4 text-center text-muted-foreground/50">{i + 1}</span>
-                                  <info.icon className={`h-3 w-3 ${info.color}`} />
-                                  <span className="capitalize font-medium text-foreground">{step.actorRole}</span>
-                                  <span className="text-muted-foreground/50">→</span>
-                                  <span>{info.label}</span>
-                                  {step.description && (
-                                    <span className="text-muted-foreground/60 italic truncate">({step.description})</span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
+                          <Button
+                            variant="ghost" size="icon"
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                            onClick={() => void handleUnassign(a.id)}
+                            disabled={saving}
+                          >
+                            <Unlink className="h-4 w-4" />
+                          </Button>
                         </div>
-                      );
-                    })}
+
+                        {/* Rubric assignment */}
+                        <div className="flex items-center gap-3">
+                          <Layout className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <Select
+                            value={a.rubricId ?? 'none'}
+                            onValueChange={(val) => void handleAssignRubric(a.id, val)}
+                          >
+                            <SelectTrigger className="h-8 text-sm bg-background border-border/50">
+                              <SelectValue placeholder="Assign rubric..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No rubric assigned</SelectItem>
+                              {rubrics.map(r => (
+                                <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Workflow steps preview */}
+                        <div className="ml-6 space-y-1">
+                          {a.workflow.steps.map((step, i) => {
+                            const info = getActionTypeInfo(step.actionType);
+                            return (
+                              <div key={step.id} className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span className="font-mono w-5 text-center">{i + 1}</span>
+                                <info.icon className={`h-3 w-3 ${info.color}`} />
+                                <span className="capitalize font-medium">{step.actorRole}</span>
+                                <span>→</span>
+                                <span>{info.label}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
 
-                {/* Assign workflow */}
+                {/* Assign workflow to this role */}
                 <div className="pt-2 border-t border-border/30">
-                  <p className="text-sm font-medium mb-2">
-                    Assign Workflow
-                    <span className="text-xs text-muted-foreground ml-2 font-normal">
-                      (multiple workflows allowed per role)
-                    </span>
-                  </p>
+                  <p className="text-sm font-medium mb-2">Assign a Workflow</p>
                   <div className="flex gap-2">
-                    <Select value={workflowToAssign} onValueChange={setWorkflowToAssign}>
+                    <Select value={selectedWorkflowId} onValueChange={setSelectedWorkflowId}>
                       <SelectTrigger className="flex-1 h-9">
-                        <SelectValue placeholder="Select workflow to assign..." />
+                        <SelectValue placeholder="Select workflow..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {workflows.map(w => {
-                          const typeInfo = getWorkflowTypeInfo(w.type);
-                          const alreadyAssigned = assignments.some(a => a.workflowId === w.id);
-                          return (
-                            <SelectItem key={w.id} value={w.id} disabled={alreadyAssigned}>
-                              <div className="flex items-center gap-2">
-                                <span>{w.name}</span>
-                                <Badge className={`text-xs ${typeInfo.color}`}>{typeInfo.label}</Badge>
-                                {alreadyAssigned && <span className="text-xs text-muted-foreground">(assigned)</span>}
-                              </div>
-                            </SelectItem>
-                          );
-                        })}
+                        {workflows.map(w => (
+                          <SelectItem key={w.id} value={w.id}>
+                            {w.name} <span className="text-muted-foreground text-xs ml-1">({w.type})</span>
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <Button
                       size="sm"
                       onClick={() => void handleAssignWorkflow()}
-                      disabled={!workflowToAssign || saving}
+                      disabled={!selectedWorkflowId || saving}
                     >
                       {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4 mr-1" />}
                       Assign
@@ -624,7 +527,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
         </Card>
       )}
 
-      {/* ══ Panel 3: Workflow Definitions Manager ═══════════════════════════ */}
+      {/* ── Panel 3: Workflow Definitions Manager ── */}
       <Card className="glass-panel border-border/30">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -633,13 +536,11 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                 <ShieldCheck className="h-5 w-5 text-orange-500" />
                 Workflow Definitions
               </CardTitle>
-              <CardDescription>
-                Create reusable workflow templates. Steps are fully configurable — no assumptions about who goes first.
-              </CardDescription>
+              <CardDescription>Create and edit reusable workflow templates</CardDescription>
             </div>
             <Button
               size="sm"
-              onClick={() => { setShowNewWorkflow(true); setNewWorkflowType('CLASSROOM_OBSERVATION'); }}
+              onClick={() => setShowNewWorkflow(true)}
               disabled={saving || showNewWorkflow}
             >
               <Plus className="h-4 w-4 mr-1" />New Workflow
@@ -654,7 +555,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
               <p className="text-sm font-semibold text-primary">New Workflow Definition</p>
               <div className="grid grid-cols-2 gap-3">
                 <Input
-                  placeholder="Workflow name (e.g. Classroom Observation)"
+                  placeholder="Workflow name..."
                   value={newWorkflowName}
                   onChange={(e) => setNewWorkflowName(e.target.value)}
                   className="h-9"
@@ -665,24 +566,13 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                   </SelectTrigger>
                   <SelectContent>
                     {WORKFLOW_TYPES.map(t => (
-                      <SelectItem key={t.value} value={t.value}>
-                        <Badge className={`text-xs ${t.color}`}>{t.label}</Badge>
-                      </SelectItem>
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <Textarea
-                placeholder="Description (optional)..."
-                value={newWorkflowDesc}
-                onChange={(e) => setNewWorkflowDesc(e.target.value)}
-                className="h-16 text-sm resize-none"
-              />
-              <p className="text-xs text-muted-foreground">
-                Default steps akan dibuat otomatis sesuai tipe workflow. Kamu bisa edit setelah dibuat.
-              </p>
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" size="sm" onClick={() => { setShowNewWorkflow(false); setNewWorkflowName(''); setNewWorkflowDesc(''); }}>
+                <Button variant="outline" size="sm" onClick={() => { setShowNewWorkflow(false); setNewWorkflowName(''); }}>
                   Cancel
                 </Button>
                 <Button size="sm" onClick={() => void handleCreateWorkflow()} disabled={!newWorkflowName.trim() || saving}>
@@ -692,178 +582,133 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
             </div>
           )}
 
-          {/* Workflow list */}
+          {/* List of workflow definitions */}
           {workflows.length === 0 ? (
             <div className="text-center py-8 border border-dashed rounded-lg text-muted-foreground text-sm">
-              No workflow definitions. Create one above.
+              No workflow definitions yet. Create one above.
             </div>
           ) : (
-            <div className="space-y-3">
-              {workflows.map(workflow => {
-                const typeInfo    = getWorkflowTypeInfo(workflow.type);
-                const isExpanded  = expandedWorkflowId === workflow.id;
-                const assignCount = assignments.filter(a => a.workflowId === workflow.id).length;
-
-                return (
-                  <div key={workflow.id} className="rounded-lg border border-border/50 overflow-hidden">
-                    {/* Header */}
-                    <div
-                      className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${isExpanded ? 'bg-primary/5 border-b border-primary/10' : 'bg-muted/20 hover:bg-muted/40'}`}
-                      onClick={() => setExpandedWorkflowId(isExpanded ? null : workflow.id)}
-                    >
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <GitBranch className="h-4 w-4 text-primary shrink-0" />
+            <div className="space-y-4">
+              {workflows.map(workflow => (
+                <div key={workflow.id} className="rounded-lg border border-border/50 overflow-hidden">
+                  {/* Workflow header */}
+                  <div
+                    className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
+                      selectedWorkflow?.id === workflow.id ? 'bg-primary/10 border-b border-primary/20' : 'bg-muted/30 hover:bg-muted/50'
+                    }`}
+                    onClick={() => setSelectedWorkflowId(prev => prev === workflow.id ? '' : workflow.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <GitBranch className="h-4 w-4 text-primary" />
+                      <div>
                         <span className="font-semibold text-sm">{workflow.name}</span>
-                        <Badge className={`text-xs ${typeInfo.color}`}>{typeInfo.label}</Badge>
-                        <Badge variant="secondary" className="text-xs">{workflow.steps.length} steps</Badge>
-                        {assignCount > 0 && (
-                          <Badge variant="outline" className="text-xs text-green-600 border-green-300">
-                            {assignCount} role{assignCount > 1 ? 's' : ''} assigned
-                          </Badge>
-                        )}
+                        <Badge variant="outline" className="ml-2 text-xs">{workflow.type}</Badge>
                       </div>
+                      <Badge variant="secondary" className="text-xs">{workflow.steps.length} steps</Badge>
+                    </div>
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                      onClick={(e) => { e.stopPropagation(); void handleDeleteWorkflow(workflow.id); }}
+                      disabled={saving}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+
+                  {/* Steps editor — only show for selected workflow */}
+                  {selectedWorkflow?.id === workflow.id && (
+                    <div className="p-4 space-y-3 bg-background">
+                      {/* Self assessment always first */}
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                        <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground font-bold text-xs">0</div>
+                        <div className="flex-1">
+                          <span className="font-medium text-sm">Self Assessment</span>
+                          <p className="text-xs text-muted-foreground">Employee completes self-assessment (automatic)</p>
+                        </div>
+                      </div>
+
+                      {workflow.steps.map((step, idx) => {
+                        const info = getActionTypeInfo(step.actionType);
+                        return (
+                          <div key={step.id}>
+                            <div className="flex justify-center py-1">
+                              <ArrowDown className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
+                              <div className="flex items-center justify-center w-7 h-7 rounded-full bg-muted font-bold text-xs">{idx + 1}</div>
+                              <div className="flex-1 grid grid-cols-2 gap-2">
+                                {/* Actor Role */}
+                                <Select
+                                  value={step.actorRole}
+                                  onValueChange={val => void handleUpdateStep(workflow.id, idx, 'actorRole', val)}
+                                >
+                                  <SelectTrigger className="h-8 text-sm">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {ACTOR_ROLES.map(r => (
+                                      <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                {/* Action Type */}
+                                <Select
+                                  value={step.actionType}
+                                  onValueChange={val => void handleUpdateStep(workflow.id, idx, 'actionType', val)}
+                                >
+                                  <SelectTrigger className="h-8 text-sm">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {ACTION_TYPES.map(at => (
+                                      <SelectItem key={at.value} value={at.value}>
+                                        <div className="flex items-center gap-2">
+                                          <at.icon className={`h-3.5 w-3.5 ${at.color}`} />
+                                          {at.label}
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <info.icon className={`h-4 w-4 ${info.color}`} />
+                                <Button
+                                  variant="ghost" size="icon"
+                                  className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                  onClick={() => void handleRemoveStep(workflow.id, idx)}
+                                  disabled={saving}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      <div className="flex justify-center pt-2">
+                        <ArrowDown className="h-4 w-4 text-muted-foreground" />
+                      </div>
+
                       <Button
-                        variant="ghost" size="icon"
-                        className="h-7 w-7 text-destructive hover:bg-destructive/10 shrink-0"
-                        onClick={(e) => { e.stopPropagation(); void handleDeleteWorkflow(workflow.id); }}
+                        variant="outline" size="sm"
+                        className="w-full border-dashed"
+                        onClick={() => void handleAddStep(workflow.id)}
                         disabled={saving}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                        Add Step
                       </Button>
                     </div>
-
-                    {/* Steps editor */}
-                    {isExpanded && (
-                      <div className="p-4 space-y-2 bg-background">
-                        {workflow.description && (
-                          <p className="text-xs text-muted-foreground italic mb-3">{workflow.description}</p>
-                        )}
-
-                        {/* ✅ Milestone 2: tidak ada hardcoded "Self Assessment" step */}
-                        {workflow.steps.length === 0 ? (
-                          <p className="text-xs text-muted-foreground text-center py-4">No steps yet. Add one below.</p>
-                        ) : (
-                          workflow.steps.map((step, idx) => {
-                            const info = getActionTypeInfo(step.actionType);
-                            return (
-                              <div key={step.id}>
-                                {idx > 0 && (
-                                  <div className="flex justify-center py-1">
-                                    <ArrowDown className="h-3.5 w-3.5 text-muted-foreground" />
-                                  </div>
-                                )}
-                                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/20 border border-border/40">
-                                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-muted text-xs font-bold shrink-0">
-                                    {idx + 1}
-                                  </div>
-                                  {/* Actor Role */}
-                                  <Select
-                                    value={step.actorRole}
-                                    onValueChange={val => void handleUpdateStep(workflow.id, idx, 'actorRole', val)}
-                                  >
-                                    <SelectTrigger className="h-8 text-sm flex-1">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {ACTOR_ROLES.map(r => (
-                                        <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  {/* Action Type */}
-                                  <Select
-                                    value={step.actionType}
-                                    onValueChange={val => void handleUpdateStep(workflow.id, idx, 'actionType', val)}
-                                  >
-                                    <SelectTrigger className="h-8 text-sm flex-1">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {ACTION_TYPES.map(at => (
-                                        <SelectItem key={at.value} value={at.value}>
-                                          <div className="flex items-center gap-2">
-                                            <at.icon className={`h-3.5 w-3.5 ${at.color}`} />
-                                            <div>
-                                              <div>{at.label}</div>
-                                              <div className="text-xs text-muted-foreground">{at.desc}</div>
-                                            </div>
-                                          </div>
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <info.icon className={`h-4 w-4 ${info.color} shrink-0`} />
-                                  <Button
-                                    variant="ghost" size="icon"
-                                    className="h-7 w-7 text-destructive hover:bg-destructive/10 shrink-0"
-                                    onClick={() => void handleRemoveStep(workflow.id, idx)}
-                                    disabled={saving}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-
-                        <div className="flex justify-center pt-2">
-                          <ArrowDown className="h-3.5 w-3.5 text-muted-foreground/50" />
-                        </div>
-
-                        <Button
-                          variant="outline" size="sm"
-                          className="w-full border-dashed text-xs h-8"
-                          onClick={() => void handleAddStep(workflow.id)}
-                          disabled={saving}
-                        >
-                          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-                          Add Step
-                        </Button>
-
-                        {/* Quick template untuk Classroom Observation */}
-                        {workflow.type === 'CLASSROOM_OBSERVATION' && workflow.steps.length === 0 && (
-                          <div className="pt-2 border-t border-border/30">
-                            <p className="text-xs text-muted-foreground mb-2">Quick template:</p>
-                            <Button
-                              variant="outline" size="sm" className="text-xs h-7"
-                              onClick={async () => {
-                                setSaving(true);
-                                const { data, error } = await api.updateWorkflowDefinition(workflow.id, {
-                                  steps: [
-                                    { actorRole: 'manager', actionType: 'FILL_FORM',   description: 'Manager/Observer mengisi form observasi' },
-                                    { actorRole: 'staff',   actionType: 'ACKNOWLEDGE', description: 'Staff mengakui hasil observasi' },
-                                  ],
-                                });
-                                if (!error && data) setWorkflows(prev => prev.map(w => w.id === workflow.id ? data as WorkflowDefinition : w));
-                                setSaving(false);
-                              }}
-                            >
-                              <CheckCheck className="h-3 w-3 mr-1" />
-                              Manager fills → Staff acknowledges
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
       </Card>
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground px-1">
-        {ACTION_TYPES.map(at => (
-          <div key={at.value} className="flex items-center gap-1.5">
-            <at.icon className={`h-3.5 w-3.5 ${at.color}`} />
-            <span><strong>{at.label}</strong> — {at.desc}</span>
-          </div>
-        ))}
-      </div>
-
     </div>
   );
 }
