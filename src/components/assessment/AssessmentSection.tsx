@@ -1,14 +1,12 @@
 import { cn } from "@/lib/utils";
 import { AssessmentIndicator, KPIData } from "./AssessmentIndicator";
 import { EvidenceItem } from "./EvidenceInput";
-import { Percent, Target, Layers, ChevronDown } from "lucide-react";
+import { Percent, Target, Layers } from "lucide-react";
 import {
-  Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-
 export interface StandardData {
   id: string;
   name: string;

@@ -1,0 +1,658 @@
+[
+  {
+    "id": "1",
+    "staffName": "CHECKLIST FOR DIRECT INSTRUCTION",
+    "rubricName": "obstest",
+    "status": "Observer Test",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=1"
+  },
+  {
+    "id": "2",
+    "staffName": "CHECKLIST FOR DIRECT INSTRUCTION",
+    "rubricName": "obstest",
+    "status": "Observee Tester",
+    "submittedAt": "Submitted  Not Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=2"
+  },
+  {
+    "id": "3",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "obsertvertest",
+    "status": "Observer Test",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=3"
+  },
+  {
+    "id": "4",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.23.736",
+    "status": "Rizki Nurul Hayati,",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=4"
+  },
+  {
+    "id": "5",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "12.02.062",
+    "status": "Abu Bakar Ali, S.Sos I",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=5"
+  },
+  {
+    "id": "6",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.769",
+    "status": "Tria Fadilla",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=6"
+  },
+  {
+    "id": "7",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.25.828",
+    "status": "Berliana Gustina Siregar",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=7"
+  },
+  {
+    "id": "8",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "-----",
+    "status": "Novia Syifaputri Ramadhan",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=8"
+  },
+  {
+    "id": "9",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.765",
+    "status": "Bela Kartika Sari",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=9"
+  },
+  {
+    "id": "10",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.25.844",
+    "status": "Raisa Ramadhani",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=10"
+  },
+  {
+    "id": "11",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.774",
+    "status": "Risma Ayu Angelita",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=11"
+  },
+   {
+    "id": "12",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.23.709",
+    "status": "Zolla Firmalia Rossa, S.Pd.",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=12"
+  },
+  {
+    "id": "13",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.25.837",
+    "status": "Hadi",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=13"
+  },
+  {
+    "id": "14",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.809",
+    "status": "Rifqi Satria Permana, S.Pd",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=14"
+  },
+  {
+    "id": "15",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.816",
+    "status": "Nadia",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=15"
+  },
+  {
+    "id": "16",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.775",
+    "status": "Tri Ayu Lestari",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=16"
+  },
+  {
+    "id": "17",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.799",
+    "status": "Vicki Aprinando",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=17"
+  },
+  {
+    "id": "18",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "---",
+    "status": "Robby Noer Abjuny",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=18"
+  },
+  {
+    "id": "19",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.25.840",
+    "status": "Himawan Rizky Syaputra",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=19"
+  },
+  {
+    "id": "20",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.25.840",
+    "status": "Himawan Rizky Syaputra",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=20"
+  },
+  {
+    "id": "21",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.753",
+    "status": "Yosafat Imanuel Parlindungan, S.Sn",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=21"
+  },
+  {
+    "id": "22",
+    "staffName": "CHECKLIST FOR LEARNING AND UNDERSTANDING",
+    "rubricName": "14.23.736",
+    "status": "Rizki Nurul Hayati,",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=22"
+  },
+  {
+    "id": "27",
+    "staffName": "FOCUS ON LEARNERS – STUDENT ENGAGEMENT",
+    "rubricName": "14.23.736",
+    "status": "Rizki Nurul Hayati,",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=27"
+  },
+  {
+    "id": "28",
+    "staffName": "CHECKLIST FOR DIRECT INSTRUCTION",
+    "rubricName": "14.23.736",
+    "status": "Rizki Nurul Hayati,",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=28"
+  },
+  {
+    "id": "31",
+    "staffName": "CHECKLIST FOR DIFFERENTIATION",
+    "rubricName": "14.23.736",
+    "status": "Rizki Nurul Hayati,",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=31"
+  },
+  {
+    "id": "32",
+    "staffName": "FOCUS ON LEARNERS – SMALL GROUP OR IN PAIRING",
+    "rubricName": "14.23.736",
+    "status": "Rizki Nurul Hayati,",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=32"
+  },
+  {
+    "id": "33",
+    "staffName": "CLASSROOM DISPLAY CHECKLIST",
+    "rubricName": "12.02.062",
+    "status": "Abu Bakar Ali, S.Sos I",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=33"
+  },
+  {
+    "id": "34",
+    "staffName": "CLASSROOM DISPLAY CHECKLIST",
+    "rubricName": "14.23.736",
+    "status": "Rizki Nurul Hayati,",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=34"
+  },
+  {
+    "id": "35",
+    "staffName": "CLASSROOM DISPLAY CHECKLIST",
+    "rubricName": "14.23.709",
+    "status": "Zolla Firmalia Rossa, S.Pd.",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=35"
+  },
+  {
+    "id": "36",
+    "staffName": "Test Observation",
+    "rubricName": "14.21.652",
+    "status": "Almia Ester Kristiyany Sinabang, S.Pd",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=36"
+  },
+  {
+    "id": "37",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.24.746",
+    "status": "Alifananda Dhaffa Hanif Musyafa, S.Pd",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=37"
+  },
+  {
+    "id": "38",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.21.652",
+    "status": "Almia Ester Kristiyany Sinabang, S.Pd",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=38"
+  },
+  {
+    "id": "39",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.23.712",
+    "status": "Anggie Ayu Setya Pradini, S.Pd",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=39"
+  },
+  {
+    "id": "40",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.25.843",
+    "status": "Annisa Fitri Tanjung",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=40"
+  },
+  {
+    "id": "41",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.25.829",
+    "status": "Ferlyna Balqis",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=41"
+  },
+  {
+    "id": "42",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.24.771",
+    "status": "Devi Larasati",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=42"
+  },
+  {
+    "id": "43",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.25.839",
+    "status": "Dien Islamy",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=43"
+  },
+  {
+    "id": "44",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.24.767",
+    "status": "Dini Meilani Pramesti",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=44"
+  },
+  {
+    "id": "45",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.24.764",
+    "status": "Fadholi Akbar",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=45"
+  },
+  {
+    "id": "46",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.25.831",
+    "status": "Faqiha Salma Achmada S.Psi.",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=46"
+  },
+  {
+    "id": "47",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "-",
+    "status": "Galen Rasendriya",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=47"
+  },
+  {
+    "id": "48",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.25.842",
+    "status": "Iis Asifah",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=48"
+  },
+  {
+    "id": "49",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.25.836",
+    "status": "Ika Rahayu",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=49"
+  },
+  {
+    "id": "50",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.24.814",
+    "status": "Nazmi Kusumawantari",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=50"
+  },
+  {
+    "id": "51",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.25.835",
+    "status": "Novan Syaiful Rahman",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=51"
+  },
+  {
+    "id": "52",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.25.834",
+    "status": "Prisy Dewanti",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=52"
+  },
+  {
+    "id": "53",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "15.24.804",
+    "status": "Restia Widiasari",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=53"
+  },
+  {
+    "id": "54",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.24.768",
+    "status": "Reza Rizky Prayudha",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=54"
+  },
+  {
+    "id": "55",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.24.754",
+    "status": "Rike Rahmawati S.Pd",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=55"
+  },
+  {
+    "id": "56",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.22.673",
+    "status": "Romasta Oryza Sativa Siagian, S.Pd",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=56"
+  },
+  {
+    "id": "57",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "14.23.732",
+    "status": "Tiastiningrum Nugrahanti, S.Pd",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=57"
+  },
+  {
+    "id": "65",
+    "staffName": "CLASSROOM DISPLAY CHECKLIST",
+    "rubricName": "12.02.062",
+    "status": "Abu Bakar Ali, S.Sos I",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=65"
+  },
+  {
+    "id": "66",
+    "staffName": "CHECKLIST FOR LEARNING AND UNDERSTANDING",
+    "rubricName": "14.25.840",
+    "status": "Himawan Rizky Syaputra",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=66"
+  },
+  {
+    "id": "71",
+    "staffName": "DELIVERY OF INSTRUCTION",
+    "rubricName": "14.25.866",
+    "status": "Najmi Silmi Mafaza",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=71"
+  },
+  {
+    "id": "72",
+    "staffName": "FOCUS ON LEARNERS – SMALL GROUP OR IN PAIRING",
+    "rubricName": "14.25.866",
+    "status": "Najmi Silmi Mafaza",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=72"
+  },
+  {
+    "id": "73",
+    "staffName": "FOCUS ON LEARNERS – SMALL GROUP OR IN PAIRING",
+    "rubricName": "14.24.816",
+    "status": "Nadia",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=73"
+  },
+  {
+    "id": "74",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.23.709",
+    "status": "Zolla Firmalia Rossa, S.Pd.",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=74"
+  },
+  {
+    "id": "78",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.809",
+    "status": "Rifqi Satria Permana, S.Pd",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=78"
+  },
+  {
+    "id": "80",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.25.840",
+    "status": "Himawan Rizky Syaputra",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=80"
+  },
+  {
+    "id": "81",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.816",
+    "status": "Nadia",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=81"
+  },
+  {
+    "id": "82",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.22.671",
+    "status": "Maria Rosa Apriliana Jaftoran",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=82"
+  },
+  {
+    "id": "83",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.753",
+    "status": "Yosafat Imanuel Parlindungan, S.Sn",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=83"
+  },
+  {
+    "id": "84",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.809",
+    "status": "Rifqi Satria Permana, S.Pd",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=84"
+  },
+  {
+    "id": "85",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.23.709",
+    "status": "Zolla Firmalia Rossa, S.Pd.",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=85"
+  },
+  {
+    "id": "86",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.22.689",
+    "status": "Auliya Hasanatin Suwisto, S.IKom",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=86"
+  },
+  {
+    "id": "87",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.23.711",
+    "status": "Pipiet Anggreiny, S.TP",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=87"
+  },
+  {
+    "id": "88",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.773",
+    "status": "Devi Agriani, S.Pd.",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=88"
+  },
+  {
+    "id": "89",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "66",
+    "status": "Nayandra Hasan Sudra",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=89"
+  },
+  {
+    "id": "90",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "--",
+    "status": "Risma Galuh Pitaloka Fahdin",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=90"
+  },
+  {
+    "id": "91",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.21.654",
+    "status": "Fransiska Evasari, S.Pd",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=91"
+  },
+  {
+    "id": "92",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.23.730",
+    "status": "Pricilla Cecil Leander, S.Pd",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=92"
+  },
+  {
+    "id": "93",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.23.721",
+    "status": "Nathasya Christine Prabowo, S.Si",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=93"
+  },
+  {
+    "id": "94",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.22.687",
+    "status": "Zavier Cloudya Mashareen, S.Psi",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=94"
+  },
+  {
+    "id": "95",
+    "staffName": "Lesson Preparation Walkthrough",
+    "rubricName": "obsertvertest",
+    "status": "Observer Test",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=95"
+  },
+  {
+    "id": "96",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.25.866",
+    "status": "Najmi Silmi Mafaza",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=96"
+  },
+  {
+    "id": "97",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.816",
+    "status": "Nadia",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=97"
+  },
+  {
+    "id": "98",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "16.24.806",
+    "status": "Nurul Widyaningtyas Agustin",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=98"
+  },
+  {
+    "id": "100",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.769",
+    "status": "Tria Fadilla",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=100"
+  },
+  {
+    "id": "101",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.23.713",
+    "status": "Krisalyssa Esna Rehulina Tarigan, S.K.Pm",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=101"
+  },
+  {
+    "id": "102",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.23.719",
+    "status": "Gundah Basiswi, S.Pd",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=102"
+  },
+  {
+    "id": "103",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "12.02.062",
+    "status": "Abu Bakar Ali, S.Sos I",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=103"
+  },
+   {
+    "id": "104",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.24.816",
+    "status": "Nadia",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=104"
+  }
+]

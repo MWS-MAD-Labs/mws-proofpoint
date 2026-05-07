@@ -1,0 +1,42 @@
+[
+  {
+    "id": "1",
+    "staffName": "CHECKLIST FOR DIRECT INSTRUCTION",
+    "rubricName": "obstest",
+    "status": "Observer Test",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=1"
+  },
+  {
+    "id": "2",
+    "staffName": "CHECKLIST FOR DIRECT INSTRUCTION",
+    "rubricName": "obstest",
+    "status": "Observee Tester",
+    "submittedAt": "Submitted  Not Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=2"
+  },
+  {
+    "id": "3",
+    "staffName": "Special Education Teacher Supervision Instrument",
+    "rubricName": "obsertvertest",
+    "status": "Observer Test",
+    "submittedAt": "Submitted  Acknowledged",
+    "detailUrl": "view_submissions.php?submission_id=3"
+  },
+  {
+    "id": "4",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "14.23.736",
+    "status": "Rizki Nurul Hayati,",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=4"
+  },
+  {
+    "id": "5",
+    "staffName": "DETAILED CLASSROOM OBSERVATION",
+    "rubricName": "12.02.062",
+    "status": "Abu Bakar Ali, S.Sos I",
+    "submittedAt": "Pending",
+    "detailUrl": "view_submissions.php?submission_id=5"
+  }
+]

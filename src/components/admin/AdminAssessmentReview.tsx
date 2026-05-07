@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { CheckCircle2, FileText, Loader2, User, Building, Eye, TableIcon, CheckCheck, Copy, X } from 'lucide-react';
+import { CheckCircle2, FileText, Loader2, Building, TableIcon, CheckCheck, Copy } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -26,9 +26,6 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-interface AdminAssessmentReviewProps {
-    // No props needed for now as it fetches its own data
-}
 
 interface Assessment {
     id: string;
@@ -100,7 +97,7 @@ export function AdminAssessmentReview() {
 
     const handleRelease = async (id: string) => {
         setProcessingId(id);
-        const { data, error } = await api.put('/api/admin/assessments', {
+        const { error } = await api.put('/api/admin/assessments', {
             id,
             action: 'release'
         });
@@ -209,7 +206,7 @@ export function AdminAssessmentReview() {
                 description: "Table copied to clipboard. You can paste it directly into Google Docs.",
             });
             setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
+        } catch (_err) {
             // Fallback to plain text
             try {
                 await navigator.clipboard.writeText(html);
@@ -219,7 +216,7 @@ export function AdminAssessmentReview() {
                     description: "Table HTML copied to clipboard.",
                 });
                 setTimeout(() => setCopied(false), 2000);
-            } catch (e) {
+            } catch (_e) {
                 toast({
                     title: "Error",
                     description: "Failed to copy table",
