@@ -185,7 +185,7 @@ export function AssessmentIndicator({ indicator, onChange, index, readonly = fal
 
             <div className={cn("pt-2 transition-opacity duration-200", isExcluded && "opacity-40 select-none")}>
               <EvidenceInput
-                score={indicator.score}
+                score={indicator.score === 'X' ? null : indicator.score}
                 value={indicator.evidence}
                 onChange={(evidence) => onChange({ evidence })}
                 disabled={readonly || isExcluded}

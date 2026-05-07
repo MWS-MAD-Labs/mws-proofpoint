@@ -46,6 +46,7 @@ enum WorkflowStepType {
   approval
   review_and_approval
   acknowledge
+  admin_review
 }
 
 enum StrategicPlanStatus {
@@ -59,6 +60,32 @@ enum ProgramStatus {
   at_risk
   off_track
   completed
+}
+
+enum ObservationStatus {
+  draft
+  submitted
+  reviewed
+  acknowledged
+  pending
+}
+
+enum ObservationType {
+  SELF
+  MANAGER
+}
+
+enum TemplateType {
+  KPI_APPRAISAL
+  CLASSROOM_OBSERVATION
+  GENERIC
+}
+
+enum WorkflowActionType {
+  FILL_FORM
+  ACKNOWLEDGE
+  REVIEW
+  APPROVE
 }
 
 // Models
@@ -101,6 +128,10 @@ model User {
   answeredQuestions  AssessmentQuestion[] @relation("AnsweredQuestions")
   notificationPreferences NotificationPreference?
   notifications Notification[]
+  observationsAsDirector Observation[] @relation("DirectorObservations")
+  observations_observations_managerIdTousers Observation[] @relation("observations_managerIdTousers")
+  observations_observations_staffIdTousers Observation[] @relation("observations_staffIdTousers")
+  observationUpdates ObservationUpdate[] @relation("UpdatedByUser")
   ownedStrategicPlans StrategicPlan[] @relation("PlanOwner")
   progressUpdates ProgramProgressUpdate[] @relation("ProgressUpdateAuthor")
 
@@ -156,6 +187,9 @@ model RubricTemplate {
   domains          KpiDomain[]
   departmentRoles  DepartmentRole[]
   assessments      Assessment[]
+  observations     Observation[]
+  workflowAssignments RoleWorkflowAssignment[]
+  templateType     TemplateType @default(KPI_APPRAISAL) @map("template_type")
 
   @@map("rubric_templates")
 }
@@ -186,6 +220,7 @@ model RubricIndicator {
 
   section RubricSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   questions AssessmentQuestion[]
+  answers ObservationAnswer[]
 
   @@map("rubric_indicators")
 }
@@ -329,6 +364,7 @@ model DepartmentRole {
   department       Department?  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   defaultTemplate  RubricTemplate? @relation(fields: [defaultTemplateId], references: [id], onDelete: SetNull)
   approvalWorkflows ApprovalWorkflow[]
+  workflowAssignments RoleWorkflowAssignment[]
 
   @@unique([departmentId, role])
   @@index([departmentId])
@@ -401,6 +437,119 @@ enum NotificationType {
   admin_released
   assessment_returned
   assessment_acknowledged
+  observation_created
+  observation_pending
+  observation_submitted
+  observation_acknowledged
+}
+
+model WorkflowDefinition {
+  id          String                   @id @default(uuid())
+  name        String                   @db.Text
+  type        TemplateType
+  description String?                  @db.Text
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  assignments RoleWorkflowAssignment[]
+  steps       WorkflowStep[]
+
+  @@map("workflow_definitions")
+}
+
+model WorkflowStep {
+  id          String             @id @default(uuid())
+  workflowId  String             @map("workflow_id")
+  stepOrder   Int                @map("step_order")
+  actorRole   AppRole            @map("actor_role")
+  actionType  WorkflowActionType @map("action_type")
+  description String?            @db.Text
+
+  workflow WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@map("workflow_steps")
+}
+
+model RoleWorkflowAssignment {
+  id               String   @id @default(uuid())
+  departmentRoleId String   @map("department_role_id")
+  workflowId       String   @map("workflow_id")
+  rubricId         String?  @map("rubric_id")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  departmentRole DepartmentRole     @relation(fields: [departmentRoleId], references: [id], onDelete: Cascade, map: "role_workflow_assignments_dept_role_fkey")
+  workflow       WorkflowDefinition @relation(fields: [workflowId], references: [id], map: "role_workflow_assignments_workflow_fkey")
+  rubric         RubricTemplate?    @relation(fields: [rubricId], references: [id], onDelete: SetNull, map: "role_workflow_assignments_rubric_fkey")
+
+  @@index([departmentRoleId], map: "role_workflow_assignments_dept_role_idx")
+  @@map("role_workflow_assignments")
+}
+
+model Observation {
+  id                                  String              @id @default(uuid())
+  staffId                             String
+  managerId                           String?
+  directorId                          String?             @map("director_id")
+  rubricId                            String
+  status                              ObservationStatus   @default(draft)
+  type                                ObservationType     @default(MANAGER)
+  title                               String?             @db.Text
+  description                         String?             @db.Text
+  submittedAt                         DateTime?           @map("submitted_at")
+  acknowledgedAt                      DateTime?           @map("acknowledged_at")
+  acknowledgedBy                      String?             @map("acknowledged_by")
+  createdAt                           DateTime            @default(now()) @map("created_at")
+  updatedAt                           DateTime            @updatedAt @map("updated_at")
+
+  director                            User?               @relation("DirectorObservations", fields: [directorId], references: [id], onDelete: SetNull)
+  users_observations_managerIdTousers User?               @relation("observations_managerIdTousers", fields: [managerId], references: [id], onDelete: SetNull)
+  users_observations_staffIdTousers   User                @relation("observations_staffIdTousers", fields: [staffId], references: [id], onDelete: Cascade)
+  rubric_templates                    RubricTemplate      @relation(fields: [rubricId], references: [id])
+  answers                             ObservationAnswer[]
+  updates                             ObservationUpdate[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([managerId])
+  @@index([staffId])
+  @@map("observations")
+}
+
+model ObservationUpdate {
+  id            String            @id @default(uuid())
+  observationId String            @map("observation_id")
+  updatedById   String            @map("updated_by")
+  statusFrom    ObservationStatus
+  statusTo      ObservationStatus
+  notes         String?           @db.Text
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  observation   Observation       @relation(fields: [observationId], references: [id], onDelete: Cascade)
+  updatedBy     User              @relation("UpdatedByUser", fields: [updatedById], references: [id])
+
+  @@index([observationId])
+  @@index([updatedById])
+  @@map("observation_updates")
+}
+
+model ObservationAnswer {
+  id            String          @id @default(uuid())
+  observationId String          @map("observation_id")
+  indicatorId   String          @map("indicator_id")
+  score         Int
+  note          String?         @db.VarChar(1000)
+  evidence      String?         @db.Text
+  evidenceFile  String?         @map("evidence_file") @db.Text
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  indicator     RubricIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  observation   Observation     @relation(fields: [observationId], references: [id], onDelete: Cascade)
+
+  @@unique([observationId, indicatorId])
+  @@index([observationId])
+  @@index([indicatorId])
+  @@map("observation_answers")
 }
 
 model StrategicPlan {

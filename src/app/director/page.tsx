@@ -8,7 +8,6 @@ import { Header } from "@/components/layout/Header";
 import {
   AssessmentProgress,
   ReviewComparisonSection,
-  WeightedScoreDisplay,
 } from "@/components/assessment";
 import { AssessmentPrintView } from "@/components/assessment/AssessmentPrintView";
 import { ScoreComparisonWidget } from "@/components/assessment/ScoreComparisonWidget";
@@ -35,12 +34,10 @@ import {
   ChevronRight,
   ArrowLeft,
   Loader2,
-  CheckCircle2,
   Search,
   ShieldCheck,
   Trash2,
   Save,
-  Send,
   Layout,
   FileText,
   Info,
@@ -477,10 +474,6 @@ function DirectorContent() {
     const isReadOnly = !canEdit;
 
     // Determine the label for the reviewer column
-    const reviewerLabel = isDirectorReviewAndApproval
-      ? "Director Review"
-      : "Manager Review";
-
     return (
       <div className="max-w-7xl mx-auto py-8">
         {/* Status Alert Bar */}

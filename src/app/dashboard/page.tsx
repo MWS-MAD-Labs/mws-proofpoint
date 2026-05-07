@@ -178,6 +178,17 @@ function DashboardContent() {
       iconColor: "text-teal-500",
     },
     {
+      title: "Observations",
+      description: "Manage observation & evaluation",
+      icon: ClipboardList,
+      link: "/observations",
+      buttonText: "Open Observations",
+      buttonVariant: "outline" as const,
+      show: true,
+      gradient: "from-indigo-500/10 to-blue-500/10",
+      iconColor: "text-indigo-500",
+    },
+    {
       title: "Rubric Templates",
       description: "Create and manage evaluation criteria",
       icon: FileText,

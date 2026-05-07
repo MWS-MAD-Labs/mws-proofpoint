@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { DomainData, KPIData } from "@/hooks/useAssessment";
-import { EvidenceItem } from "./EvidenceInput";
+
 import { TrendingUp, Award, AlertTriangle, Lock } from "lucide-react";
 
 interface ScoreComparisonWidgetProps {
@@ -9,12 +9,6 @@ interface ScoreComparisonWidgetProps {
     projectedScore?: number | null;
 }
 
-function hasValidEvidence(evidence: string | EvidenceItem[]): boolean {
-    if (Array.isArray(evidence)) {
-        return evidence.some(e => e.evidence.trim().length > 0);
-    }
-    return typeof evidence === 'string' && evidence.trim().length > 0;
-}
 
 function calculateWeightedScore(domains: DomainData[] | undefined | null, type: 'staff' | 'manager' = 'staff'): number | null {
     if (!domains || !Array.isArray(domains)) return null;

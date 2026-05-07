@@ -1,15 +1,15 @@
 'use client';
 
-import { ReactNode } from 'react';
+// ✅ FIX: merge duplicate react imports jadi satu baris
+import { type ReactNode, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
-import { useEffect } from 'react';
 
 type AppRole = 'admin' | 'staff' | 'manager' | 'director';
 
 interface ProtectedRouteProps {
-  children: ReactNode;
+  children:       ReactNode;
   requiredRoles?: AppRole[];
 }
 
