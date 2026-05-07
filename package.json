@@ -22,6 +22,7 @@
     "db:seed:sections":         "tsx prisma/seed-sections.ts",
     "db:seed:notifications":    "tsx prisma/seed-notification-preferences.ts",
     "db:seed:observations":     "tsx prisma/seed-nlsmartrack-observations.ts",
+    "db:seed:milestone1":       "tsx prisma/seed-milestone1.ts",
 
     "deploy": "prisma migrate deploy && npm run db:seed"
   },
