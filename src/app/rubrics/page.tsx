@@ -8,6 +8,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +32,7 @@ import {
   X,
   BookOpen,
   Award,
+  ChevronUp,
   Import,
   Scale,
   Percent,
@@ -59,6 +61,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Tooltip,
   TooltipContent,
@@ -392,12 +401,12 @@ function DomainWeightEditor({
   onUpdateWeight,
   onAutoBalance,
 }: {
-  domains: Domain[];
+  domains: Template[];
   onUpdateWeight: (domainId: string, weight: number) => void;
   onAutoBalance: () => void;
 }) {
   const totalWeight = domains.reduce(
-    (acc, d) => acc + (d.weight || 0),
+    (acc, d) => acc + (parseFloat(d.weight) || 0),
     0,
   );
   const isBalanced = Math.abs(totalWeight - 100) < 0.1;
@@ -451,7 +460,7 @@ function DomainWeightEditor({
             <div className="flex items-center gap-2 w-32">
               <Slider
                 value={[parseFloat(domain.weight) || 0]}
-                onValueChange={([value]) => { if (value !== undefined) onUpdateWeight(domain.id, value); }}
+                onValueChange={([value]) => onUpdateWeight(domain.id, value)}
                 max={100}
                 step={0.5}
                 className="flex-1"
@@ -771,7 +780,7 @@ function RubricsContent() {
       }
 
       // Create standards
-      for (const standard of (domain as unknown as Domain).standards || []) {
+      for (const standard of domain.standards || []) {
         const { data: newStandard, error: standardError } =
           await api.createStandard({
             domain_id: (newDomain as any).id,
@@ -829,7 +838,7 @@ function RubricsContent() {
       toast({ title: "Success", description: "Template created successfully" });
       if (refreshTemplates) refreshTemplates();
       // Select the newly created template
-      await handleSelectTemplate(data as Template);
+      await handleSelectTemplate(data);
     }
   };
 
@@ -839,7 +848,7 @@ function RubricsContent() {
     const { data, error } = await api.createStandard({
       domain_id: domainId,
       name: "New Standard",
-      sort_order: domain?.standards?.length ?? 0,
+      sort_order: domain.standards?.length || 0,
     });
 
     if (error) {
@@ -1012,7 +1021,7 @@ function RubricsContent() {
     return domains.reduce(
       (acc, d) =>
         acc +
-        ((d as unknown as Domain).standards || []).reduce(
+        (d.standards || []).reduce(
           (sacc: number, s: any) => sacc + (s.kpis?.length || 0),
           0,
         ),
@@ -1020,7 +1029,7 @@ function RubricsContent() {
     );
   };
 
-  const countStandards = (domains: Domain[]) => {
+  const countStandards = (domains: Template[]) => {
     if (!domains) return 0;
     return domains.reduce((acc, d) => acc + (d.standards?.length || 0), 0);
   };

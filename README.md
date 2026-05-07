@@ -45,7 +45,7 @@ ProofPoint Dashboard is a premium performance assessment platform designed for M
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/MWS-MAD-Labs/proofpoint.git
    cd proofpoint-dashboard
    ```
 
@@ -104,7 +104,7 @@ Komodo Server
   └─ Restart Services
 ```
 
-**See [CI_CD.md](./CI_CD.md) for complete deployment documentation.**
+Deployment details are currently documented in this README and the deployment scripts in the repository.
 
 ### Manual Deployment
 
@@ -128,10 +128,7 @@ The system enforces a strict hierarchy for role availability:
 
 ## 📚 Documentation
 
-- [CI/CD Pipeline](./CI_CD.md) - Complete deployment guide
-- [Prisma Setup](./PRISMA_SETUP.md) - Database ORM guide
-- [Database Migrations](./database/DATABASE_MIGRATIONS.md) - Schema history
-- [Secrets Setup](./SECRETS_SETUP.md) - GitHub secrets configuration
+- [README.md](./README.md) - Project overview, setup, and deployment notes
 
 ---
 
