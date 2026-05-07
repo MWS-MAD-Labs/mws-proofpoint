@@ -1,0 +1,3 @@
+id,email,password_hash,email_verified,status,created_at,updated_at,directorId
+8cecfba8-0a3a-4485-b021-cc27d1ab1d1b,ananta@millennia21.id,dummy123,f,active,2026-04-07 14:30:39.103,2026-04-07 14:30:39.103,
+9cbd9f0e-cac2-4c09-943d-787daec177c7,faisal@millennia21.id,dummy123,f,active,2026-04-07 14:30:39.103,2026-04-07 14:30:39.103,

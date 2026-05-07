@@ -7,7 +7,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Download, X, Loader2, Printer } from "lucide-react";
-import { getGradeFromScore } from "@/hooks/useAssessment";
 
 interface AppraisalData {
   staffName: string;

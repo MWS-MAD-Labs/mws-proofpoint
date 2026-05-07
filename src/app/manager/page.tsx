@@ -9,7 +9,6 @@ import { Header } from "@/components/layout/Header";
 import {
   AssessmentProgress,
   ReviewComparisonSection,
-  WeightedScoreDisplay,
 } from "@/components/assessment";
 import { ScoreComparisonWidget } from "@/components/assessment/ScoreComparisonWidget";
 import {
