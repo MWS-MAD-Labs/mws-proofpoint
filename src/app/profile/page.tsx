@@ -1,17 +1,17 @@
 "use client";
 
-import { useRef } from "react";
+import { useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { Loader2, Camera } from "lucide-react";
+import { Loader2, Camera, User, Lock, Save, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
+import { Separator } from "@/components/ui/separator";
 
 interface UserProfile {
     id: string;

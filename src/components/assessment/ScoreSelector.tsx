@@ -158,7 +158,7 @@ export function ScoreSelector({ value, onChange, disabled, rubricDescriptions, h
           selectedOption.score === 'X' && "bg-slate-50 border-slate-200",
           selectedOption.score === 1 && "bg-evidence-alert-bg border-evidence-alert-border",
           selectedOption.score === 2 && "bg-muted/50 border-border",
-          typeof selectedOption.score === 'number' && selectedOption.score >= 3 && "bg-evidence-success-bg border-evidence-success-border"
+          selectedOption.score >= 3 && "bg-evidence-success-bg border-evidence-success-border"
         )}>
           {/* Gradient Overlay */}
           <div className={cn(
@@ -172,8 +172,7 @@ export function ScoreSelector({ value, onChange, disabled, rubricDescriptions, h
               selectedOption.score === 'X' && "bg-slate-500 text-white",
               selectedOption.score === 1 && "bg-evidence-alert/10 text-evidence-alert",
               selectedOption.score === 2 && "bg-muted text-muted-foreground",
-              typeof selectedOption.score === 'number' && selectedOption.score >= 3 && "bg-evidence-success/10 text-evidence-success"
-
+              selectedOption.score >= 3 && "bg-evidence-success/10 text-evidence-success"
             )}>
               {selectedOption.score === 'X' ? (
                 <span className="text-xl font-mono font-bold">X</span>
@@ -187,7 +186,7 @@ export function ScoreSelector({ value, onChange, disabled, rubricDescriptions, h
                 selectedOption.score === 'X' && "text-slate-700",
                 selectedOption.score === 1 && "text-evidence-alert",
                 selectedOption.score === 2 && "text-foreground",
-                typeof selectedOption.score === 'number' && selectedOption.score >= 3 && "text-evidence-success"
+                selectedOption.score >= 3 && "text-evidence-success"
               )}>
                 {selectedOption.score === 'X' ? 'Not Implemented Yet' : selectedOption.label}
               </p>
