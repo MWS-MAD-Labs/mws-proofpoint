@@ -476,6 +476,93 @@ class ApiClient {
     });
   }
 
+  // Admin - Workflow Definitions
+  async getWorkflowDefinitions(): Promise<ApiResponse<unknown[]>> {
+    return this.request("/admin/workflow-definitions");
+  }
+
+  async createWorkflowDefinition(data: {
+    name: string;
+    type: "KPI_APPRAISAL" | "CLASSROOM_OBSERVATION" | "GENERIC";
+    description?: string;
+    steps?: {
+      actorRole: string;
+      actionType: "FILL_FORM" | "ACKNOWLEDGE" | "REVIEW" | "APPROVE";
+      description?: string;
+    }[];
+  }): Promise<ApiResponse<unknown>> {
+    return this.request("/admin/workflow-definitions", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateWorkflowDefinition(
+    id: string,
+    data: {
+      name?: string;
+      description?: string;
+      steps?: {
+        actorRole: string;
+        actionType: "FILL_FORM" | "ACKNOWLEDGE" | "REVIEW" | "APPROVE";
+        description?: string;
+      }[];
+    },
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/admin/workflow-definitions", {
+      method: "PUT",
+      body: JSON.stringify({ id, ...data }),
+    });
+  }
+
+  async deleteWorkflowDefinition(id: string): Promise<ApiResponse<unknown>> {
+    return this.request(`/admin/workflow-definitions?id=${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  // Admin - Role Workflow Assignments
+  async getRoleWorkflowAssignments(
+    departmentRoleId?: string,
+  ): Promise<ApiResponse<unknown[]>> {
+    const query = departmentRoleId
+      ? `?departmentRoleId=${departmentRoleId}`
+      : "";
+    return this.request(`/admin/role-workflow-assignments${query}`);
+  }
+
+  async createRoleWorkflowAssignment(data: {
+    departmentRoleId: string;
+    workflowId: string;
+    rubricId?: string;
+  }): Promise<ApiResponse<unknown>> {
+    return this.request("/admin/role-workflow-assignments", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateRoleWorkflowAssignment(
+    id: string,
+    data: {
+      rubricId?: string | null;
+      isActive?: boolean;
+    },
+  ): Promise<ApiResponse<unknown>> {
+    return this.request("/admin/role-workflow-assignments", {
+      method: "PUT",
+      body: JSON.stringify({ id, ...data }),
+    });
+  }
+
+  async deleteRoleWorkflowAssignment(
+    id: string,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request(`/admin/role-workflow-assignments?id=${id}`, {
+      method: "DELETE",
+    });
+  }
+
   // Public - Workflows (for any authenticated user)
   async getWorkflows(
     departmentRoleId: string,

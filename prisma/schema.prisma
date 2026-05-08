@@ -48,6 +48,19 @@ enum WorkflowStepType {
   acknowledge
 }
 
+enum TemplateType {
+  KPI_APPRAISAL
+  CLASSROOM_OBSERVATION
+  GENERIC
+}
+
+enum WorkflowActionType {
+  FILL_FORM
+  ACKNOWLEDGE
+  REVIEW
+  APPROVE
+}
+
 enum StrategicPlanStatus {
   draft
   published
@@ -146,16 +159,18 @@ model RubricTemplate {
   description  String?   @db.Text
   departmentId String?   @map("department_id")
   isGlobal     Boolean   @default(false) @map("is_global")
-  createdById  String?   @map("created_by")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @default(now()) @map("updated_at")
+  createdById  String?      @map("created_by")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @default(now()) @map("updated_at")
+  templateType TemplateType @default(KPI_APPRAISAL) @map("template_type")
 
-  department       Department?       @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  createdBy        User?             @relation("TemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  sections         RubricSection[]
-  domains          KpiDomain[]
-  departmentRoles  DepartmentRole[]
-  assessments      Assessment[]
+  department          Department?              @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdBy           User?                    @relation("TemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  sections            RubricSection[]
+  domains             KpiDomain[]
+  departmentRoles     DepartmentRole[]
+  assessments         Assessment[]
+  workflowAssignments RoleWorkflowAssignment[]
 
   @@map("rubric_templates")
 }
@@ -326,9 +341,10 @@ model DepartmentRole {
   createdAt         DateTime       @default(now()) @map("created_at")
   updatedAt         DateTime       @default(now()) @map("updated_at")
 
-  department       Department?  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  defaultTemplate  RubricTemplate? @relation(fields: [defaultTemplateId], references: [id], onDelete: SetNull)
-  approvalWorkflows ApprovalWorkflow[]
+  department          Department?              @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  defaultTemplate     RubricTemplate?          @relation(fields: [defaultTemplateId], references: [id], onDelete: SetNull)
+  approvalWorkflows   ApprovalWorkflow[]
+  workflowAssignments RoleWorkflowAssignment[]
 
   @@unique([departmentId, role])
   @@index([departmentId])
@@ -348,6 +364,51 @@ model ApprovalWorkflow {
 
   @@index([departmentRoleId])
   @@map("approval_workflows")
+}
+
+model WorkflowDefinition {
+  id          String                   @id @default(uuid())
+  name        String                   @db.Text
+  type        TemplateType
+  description String?                  @db.Text
+  createdAt   DateTime                 @default(now()) @map("created_at")
+
+  steps       WorkflowStep[]
+  assignments RoleWorkflowAssignment[]
+
+  @@map("workflow_definitions")
+}
+
+model WorkflowStep {
+  id          String             @id @default(uuid())
+  workflowId  String             @map("workflow_id")
+  stepOrder   Int                @map("step_order")
+  actorRole   AppRole            @map("actor_role")
+  actionType  WorkflowActionType @map("action_type")
+  description String?            @db.Text
+
+  workflow WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@map("workflow_steps")
+}
+
+model RoleWorkflowAssignment {
+  id               String   @id @default(uuid())
+  departmentRoleId String   @map("department_role_id")
+  workflowId       String   @map("workflow_id")
+  rubricId         String?  @map("rubric_id")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  departmentRole DepartmentRole     @relation(fields: [departmentRoleId], references: [id], onDelete: Cascade)
+  workflow       WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Restrict)
+  rubric         RubricTemplate?    @relation(fields: [rubricId], references: [id], onDelete: SetNull)
+
+  @@index([departmentRoleId])
+  @@index([workflowId])
+  @@index([rubricId])
+  @@map("role_workflow_assignments")
 }
 
 model Notification {
