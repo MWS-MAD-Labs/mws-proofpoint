@@ -171,16 +171,16 @@ function AnswerInput({
   const qType = indicator.question_type ?? 'SCALE';
   const [score,          setScore]          = useState(answer?.score && answer.score > 0 ? answer.score.toString() : '');
   const [note,           setNote]           = useState(answer?.note ?? '');
-  const [textValue,      setTextValue]      = useState(answer?.textValue ?? '');
-  const [selectedOption, setSelectedOption] = useState(answer?.selectedOption ?? '');
+  const [textValue,      setTextValue]      = useState(answer?.textValue ?? (answer as any)?.text_value ?? '');
+  const [selectedOption, setSelectedOption] = useState(answer?.selectedOption ?? (answer as any)?.selected_option ?? '');
   const [saving,         setSaving]         = useState(false);
   const [saved,          setSaved]          = useState(false);
 
   useEffect(() => {
     setScore(answer?.score && answer.score > 0 ? answer.score.toString() : '');
     setNote(answer?.note ?? '');
-    setTextValue(answer?.textValue ?? '');
-    setSelectedOption(answer?.selectedOption ?? '');
+    setTextValue(answer?.textValue ?? (answer as any)?.text_value ?? '');
+    setSelectedOption(answer?.selectedOption ?? (answer as any)?.selected_option ?? '');
   }, [answer?.score, answer?.note, answer?.textValue, answer?.selectedOption]);
 
   const handleSave = async () => {
@@ -450,7 +450,29 @@ export default function ObservationsPage() {
       showAlert('error', json.error || 'Failed to save answer.');
       return;
     }
-    await loadDetail(selected.id);
+    // Update answers from save response directly
+    const json = await res.json();
+    const raw = json.data;
+    const savedAnswer = raw ? {
+      ...raw,
+      indicatorId:    raw["indicator_id"]    ?? raw.indicatorId    ?? indicatorId,
+      textValue:      raw["text_value"]      ?? raw.textValue      ?? null,
+      selectedOption: raw["selected_option"] ?? raw.selectedOption ?? null,
+    } : null;
+    if (savedAnswer) {
+      setSelected((prev) => {
+        if (!prev) return prev;
+        const existingIdx = prev.answers?.findIndex(
+          (a) => (a.indicatorId ?? (a as any).indicator_id) === indicatorId
+        ) ?? -1;
+        const newAnswers = existingIdx >= 0
+          ? prev.answers!.map((a, i) =>
+              i === existingIdx ? { ...a, ...savedAnswer } : a
+            )
+          : [...(prev.answers ?? []), savedAnswer];
+        return { ...prev, answers: newAnswers };
+      });
+    }
   };
 
   const handleSubmit = async () => {
@@ -491,9 +513,17 @@ export default function ObservationsPage() {
 
   const allIndicators = selected?.rubric?.sections?.flatMap((s) => s.indicators) ?? [];
 
-  const filledCount = allIndicators.filter((ind) =>
-    selected?.answers?.some((a) => a.indicatorId === ind.id && a.score > 0)
-  ).length;
+  const filledCount = allIndicators.filter((ind) => {
+    const answer = selected?.answers?.find(
+      (a) => (a.indicatorId ?? (a as any).indicator_id) === ind.id
+    );
+    if (!answer) return false;
+    const qType = (ind as any).question_type ?? 'SCALE';
+    if (qType === 'SCALE') return (answer.score ?? 0) > 0;
+    if (qType === 'TEXT') return !!(answer.textValue ?? (answer as any).text_value);
+    if (qType === 'CHOICE') return !!(answer.selectedOption ?? (answer as any).selected_option);
+    return (answer.score ?? 0) > 0;
+  }).length;
 
   const canEdit =
     selected?.status === 'draft' &&
@@ -798,7 +828,7 @@ export default function ObservationsPage() {
                             No indicators in this section
                           </p>
                         ) : section.indicators.map((indicator) => {
-                          const answer = selected.answers?.find((a) => a.indicatorId === indicator.id);
+                          const answer = selected.answers?.find((a) => (a.indicatorId ?? (a as any).indicator_id) === indicator.id);
 
                           if (!canEdit) {
                             return (

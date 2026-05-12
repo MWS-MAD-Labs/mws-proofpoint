@@ -257,7 +257,7 @@ function AssessmentContent() {
                                                     <SelectItem key={t.id} value={t.id} className="focus:bg-primary focus:text-white">
                                                         <div className="flex flex-col py-1">
                                                             <span className="font-bold">{t.name}</span>
-                                                            <span className="text-[10px] opacity-70">Comprehensive KPI Framework</span>
+                                                            <span className="text-[10px] opacity-70">KPI Appraisal</span>
                                                         </div>
                                                     </SelectItem>
                                                 ))
