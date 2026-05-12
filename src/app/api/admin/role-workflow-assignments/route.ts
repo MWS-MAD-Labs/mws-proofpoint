@@ -1,35 +1,32 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+// src/app/api/admin/role-workflow-assignments/route.ts
+// CRUD for assigning a WorkflowDefinition to a DepartmentRole (with optional rubric)
+//
+// GET    /api/admin/role-workflow-assignments?departmentRoleId=  → list assignments for a role
+// POST   /api/admin/role-workflow-assignments                    → create assignment
+// PUT    /api/admin/role-workflow-assignments                    → update assignment (rubric / isActive)
+// DELETE /api/admin/role-workflow-assignments?id=               → delete assignment
+
 import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth-helpers";
 
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return { error: "Unauthorized", status: 401 };
-  }
+// ── GET ───────────────────────────────────────────────────────────────────────
+export async function GET(req: Request) {
+  const { response } = await requireRole("admin");
+  if (response) return response;
 
-  const roles = (session.user as { roles?: string[] }).roles ?? [];
-  if (!roles.includes("admin")) {
-    return { error: "Forbidden", status: 403 };
-  }
+  const { searchParams } = new URL(req.url);
+  const departmentRoleId = searchParams.get("departmentRoleId");
 
-  return { session };
-}
-
-export async function GET(request: Request) {
   try {
-    const adminCheck = await requireAdmin();
-    if ("error" in adminCheck) {
-      return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const departmentRoleId = searchParams.get("departmentRoleId");
-
     const assignments = await prisma.roleWorkflowAssignment.findMany({
       where: departmentRoleId ? { departmentRoleId } : undefined,
       include: {
-        workflow: { include: { steps: { orderBy: { stepOrder: "asc" } } } },
+        workflow: {
+          include: {
+            steps: { orderBy: { stepOrder: "asc" } },
+          },
+        },
         rubric: { select: { id: true, name: true, templateType: true } },
         departmentRole: {
           include: {
@@ -40,46 +37,70 @@ export async function GET(request: Request) {
       orderBy: { createdAt: "asc" },
     });
 
-    return NextResponse.json({ data: assignments });
-  } catch (error) {
-    console.error("Role workflow assignments error:", error);
-    return NextResponse.json({ error: "Failed to fetch role workflow assignments" }, { status: 500 });
+    return NextResponse.json(assignments);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("GET /api/admin/role-workflow-assignments error:", error);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-export async function POST(request: Request) {
-  try {
-    const adminCheck = await requireAdmin();
-    if ("error" in adminCheck) {
-      return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
-    }
+// ── POST ──────────────────────────────────────────────────────────────────────
+export async function POST(req: Request) {
+  const { response } = await requireRole("admin");
+  if (response) return response;
 
-    const body = await request.json();
+  try {
+    const body = await req.json();
     const { departmentRoleId, workflowId, rubricId } = body;
 
     if (!departmentRoleId || !workflowId) {
       return NextResponse.json(
-        { error: "departmentRoleId and workflowId are required" },
+        { error: "departmentRoleId and workflowId are required." },
         { status: 400 }
       );
     }
 
-    const [departmentRole, workflow, rubric] = await Promise.all([
-      prisma.departmentRole.findUnique({ where: { id: departmentRoleId } }),
-      prisma.workflowDefinition.findUnique({ where: { id: workflowId } }),
-      rubricId ? prisma.rubricTemplate.findUnique({ where: { id: rubricId } }) : Promise.resolve(null),
-    ]);
-
-    if (!departmentRole) {
-      return NextResponse.json({ error: "Department role not found" }, { status: 404 });
+    // Verify department role exists
+    const deptRole = await prisma.departmentRole.findUnique({ where: { id: departmentRoleId } });
+    if (!deptRole) {
+      return NextResponse.json({ error: "Department role not found." }, { status: 404 });
     }
 
+    // Verify workflow exists
+    const workflow = await prisma.workflowDefinition.findUnique({ where: { id: workflowId } });
     if (!workflow) {
-      return NextResponse.json({ error: "Workflow definition not found" }, { status: 404 });
+      return NextResponse.json({ error: "Workflow definition not found." }, { status: 404 });
     }
 
-    if (rubricId && !rubric) {
-      return NextResponse.json({ error: "Rubric template not found" }, { status: 404 });
+    // Verify rubric exists if provided
+    let rubric = null;
+    if (rubricId) {
+      rubric = await prisma.rubricTemplate.findUnique({ where: { id: rubricId } });
+      if (!rubric) {
+        return NextResponse.json({ error: "Rubric template not found." }, { status: 404 });
+      }
+    }
+
+    // Validate rubric type matches workflow type
+    if (rubric && workflow) {
+      const wfType = (workflow as any).type as string;
+      const rubricType = (rubric as any).templateType as string;
+      if (wfType === "CLASSROOM_OBSERVATION") {
+        if (rubricType !== "CLASSROOM_OBSERVATION" && rubricType !== "GENERIC") {
+          return NextResponse.json(
+            { error: "Observation workflow only allows CLASSROOM_OBSERVATION or GENERIC rubric templates." },
+            { status: 400 }
+          );
+        }
+      } else if (wfType === "KPI_APPRAISAL") {
+        if (rubricType !== "KPI_APPRAISAL" && rubricType !== "GENERIC") {
+          return NextResponse.json(
+            { error: "KPI Appraisal workflow only allows KPI_APPRAISAL or GENERIC rubric templates." },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     const assignment = await prisma.roleWorkflowAssignment.create({
@@ -95,44 +116,65 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ data: assignment }, { status: 201 });
-  } catch (error) {
-    console.error("Create role workflow assignment error:", error);
-    return NextResponse.json({ error: "Failed to create role workflow assignment" }, { status: 500 });
+    return NextResponse.json(assignment, { status: 201 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("POST /api/admin/role-workflow-assignments error:", error);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-export async function PUT(request: Request) {
-  try {
-    const adminCheck = await requireAdmin();
-    if ("error" in adminCheck) {
-      return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
-    }
+// ── PUT ───────────────────────────────────────────────────────────────────────
+export async function PUT(req: Request) {
+  const { response } = await requireRole("admin");
+  if (response) return response;
 
-    const body = await request.json();
+  try {
+    const body = await req.json();
     const { id, rubricId, isActive } = body;
 
     if (!id) {
-      return NextResponse.json({ error: "Assignment ID is required" }, { status: 400 });
+      return NextResponse.json({ error: "Assignment ID is required." }, { status: 400 });
     }
 
-    const existing = await prisma.roleWorkflowAssignment.findUnique({ where: { id } });
+    const existing = await prisma.roleWorkflowAssignment.findUnique({
+      where: { id },
+      include: { workflow: true },
+    });
     if (!existing) {
-      return NextResponse.json({ error: "Role workflow assignment not found" }, { status: 404 });
+      return NextResponse.json({ error: "Assignment not found." }, { status: 404 });
     }
 
+    // Validate rubric type matches workflow type if rubric is being updated
     if (rubricId) {
       const rubric = await prisma.rubricTemplate.findUnique({ where: { id: rubricId } });
       if (!rubric) {
-        return NextResponse.json({ error: "Rubric template not found" }, { status: 404 });
+        return NextResponse.json({ error: "Rubric template not found." }, { status: 404 });
+      }
+      const wfType = (existing.workflow as any)?.type as string;
+      const rubricType = (rubric as any).templateType as string;
+      if (wfType === "CLASSROOM_OBSERVATION") {
+        if (rubricType !== "CLASSROOM_OBSERVATION" && rubricType !== "GENERIC") {
+          return NextResponse.json(
+            { error: "Observation workflow only allows CLASSROOM_OBSERVATION or GENERIC rubric templates." },
+            { status: 400 }
+          );
+        }
+      } else if (wfType === "KPI_APPRAISAL") {
+        if (rubricType !== "KPI_APPRAISAL" && rubricType !== "GENERIC") {
+          return NextResponse.json(
+            { error: "KPI Appraisal workflow only allows KPI_APPRAISAL or GENERIC rubric templates." },
+            { status: 400 }
+          );
+        }
       }
     }
 
-    const assignment = await prisma.roleWorkflowAssignment.update({
+    const updated = await prisma.roleWorkflowAssignment.update({
       where: { id },
       data: {
-        rubricId: rubricId !== undefined ? rubricId : existing.rubricId,
-        isActive: typeof isActive === "boolean" ? isActive : existing.isActive,
+        rubricId: rubricId !== undefined ? (rubricId ?? null) : existing.rubricId,
+        isActive:  isActive  !== undefined ? isActive             : existing.isActive,
       },
       include: {
         workflow: { include: { steps: { orderBy: { stepOrder: "asc" } } } },
@@ -140,31 +182,37 @@ export async function PUT(request: Request) {
       },
     });
 
-    return NextResponse.json({ data: assignment });
-  } catch (error) {
-    console.error("Update role workflow assignment error:", error);
-    return NextResponse.json({ error: "Failed to update role workflow assignment" }, { status: 500 });
+    return NextResponse.json(updated);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("PUT /api/admin/role-workflow-assignments error:", error);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-export async function DELETE(request: Request) {
-  try {
-    const adminCheck = await requireAdmin();
-    if ("error" in adminCheck) {
-      return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
-    }
+// ── DELETE ────────────────────────────────────────────────────────────────────
+export async function DELETE(req: Request) {
+  const { response } = await requireRole("admin");
+  if (response) return response;
 
-    const { searchParams } = new URL(request.url);
+  try {
+    const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
     if (!id) {
-      return NextResponse.json({ error: "Assignment ID is required" }, { status: 400 });
+      return NextResponse.json({ error: "Query parameter 'id' is required." }, { status: 400 });
+    }
+
+    const existing = await prisma.roleWorkflowAssignment.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Assignment not found." }, { status: 404 });
     }
 
     await prisma.roleWorkflowAssignment.delete({ where: { id } });
-    return NextResponse.json({ message: "Role workflow assignment deleted successfully" });
-  } catch (error) {
-    console.error("Delete role workflow assignment error:", error);
-    return NextResponse.json({ error: "Failed to delete role workflow assignment" }, { status: 500 });
+    return NextResponse.json({ message: "Assignment deleted successfully." });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("DELETE /api/admin/role-workflow-assignments error:", error);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -162,7 +162,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
     const fetchData = async () => {
       const [drRes, rRes, wfRes] = await Promise.all([
         api.getDepartmentRoles(),
-        api.getRubrics(),
+        api.getRubrics('all'),
         api.getWorkflowDefinitions(),
       ]);
       if (drRes.data) setDepartmentRoles(drRes.data as DepartmentRole[]);
@@ -533,12 +533,13 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                                   {rubrics
                                     .filter(r => {
                                       if (a.workflow.type === 'CLASSROOM_OBSERVATION') {
-                                        return r.templateType === 'CLASSROOM_OBSERVATION';
+                                        // AC2: observation workflow allows CLASSROOM_OBSERVATION or GENERIC
+                                        return r.templateType === 'CLASSROOM_OBSERVATION' || r.templateType === 'GENERIC';
                                       }
                                       if (a.workflow.type === 'KPI_APPRAISAL') {
-                                        return r.templateType === 'KPI_APPRAISAL';
+                                        return r.templateType === 'KPI_APPRAISAL' || r.templateType === 'GENERIC';
                                       }
-                                      return true;
+                                      return r.templateType === 'CLASSROOM_OBSERVATION' || r.templateType === 'GENERIC';
                                     })
                                     .map(r => (
                                       <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>

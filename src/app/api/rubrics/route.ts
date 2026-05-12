@@ -11,7 +11,8 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const templateId = searchParams.get("id");
+    const templateId   = searchParams.get("id");
+    const templateType = searchParams.get("templateType");
 
     if (templateId) {
       // Get single template
@@ -81,13 +82,39 @@ export async function GET(request: Request) {
       });
     }
 
-    // List all templates
+    // List templates with filtering
+    // ?templateType=CLASSROOM_OBSERVATION  → only observation forms
+    // ?templateType=KPI_APPRAISAL          → only KPI templates
+    // ?templateType=all                    → all templates
+    // default (no param)                  → exclude CLASSROOM_OBSERVATION (for appraisal lists)
+    let whereClause = "";
+    let queryParams: string[] = [];
+
+    if (templateType === "all") {
+      // no filter
+    } else if (templateType === "CLASSROOM_OBSERVATION") {
+      whereClause = `WHERE rt.template_type = $1`;
+      queryParams = ["CLASSROOM_OBSERVATION"];
+    } else if (templateType === "KPI_APPRAISAL") {
+      whereClause = `WHERE rt.template_type = $1`;
+      queryParams = ["KPI_APPRAISAL"];
+    } else if (templateType === "GENERIC") {
+      whereClause = `WHERE rt.template_type = $1`;
+      queryParams = ["GENERIC"];
+    } else {
+      // Default: exclude CLASSROOM_OBSERVATION from appraisal rubric lists
+      whereClause = `WHERE rt.template_type != $1`;
+      queryParams = ["CLASSROOM_OBSERVATION"];
+    }
+
     const templates = await query(
       `SELECT rt.*, rt.template_type as "templateType", d.name as department_name, p.full_name as created_by_name
        FROM rubric_templates rt
        LEFT JOIN departments d ON rt.department_id = d.id
        LEFT JOIN profiles p ON rt.created_by = p.user_id
+       ${whereClause}
        ORDER BY rt.name`,
+      queryParams,
     );
 
     return NextResponse.json({ data: templates });

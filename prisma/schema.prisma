@@ -118,6 +118,10 @@ model User {
   progressUpdates ProgramProgressUpdate[] @relation("ProgressUpdateAuthor")
 
   @@index([status])
+  observationsAsStaff   Observation[]           @relation("ObservationStaff")
+  observationsAsManager Observation[]           @relation("ObservationManager")
+  observationUpdates    ObservationUpdate[]     @relation("ObservationUpdates")
+
   @@map("users")
 }
 
@@ -171,6 +175,7 @@ model RubricTemplate {
   departmentRoles     DepartmentRole[]
   assessments         Assessment[]
   workflowAssignments RoleWorkflowAssignment[]
+  observations        Observation[]
 
   @@map("rubric_templates")
 }
@@ -190,19 +195,31 @@ model RubricSection {
 }
 
 model RubricIndicator {
-  id               String   @id @default(uuid())
-  sectionId        String   @map("section_id")
-  name             String   @db.Text
-  description      String?  @db.Text
-  sortOrder        Int      @default(0) @map("sort_order")
-  evidenceGuidance String?  @map("evidence_guidance") @db.Text
-  scoreOptions     Json?    @map("score_options")
-  createdAt        DateTime @default(now()) @map("created_at")
+  id               String                @id @default(uuid())
+  sectionId        String                @map("section_id")
+  name             String                @db.Text
+  description      String?               @db.Text
+  sortOrder        Int                   @default(0) @map("sort_order")
+  evidenceGuidance String?               @map("evidence_guidance") @db.Text
+  scoreOptions     Json?                 @map("score_options")
+  questionType     IndicatorQuestionType @default(SCALE) @map("question_type")
+  scoreMin         Int?                  @map("score_min")
+  scoreMax         Int?                  @map("score_max")
+  scoreStep        Int?                  @map("score_step")
+  placeholderText  String?               @map("placeholder_text") @db.Text
+  createdAt        DateTime              @default(now()) @map("created_at")
 
-  section RubricSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  section   RubricSection      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   questions AssessmentQuestion[]
+  observationAnswers ObservationAnswer[] @relation("AnswerIndicator")
 
   @@map("rubric_indicators")
+}
+
+enum IndicatorQuestionType {
+  SCALE   // Numeric scale (e.g. 1-10, 1-100)
+  CHOICE  // Single/multiple choice from predefined options
+  TEXT    // Free text / narrative response
 }
 
 model KpiDomain {
@@ -655,4 +672,68 @@ model ProgramProgressUpdate {
   @@index([programId])
   @@index([authorId])
   @@map("program_progress_updates")
+}
+
+// ─── Observation Models ───────────────────────────────────────────────────────
+
+model Observation {
+  id          String            @id @default(uuid())
+  staffId     String            @map("staff_id")
+  managerId   String            @map("manager_id")
+  rubricId    String            @map("rubric_id")
+  status      ObservationStatus @default(draft)
+  type        String            @default("MANAGER")
+  title       String            @db.Text
+  description String?           @db.Text
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  users_observations_staffIdTousers   User            @relation("ObservationStaff",   fields: [staffId],   references: [id])
+  users_observations_managerIdTousers User            @relation("ObservationManager", fields: [managerId], references: [id])
+  rubric_templates                    RubricTemplate  @relation(fields: [rubricId], references: [id], onDelete: Restrict)
+  answers                             ObservationAnswer[]
+  updates                             ObservationUpdate[]
+
+  @@map("observations")
+}
+
+model ObservationAnswer {
+  id             String      @id @default(uuid())
+  observationId  String      @map("observation_id")
+  indicatorId    String?     @map("indicator_id")
+  score          Int         @default(0)
+  note           String?     @db.Text
+  evidence       String?     @db.Text
+  evidenceFile   String?     @map("evidence_file") @db.Text
+  textValue      String?     @map("text_value") @db.Text
+  selectedOption String?     @map("selected_option") @db.Text
+  selectedOptions Json?      @map("selected_options")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  observation Observation      @relation(fields: [observationId], references: [id], onDelete: Cascade)
+  indicator   RubricIndicator? @relation("AnswerIndicator", fields: [indicatorId], references: [id], onDelete: SetNull)
+
+  @@map("observation_answers")
+}
+
+model ObservationUpdate {
+  id          String   @id @default(uuid())
+  observationId String @map("observation_id")
+  updatedById String   @map("updated_by_id")
+  statusFrom  String?  @map("status_from")
+  statusTo    String?  @map("status_to")
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  observation Observation @relation(fields: [observationId], references: [id], onDelete: Cascade)
+  updatedBy   User        @relation("ObservationUpdates", fields: [updatedById], references: [id])
+
+  @@map("observation_updates")
+}
+
+enum ObservationStatus {
+  draft
+  pending
+  acknowledged
 }
