@@ -364,19 +364,20 @@ export default function ObservationsPage() {
   const fetchFormData = useCallback(async () => {
     if (!isAdmin && !isManager) return;
     try {
-      const [resStaff, resManagers, resRubrics] = await Promise.all([
+      const [resStaff, resManagers, resAssignments] = await Promise.all([
         fetch('/api/admin/users'),
         fetch('/api/managers'),
-        fetch('/api/rubrics?templateType=CLASSROOM_OBSERVATION'),
+        fetch('/api/observations/available-forms'),
       ]);
 
-      const rawStaff    = await resStaff.json();
-      const rawManagers = await resManagers.json();
-      const rawRubrics  = await resRubrics.json();
+      const rawStaff       = await resStaff.json();
+      const rawManagers    = await resManagers.json();
+      const rawAssignments = await resAssignments.json();
 
       setStaffList(Array.isArray(rawStaff?.data) ? rawStaff.data : Array.isArray(rawStaff) ? rawStaff : []);
       setManagerList(Array.isArray(rawManagers) ? rawManagers : []);
-      setRubricList(Array.isArray(rawRubrics) ? rawRubrics : Array.isArray(rawRubrics?.data) ? rawRubrics.data : []);
+      // Only rubrics that are linked via workflow assignments
+      setRubricList(Array.isArray(rawAssignments) ? rawAssignments : []);
     } catch (err) {
       console.error('fetchFormData error:', err);
     }
