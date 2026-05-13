@@ -89,27 +89,27 @@ export async function GET(request: Request) {
     // default (no param)                  → exclude CLASSROOM_OBSERVATION (for appraisal lists)
     // All queries filter is_active = true
     let whereClause = "";
-    let queryParams: any[] = [];
+    let queryParams: (string | string[])[] = [];
 
     if (templateType === "all") {
       whereClause = `WHERE rt.is_active = true`;
     } else if (templateType && templateType.includes(",")) {
       // Comma-separated: e.g. "CLASSROOM_OBSERVATION,GENERIC"
       const types = templateType.split(",").map(t => t.trim()).filter(Boolean);
-      whereClause = `WHERE rt.template_type = ANY($1::text[]) AND rt.is_active = true`;
+      whereClause = `WHERE rt.template_type = ANY($1::"TemplateType"[]) AND rt.is_active = true`;
       queryParams = [types];
     } else if (templateType === "CLASSROOM_OBSERVATION") {
-      whereClause = `WHERE rt.template_type = $1 AND rt.is_active = true`;
+      whereClause = `WHERE rt.template_type = $1::"TemplateType" AND rt.is_active = true`;
       queryParams = ["CLASSROOM_OBSERVATION"];
     } else if (templateType === "KPI_APPRAISAL") {
-      whereClause = `WHERE rt.template_type = $1 AND rt.is_active = true`;
+      whereClause = `WHERE rt.template_type = $1::"TemplateType" AND rt.is_active = true`;
       queryParams = ["KPI_APPRAISAL"];
     } else if (templateType === "GENERIC") {
-      whereClause = `WHERE rt.template_type = $1 AND rt.is_active = true`;
+      whereClause = `WHERE rt.template_type = $1::"TemplateType" AND rt.is_active = true`;
       queryParams = ["GENERIC"];
     } else {
       // Default: exclude CLASSROOM_OBSERVATION from appraisal rubric lists
-      whereClause = `WHERE rt.template_type != $1 AND rt.is_active = true`;
+      whereClause = `WHERE rt.template_type != $1::"TemplateType" AND rt.is_active = true`;
       queryParams = ["CLASSROOM_OBSERVATION"];
     }
 

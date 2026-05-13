@@ -77,6 +77,7 @@ interface RubricTemplate {
   id: string;
   name: string;
   template_type?: string;
+  templateType?: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -281,7 +282,7 @@ function WorkflowForm({
 
         {steps.length === 0 ? (
           <div className="border border-dashed rounded-xl p-6 text-center text-sm text-muted-foreground">
-            No steps yet — click "Add Step" to begin
+            No steps yet — click &quot;Add Step&quot; to begin
           </div>
         ) : (
           <div className="space-y-2">
@@ -383,7 +384,10 @@ function AssignmentPanel({
                     <SelectContent>
                       <SelectItem value="none">No rubric linked</SelectItem>
                       {rubrics
-                        .filter(r => !r.template_type || r.template_type === 'CLASSROOM_OBSERVATION')
+                        .filter((r) => {
+                          const type = r.template_type ?? r.templateType;
+                          return !type || type === 'CLASSROOM_OBSERVATION' || type === 'GENERIC';
+                        })
                         .map(r => (
                           <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
                         ))
@@ -650,7 +654,7 @@ export function ObservationWorkflowManager() {
           <BookOpen className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
           <p className="text-sm font-medium text-muted-foreground">No observation workflows yet</p>
           <p className="text-xs text-muted-foreground/70 mt-1">
-            Click "New Workflow" to create one
+            Click &quot;New Workflow&quot; to create one
           </p>
         </div>
       ) : (

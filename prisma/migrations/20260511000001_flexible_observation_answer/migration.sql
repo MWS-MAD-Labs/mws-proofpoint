@@ -2,9 +2,9 @@
 -- Supports SCALE (score), TEXT (text_value), CHOICE (selected_option)
 
 ALTER TABLE "observation_answers"
-  ADD COLUMN "text_value"       TEXT,
-  ADD COLUMN "selected_option"  TEXT,
-  ADD COLUMN "selected_options" JSONB;
+  ADD COLUMN IF NOT EXISTS "text_value"       TEXT,
+  ADD COLUMN IF NOT EXISTS "selected_option"  TEXT,
+  ADD COLUMN IF NOT EXISTS "selected_options" JSONB;
 
 -- score and note remain for SCALE type (backward compatible)
 -- text_value for TEXT type
