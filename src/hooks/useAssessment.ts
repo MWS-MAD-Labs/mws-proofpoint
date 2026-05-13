@@ -3,15 +3,9 @@ import { api } from "@/lib/api-client";
 import { useAuth } from "./useAuth";
 import { toast } from "./use-toast";
 
-// ✅ FIX: EvidenceItem type yang hilang — sebelumnya tidak didefinisikan tapi dipakai di banyak tempat
-export interface EvidenceItem {
-  evidence:   string;
-  name?:      string;
-  notes?:     string;
-  type?:      "link" | "file";
-  fileName?:  string;
-  inputMode?: "initial" | "link" | "file";
-}
+// Import and re-export EvidenceItem from canonical source to avoid type mismatch
+import type { EvidenceItem } from "@/components/assessment/EvidenceInput";
+export type { EvidenceItem };
 
 export interface KPIData {
   id:               string;
@@ -211,7 +205,36 @@ export function useAssessment(assessmentId?: string) {
               }))
             }));
 
-          setDomains(formattedDomains);
+          if (formattedDomains.length === 0) {
+            const sections = (template as any).sections || [];
+            const legacyDomains: DomainData[] = sections.map((section: any) => ({
+              id:     section.id,
+              name:   section.name,
+              weight: Number(section.weight || 0),
+              standards: [{
+                id:   section.id + '_std',
+                name: section.name,
+                kpis: (section.indicators || []).map((ind: any) => ({
+                  id:               ind.id,
+                  name:             ind.name,
+                  description:      ind.description || null,
+                  evidence_guidance:ind.evidence_guidance || null,
+                  trainings:        null,
+                  rubric_4:         '',
+                  rubric_3:         '',
+                  rubric_2:         '',
+                  rubric_1:         '',
+                  score:            staffScores[ind.id] ?? null,
+                  evidence:         staffEvidence[ind.id] || '',
+                  managerScore:     managerScores[ind.id] ?? null,
+                  managerEvidence:  managerEvidence[ind.id] || '',
+                }))
+              }]
+            }));
+            setDomains(legacyDomains);
+          } else {
+            setDomains(formattedDomains);
+          }
         }
       }
 

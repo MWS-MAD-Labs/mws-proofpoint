@@ -463,7 +463,7 @@ export function ObservationWorkflowManager() {
       const [wfRes, drRes, rbRes] = await Promise.all([
         fetch('/api/admin/workflow-definitions'),
         fetch('/api/admin/department-roles'),
-        fetch('/api/rubrics?templateType=CLASSROOM_OBSERVATION'),
+        fetch('/api/rubrics?templateType=CLASSROOM_OBSERVATION,GENERIC'),
       ]);
 
       const wfJson = await wfRes.json();
@@ -475,7 +475,10 @@ export function ObservationWorkflowManager() {
       setWorkflows(allWorkflows.filter(w => w.type === 'CLASSROOM_OBSERVATION'));
 
       setDepartmentRoles(Array.isArray(drJson?.data) ? drJson.data : Array.isArray(drJson) ? drJson : []);
-      setRubrics(Array.isArray(rbJson) ? rbJson : Array.isArray(rbJson?.data) ? rbJson.data : []);
+
+      // CLASSROOM_OBSERVATION + GENERIC rubrics combined for selector
+      const allRubrics = Array.isArray(rbJson) ? rbJson : Array.isArray(rbJson?.data) ? rbJson.data : [];
+      setRubrics(allRubrics);
     } catch (err) {
       console.error('fetchAll error:', err);
       showAlert('error', 'Failed to load data.');

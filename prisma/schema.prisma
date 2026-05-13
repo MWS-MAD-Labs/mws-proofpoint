@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Department {
@@ -89,6 +88,7 @@ model RubricTemplate {
   description     String?
   departmentId    String?          @map("department_id")
   isGlobal        Boolean          @default(false) @map("is_global")
+  isActive        Boolean          @default(true) @map("is_active")
   createdById     String?          @map("created_by")
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @default(now()) @map("updated_at")

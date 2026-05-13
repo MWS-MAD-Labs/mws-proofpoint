@@ -140,10 +140,15 @@ class ApiClient {
   }
 
   // Rubrics
-  async getRubrics(type?: "all" | "CLASSROOM_OBSERVATION" | "KPI_APPRAISAL"): Promise<ApiResponse<unknown[]>> {
-  const qs = type ? `?type=${type}` : "";
-  return this.request(`/rubrics${qs}`);
-}
+  async getRubrics(templateType?: "all" | "CLASSROOM_OBSERVATION" | "KPI_APPRAISAL" | "GENERIC" | "OBSERVATION_AND_GENERIC"): Promise<ApiResponse<unknown[]>> {
+    let qs = "";
+    if (templateType === "OBSERVATION_AND_GENERIC") {
+      qs = "?templateType=CLASSROOM_OBSERVATION,GENERIC";
+    } else if (templateType) {
+      qs = `?templateType=${templateType}`;
+    }
+    return this.request(`/rubrics${qs}`);
+  }
 
   async getRubric(id: string): Promise<ApiResponse<unknown>> {
     return this.request(`/rubrics?id=${id}`);

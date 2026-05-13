@@ -162,7 +162,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
     const fetchData = async () => {
       const [drRes, rRes, wfRes] = await Promise.all([
         api.getDepartmentRoles(),
-        api.getRubrics('all'),
+        api.getRubrics('all'), // fetch all templates including CLASSROOM_OBSERVATION and GENERIC
         api.getWorkflowDefinitions(),
       ]);
       if (drRes.data) setDepartmentRoles(drRes.data as DepartmentRole[]);
