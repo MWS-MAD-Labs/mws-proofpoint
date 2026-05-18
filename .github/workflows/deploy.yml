@@ -41,12 +41,12 @@ jobs:
       - name: Generate Prisma Client
         run: npm run db:generate
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://proofpoint:proofpoint@localhost:5432/proofpoint?schema=public' }}
 
       - name: Build application
         run: npm run build
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://proofpoint:proofpoint@localhost:5432/proofpoint?schema=public' }}
           NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
 
@@ -83,7 +83,6 @@ jobs:
           else
             echo "value=staging" >> $GITHUB_OUTPUT
           fi
-
 
       - name: Extract metadata
         id: meta

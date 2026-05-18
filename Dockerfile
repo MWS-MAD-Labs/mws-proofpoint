@@ -6,6 +6,12 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
+COPY prisma.config.ts ./
+
+# Build-time placeholders. Real runtime values must be injected by deployment.
+ENV DATABASE_URL="postgresql://proofpoint:proofpoint@localhost:5432/proofpoint?schema=public"
+ENV NEXTAUTH_URL="http://localhost:3000"
+ENV NEXTAUTH_SECRET="build-time-placeholder-change-at-runtime"
 
 # Install dependencies
 RUN npm ci
