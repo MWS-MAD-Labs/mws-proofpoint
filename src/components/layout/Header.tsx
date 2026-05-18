@@ -102,12 +102,6 @@ export function Header({ className }: HeaderProps) {
       show: isManager || isDirector || isAdmin,
     },
     {
-      path: "/observation-forms",
-      label: "Obs. Forms",
-      icon: ClipboardCheck,
-      show: isAdmin,
-    },
-    {
       path: "/admin",
       label: "Admin",
       icon: Shield,
