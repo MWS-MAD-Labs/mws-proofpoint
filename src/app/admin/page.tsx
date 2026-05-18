@@ -28,8 +28,7 @@ import {
     Plus,
     Clock,
     ChevronDown,
-    FileText,
-    ClipboardCheck
+    FileText
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api-client';
@@ -65,7 +64,6 @@ import { UserManagementModal } from '@/components/admin/UserManagementModal';
 import { DepartmentModal } from '@/components/admin/DepartmentModal';
 import { WorkflowEditor } from '@/components/admin/WorkflowEditor';
 import { AdminAssessmentReview } from '@/components/admin/AdminAssessmentReview';
-import { ObservationFormEditor } from '@/components/admin/ObservationFormEditor';
 
 interface User {
     id: string;
@@ -474,10 +472,6 @@ function AdminContent() {
                         <FileText className="h-4 w-4" />
                         Reviews
                     </TabsTrigger>
-                    <TabsTrigger value="obs-forms" className="flex items-center gap-2">
-                        <ClipboardCheck className="h-4 w-4" />
-                        Obs. Forms
-                    </TabsTrigger>
                 </TabsList>
 
                 {/* Users Tab */}
@@ -743,9 +737,7 @@ function AdminContent() {
                 <TabsContent value="reviews">
                     <AdminAssessmentReview />
                 </TabsContent>
-                <TabsContent value="obs-forms">
-                    <ObservationFormEditor />
-                </TabsContent>
+
             </Tabs>
 
             {/* Modals */}

@@ -18,7 +18,6 @@ import {
   Sun,
   Settings,
   Eye,
-  ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -231,7 +230,10 @@ export function Header({ className }: HeaderProps) {
                 </div>
 
                 <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
-                  <Link href="/dashboard" className="flex items-center gap-2 p-2">
+                  <Link
+                    href="/dashboard"
+                    className="flex items-center gap-2 p-2"
+                  >
                     <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center">
                       <LayoutDashboard className="h-4 w-4 text-foreground" />
                     </div>
@@ -249,7 +251,10 @@ export function Header({ className }: HeaderProps) {
                 </DropdownMenuItem>
 
                 <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
-                  <Link href="/settings/notifications" className="flex items-center gap-2 p-2">
+                  <Link
+                    href="/settings/notifications"
+                    className="flex items-center gap-2 p-2"
+                  >
                     <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center">
                       <Settings className="h-4 w-4 text-foreground" />
                     </div>
