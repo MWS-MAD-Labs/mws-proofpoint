@@ -30,6 +30,8 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
+RUN apk add --no-cache curl
+
 # Install dependencies for production runtime.
 # Prisma CLI is required at container startup for migrate deploy.
 COPY package*.json ./
