@@ -11,7 +11,6 @@ if ! npx prisma migrate deploy; then
 
   if [ "${PRISMA_AUTO_REPAIR_KNOWN_MIGRATIONS:-true}" = "true" ]; then
     node /app/scripts/repair-known-prisma-migration.mjs
-    npx prisma migrate resolve --rolled-back "$KNOWN_FAILED_MIGRATION"
     echo "🔁 Retrying Prisma migrations after repair..."
     npx prisma migrate deploy
   else
