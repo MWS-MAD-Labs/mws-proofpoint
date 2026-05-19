@@ -58,9 +58,9 @@ CREATE INDEX IF NOT EXISTS "workflow_steps_workflow_id_idx"
 
 CREATE TABLE IF NOT EXISTS "role_workflow_assignments" (
   "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
-  "department_role_id" TEXT NOT NULL,
+  "department_role_id" UUID NOT NULL,
   "workflow_id" TEXT NOT NULL,
-  "rubric_id" TEXT,
+  "rubric_id" UUID,
   "is_active" BOOLEAN NOT NULL DEFAULT true,
   "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

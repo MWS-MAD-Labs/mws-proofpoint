@@ -12,10 +12,10 @@ BEGIN
 END $$;
 
 CREATE TABLE IF NOT EXISTS "observations" (
-  "id" TEXT NOT NULL PRIMARY KEY,
-  "staffId" TEXT NOT NULL,
-  "managerId" TEXT,
-  "rubricId" TEXT NOT NULL,
+  "id" UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  "staffId" UUID NOT NULL,
+  "managerId" UUID,
+  "rubricId" UUID NOT NULL,
   "status" "ObservationStatus" NOT NULL DEFAULT 'draft',
   "type" TEXT NOT NULL DEFAULT 'MANAGER',
   "title" TEXT,
@@ -30,9 +30,9 @@ CREATE TABLE IF NOT EXISTS "observations" (
 );
 
 CREATE TABLE IF NOT EXISTS "observation_answers" (
-  "id" TEXT NOT NULL PRIMARY KEY,
-  "observation_id" TEXT NOT NULL,
-  "indicator_id" TEXT NOT NULL,
+  "id" UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  "observation_id" UUID NOT NULL,
+  "indicator_id" UUID NOT NULL,
   "score" INTEGER NOT NULL DEFAULT 0,
   "note" TEXT,
   "evidence" TEXT,
@@ -43,9 +43,9 @@ CREATE TABLE IF NOT EXISTS "observation_answers" (
 );
 
 CREATE TABLE IF NOT EXISTS "observation_updates" (
-  "id" TEXT NOT NULL PRIMARY KEY,
-  "observation_id" TEXT NOT NULL,
-  "updated_by_id" TEXT,
+  "id" UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  "observation_id" UUID NOT NULL,
+  "updated_by_id" UUID,
   "status_from" TEXT,
   "status_to" TEXT NOT NULL,
   "notes" TEXT,
