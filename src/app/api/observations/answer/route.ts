@@ -1,4 +1,7 @@
 // src/app/api/observations/answer/route.ts
+// Milestone 4: Only the manager assigned to the observation (or admin)
+// can write answers. Staff does NOT fill the form.
+
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
@@ -19,9 +22,9 @@ export async function POST(request: Request) {
         { status: 400 }
       );
 
-    // Get observation - use explicit column aliases to avoid camelCase issues
+    // Load observation
     const observation = await queryOne(
-      `SELECT id, "managerId" as manager_id, "staffId" as staff_id
+      `SELECT id, "managerId" as manager_id, "staffId" as staff_id, status
        FROM observations WHERE id = $1`,
       [observationId]
     ) as any;
@@ -32,12 +35,24 @@ export async function POST(request: Request) {
     const userRoles = (session.user as any).roles ?? [];
     const isAdmin   = userRoles.includes("admin");
     const isManager = observation.manager_id === session.user.id;
-    const isStaff   = observation.staff_id   === session.user.id;
 
-    if (!isAdmin && !isManager && !isStaff)
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    // ── AC: Staff does NOT fill the form — only manager/admin can write answers
+    if (!isAdmin && !isManager) {
+      return NextResponse.json(
+        { error: "Forbidden: only the assigned manager can fill this observation form." },
+        { status: 403 }
+      );
+    }
 
-    // Get question_type
+    // Can only edit when draft
+    if (observation.status !== "draft") {
+      return NextResponse.json(
+        { error: "Cannot edit answers after the observation has been submitted." },
+        { status: 400 }
+      );
+    }
+
+    // Get indicator type
     const indicator = await queryOne(
       `SELECT id, question_type FROM rubric_indicators WHERE id = $1`,
       [indicatorId]
@@ -105,19 +120,19 @@ export async function POST(request: Request) {
       }
     }
 
-    // Normalize response
-    const normalized = answer ? {
-      id:             answer.id,
-      indicatorId:    answer.indicator_id,
-      observationId:  answer.observation_id,
-      score:          answer.score,
-      note:           answer.note,
-      textValue:      answer.text_value      ?? null,
-      selectedOption: answer.selected_option ?? null,
-    } : null;
+    const normalized = answer
+      ? {
+          id:             answer.id,
+          indicatorId:    answer.indicator_id,
+          observationId:  answer.observation_id,
+          score:          answer.score,
+          note:           answer.note,
+          textValue:      answer.text_value      ?? null,
+          selectedOption: answer.selected_option ?? null,
+        }
+      : null;
 
     return NextResponse.json({ data: normalized });
-
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("POST /api/observations/answer error:", message);

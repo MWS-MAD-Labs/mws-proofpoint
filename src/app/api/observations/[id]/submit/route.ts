@@ -1,4 +1,7 @@
 // src/app/api/observations/[id]/submit/route.ts
+// Milestone 4: Only the manager who owns the observation can submit it.
+// On submit, status moves draft → submitted, and staff is notified.
+
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
@@ -18,7 +21,7 @@ export async function PATCH(
     const isAdmin = user.roles.includes("admin");
     const { id }  = await params;
 
-    // Get observation with raw SQL
+    // Load observation
     const observation = await queryOne(
       `SELECT o.id, o."staffId", o."managerId", o.status,
               su.email as staff_email, sp.full_name as staff_name,
@@ -26,7 +29,7 @@ export async function PATCH(
        FROM observations o
        LEFT JOIN users su ON su.id = o."staffId"
        LEFT JOIN profiles sp ON sp.user_id = su.id
-       LEFT JOIN rubric_templates rt ON rt.id = o."rubricId"
+       LEFT JOIN rubric_templates rt ON rt.id = o.template_id
        WHERE o.id = $1`,
       [id]
     ) as any;
@@ -34,8 +37,9 @@ export async function PATCH(
     if (!observation)
       return NextResponse.json({ error: "Observation not found." }, { status: 404 });
 
+    // ── AC: Only the manager who created this observation (or admin) can submit
     if (!isAdmin && observation.managerId !== user.id)
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      return NextResponse.json({ error: "Forbidden: only the assigned manager can submit this observation." }, { status: 403 });
 
     if (observation.status !== "draft")
       return NextResponse.json(
@@ -43,7 +47,7 @@ export async function PATCH(
         { status: 400 }
       );
 
-    // Check at least one answer filled
+    // Verify at least one indicator has been answered
     const answers = await query(
       `SELECT score, note, text_value, selected_option
        FROM observation_answers WHERE observation_id = $1`,
@@ -59,23 +63,24 @@ export async function PATCH(
         { status: 400 }
       );
 
-    // Update status to pending
+    // Update status: draft → submitted
     const updated = await queryOne(
       `UPDATE observations
-       SET status = 'pending', submitted_at = NOW(), updated_at = NOW()
-       WHERE id = $1
-       RETURNING *`,
+      SET status = 'submitted', submitted_at = NOW(), updated_at = NOW()
+      WHERE id = $1
+      RETURNING *`,
       [id]
     ) as any;
 
-    // Log update
+    // Log status change
     await queryOne(
-      `INSERT INTO observation_updates (id, observation_id, updated_by_id, status_from, status_to, notes, created_at)
-       VALUES ($1, $2, $3, 'draft', 'pending', $4, NOW())`,
+      `INSERT INTO observation_updates
+         (id, observation_id, updated_by_id, status_from, status_to, notes, created_at)
+       VALUES ($1, $2, $3, 'draft', 'submitted', $4, NOW())`,
       [randomUUID(), id, user.id, `Submitted by ${isAdmin ? "admin" : "manager"}`]
-    ).catch((err: unknown) => console.error("ObservationUpdate error:", err));
+    ).catch((err: unknown) => console.error("ObservationUpdate log error:", err));
 
-    // Send notification
+    // Notify staff
     await notifyObservationSubmitted(
       observation.staff_email,
       observation.staff_name ?? observation.staff_email,
