@@ -1,12 +1,25 @@
 'use client';
 
+// src/app/observations/page.tsx
+// Milestone 4: Manager Observation Runtime
+//
+// Acceptance criteria:
+//   ✓ Observation is created by manager, not staff.
+//   ✓ Staff does not fill the form (read-only view for staff).
+//   ✓ Manager cannot use workflows not assigned to the staff's role.
+//   ✓ Manager can create observation for staff.
+//   ✓ Manager selects observation type (workflow/rubric).
+//   ✓ Manager fills form.
+//   ✓ Manager submits.
+//   ✓ Staff is notified (via API) and can acknowledge.
+
 import { useEffect, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { Header } from '@/components/layout/Header';
 import {
   Loader2, ClipboardList, CheckCircle2, Clock, Send, Eye,
   ChevronRight, User, BookOpen, Plus, X, AlertCircle, Shield,
-  FileText,
+  FileText, Lock,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -21,7 +34,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ObservationStatus = 'draft' | 'pending' | 'submitted' | 'reviewed' | 'acknowledged';
+type ObservationStatus = 'draft' | 'submitted' | 'reviewed' | 'acknowledged';
 
 interface Observation {
   id: string;
@@ -29,6 +42,7 @@ interface Observation {
   staffId: string;
   managerId: string | null;
   rubricId: string;
+  workflowDefinitionId?: string | null;
   submittedAt: string | null;
   acknowledgedAt: string | null;
   staff?:   { id: string; email: string; profile?: { fullName: string | null } };
@@ -90,6 +104,8 @@ interface UserData {
 interface RubricData {
   id: string;
   name: string;
+  workflowId?: string | null;
+  workflowName?: string | null;
 }
 
 // ─── Hook: session + role ─────────────────────────────────────────────────────
@@ -121,7 +137,7 @@ function useCurrentUser() {
     },
     roles,
     isManager:  roles.includes('manager') || roles.includes('admin'),
-    isStaff:    roles.includes('staff'),
+    isStaff:    roles.includes('staff') && !roles.includes('manager') && !roles.includes('admin'),
     isAdmin:    roles.includes('admin'),
     isDirector: roles.includes('director'),
     isLoading,
@@ -134,14 +150,13 @@ function fullName(u?: { email: string; profile?: { fullName: string | null } | n
   return u?.profile?.fullName || u?.email || '—';
 }
 
-// ─── Status Badge Config ──────────────────────────────────────────────────────
+// ─── Status Badge ─────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { label: string; icon: any; cls: string }> = {
-  draft:        { label: 'Draft',        icon: Clock,        cls: 'bg-zinc-100 text-zinc-600 border-zinc-200'        },
-  pending:      { label: 'Pending',      icon: Clock,        cls: 'bg-amber-50 text-amber-700 border-amber-200'      },
-  submitted:    { label: 'Submitted',    icon: Send,         cls: 'bg-blue-50 text-blue-700 border-blue-200'         },
-  reviewed:     { label: 'Reviewed',     icon: Eye,          cls: 'bg-purple-50 text-purple-700 border-purple-200'   },
-  acknowledged: { label: 'Acknowledged', icon: CheckCircle2, cls: 'bg-emerald-50 text-emerald-700 border-emerald-200'},
+  draft:        { label: 'Draft (Manager filling)',  icon: Clock,        cls: 'bg-zinc-100 text-zinc-600 border-zinc-200'         },
+  submitted:    { label: 'Submitted (Awaiting ack)', icon: Send,         cls: 'bg-blue-50 text-blue-700 border-blue-200'          },
+  reviewed:     { label: 'Reviewed',                 icon: Eye,          cls: 'bg-purple-50 text-purple-700 border-purple-200'    },
+  acknowledged: { label: 'Acknowledged',             icon: CheckCircle2, cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -155,7 +170,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ─── Score Input Component (auto-save on blur) ────────────────────────────────
+// ─── Answer Input (manager only) ─────────────────────────────────────────────
 
 function AnswerInput({
   indicator,
@@ -230,55 +245,39 @@ function AnswerInput({
         {saved && !saving && <CheckCircle2 className="w-4 h-4 text-emerald-500 ml-2 flex-shrink-0" />}
       </div>
 
-      {/* SCALE: numeric score + notes */}
       {qType === 'SCALE' && (
         <div className="flex gap-3 items-start">
           <div className="flex-shrink-0">
             <label className="block text-xs text-muted-foreground mb-1 font-medium">Score (1–100)</label>
             <Input
-              type="number"
-              min={1}
-              max={100}
-              value={score}
-              onChange={(e) => setScore(e.target.value)}
-              onBlur={handleSave}
-              disabled={disabled}
-              placeholder="1–100"
-              className="w-24"
+              type="number" min={1} max={100}
+              value={score} onChange={(e) => setScore(e.target.value)}
+              onBlur={handleSave} disabled={disabled}
+              placeholder="1–100" className="w-24"
             />
           </div>
           <div className="flex-1">
             <label className="block text-xs text-muted-foreground mb-1 font-medium">Notes</label>
             <Textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              onBlur={handleSave}
-              disabled={disabled}
-              rows={2}
-              placeholder="Write observation notes..."
-              className="resize-none"
+              value={note} onChange={(e) => setNote(e.target.value)}
+              onBlur={handleSave} disabled={disabled}
+              rows={2} placeholder="Write observation notes..." className="resize-none"
             />
           </div>
         </div>
       )}
 
-      {/* TEXT: free text response */}
       {qType === 'TEXT' && (
         <div>
           <label className="block text-xs text-muted-foreground mb-1 font-medium">Response</label>
           <Textarea
-            value={textValue}
-            onChange={(e) => setTextValue(e.target.value)}
-            onBlur={handleSave}
-            disabled={disabled}
-            rows={3}
-            placeholder="Write your observation here..."
-            className="resize-none"
+            value={textValue} onChange={(e) => setTextValue(e.target.value)}
+            onBlur={handleSave} disabled={disabled}
+            rows={3} placeholder="Write your observation here..." className="resize-none"
           />
         </div>
       )}
 
-      {/* CHOICE: single select from options */}
       {qType === 'CHOICE' && (
         <div>
           <label className="block text-xs text-muted-foreground mb-1 font-medium">Select an option</label>
@@ -287,13 +286,10 @@ function AnswerInput({
               {indicator.score_options.map((opt) => (
                 <label key={opt} className="flex items-center gap-2 cursor-pointer">
                   <input
-                    type="radio"
-                    name={`choice-${indicator.id}`}
-                    value={opt}
+                    type="radio" name={`choice-${indicator.id}`} value={opt}
                     checked={selectedOption === opt}
-                    onChange={() => { setSelectedOption(opt); }}
-                    onBlur={handleSave}
-                    disabled={disabled}
+                    onChange={() => setSelectedOption(opt)}
+                    onBlur={handleSave} disabled={disabled}
                     className="accent-primary"
                   />
                   <span className="text-sm">{opt}</span>
@@ -302,10 +298,8 @@ function AnswerInput({
             </div>
           ) : (
             <Input
-              value={selectedOption}
-              onChange={(e) => setSelectedOption(e.target.value)}
-              onBlur={handleSave}
-              disabled={disabled}
+              value={selectedOption} onChange={(e) => setSelectedOption(e.target.value)}
+              onBlur={handleSave} disabled={disabled}
               placeholder="Type your choice..."
             />
           )}
@@ -315,24 +309,72 @@ function AnswerInput({
   );
 }
 
+// ─── Read-only Answer View (for staff) ───────────────────────────────────────
+
+function AnswerReadOnly({ indicator, answer }: { indicator: Indicator; answer?: Answer }) {
+  const qType = indicator.question_type ?? 'SCALE';
+  const textValue      = answer?.textValue      ?? (answer as any)?.text_value      ?? null;
+  const selectedOption = answer?.selectedOption ?? (answer as any)?.selected_option ?? null;
+  const score          = answer?.score ?? 0;
+  const note           = answer?.note;
+
+  const isEmpty =
+    (qType === 'SCALE'  && score <= 0) ||
+    (qType === 'TEXT'   && !textValue) ||
+    (qType === 'CHOICE' && !selectedOption);
+
+  return (
+    <div className="border border-border/50 rounded-xl p-4 mb-3 bg-muted/20">
+      <div className="flex items-center gap-2 mb-2">
+        <p className="text-sm font-medium text-foreground">{indicator.name}</p>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground border border-border/50 rounded px-1">{qType}</span>
+      </div>
+      {indicator.description && (
+        <p className="text-xs text-muted-foreground mb-3">{indicator.description}</p>
+      )}
+      {isEmpty ? (
+        <p className="text-xs text-muted-foreground italic">Not yet filled in by manager</p>
+      ) : qType === 'SCALE' ? (
+        <div className="flex gap-6">
+          <div>
+            <span className="text-xs text-muted-foreground block mb-0.5">Score</span>
+            <span className="text-2xl font-bold text-foreground">{score}</span>
+            <span className="text-xs text-muted-foreground ml-1">/ 100</span>
+          </div>
+          {note && (
+            <div className="flex-1">
+              <span className="text-xs text-muted-foreground block mb-0.5">Notes</span>
+              <p className="text-sm text-foreground">{note}</p>
+            </div>
+          )}
+        </div>
+      ) : qType === 'TEXT' ? (
+        <p className="text-sm text-foreground">{textValue}</p>
+      ) : (
+        <p className="text-sm text-foreground font-medium">{selectedOption}</p>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ObservationsPage() {
   const {
-    currentUser, roles, isManager, isAdmin, isDirector, isLoading: sessionLoading,
+    currentUser, roles, isManager, isAdmin, isDirector, isStaff, isLoading: sessionLoading,
   } = useCurrentUser();
 
-  const [observations,      setObservations]      = useState<Observation[]>([]);
-  const [selected,          setSelected]          = useState<ObservationDetail | null>(null);
-  const [loading,           setLoading]           = useState(true);
-  const [loadingDetail,     setLoadingDetail]     = useState(false);
-  const [actionLoading,     setActionLoading]     = useState(false);
-  const [alert,             setAlert]             = useState<{ type: 'error'|'success'; message: string } | null>(null);
+  const [observations,  setObservations]  = useState<Observation[]>([]);
+  const [selected,      setSelected]      = useState<ObservationDetail | null>(null);
+  const [loading,       setLoading]       = useState(true);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [alert,         setAlert]         = useState<{ type: 'error'|'success'; message: string } | null>(null);
 
   const [staffList,   setStaffList]   = useState<UserData[]>([]);
   const [managerList, setManagerList] = useState<UserData[]>([]);
   const [rubricList,  setRubricList]  = useState<RubricData[]>([]);
-  const [form,        setForm]        = useState({ staffId: '', managerId: '', rubricId: '' });
+  const [form,        setForm]        = useState({ staffId: '', managerId: '', rubricId: '', workflowId: '' });
   const [creating,    setCreating]    = useState(false);
   const [showForm,    setShowForm]    = useState(false);
 
@@ -351,7 +393,7 @@ export default function ObservationsPage() {
       setObservations(list);
       if (list.length > 0 && !selected) {
         const first = list[0];
-      if (first) loadDetail(first.id);
+        if (first) loadDetail(first.id);
       }
     } catch (err) {
       console.error('fetchObservations error:', err);
@@ -361,23 +403,29 @@ export default function ObservationsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // When staff is selected, fetch available forms for that staff's role
+  const fetchRubricsForStaff = useCallback(async (staffId: string) => {
+    if (!staffId) { setRubricList([]); return; }
+    try {
+      const res = await fetch(`/api/observations/available-forms?staffId=${staffId}`);
+      const json = await res.json();
+      setRubricList(Array.isArray(json) ? json : []);
+    } catch (err) {
+      console.error('fetchRubricsForStaff error:', err);
+    }
+  }, []);
+
   const fetchFormData = useCallback(async () => {
     if (!isAdmin && !isManager) return;
     try {
-      const [resStaff, resManagers, resAssignments] = await Promise.all([
+      const [resStaff, resManagers] = await Promise.all([
         fetch('/api/admin/users'),
         fetch('/api/managers'),
-        fetch('/api/observations/available-forms'),
       ]);
-
-      const rawStaff       = await resStaff.json();
-      const rawManagers    = await resManagers.json();
-      const rawAssignments = await resAssignments.json();
-
+      const rawStaff    = await resStaff.json();
+      const rawManagers = await resManagers.json();
       setStaffList(Array.isArray(rawStaff?.data) ? rawStaff.data : Array.isArray(rawStaff) ? rawStaff : []);
       setManagerList(Array.isArray(rawManagers) ? rawManagers : []);
-      // Only rubrics that are linked via workflow assignments
-      setRubricList(Array.isArray(rawAssignments) ? rawAssignments : []);
     } catch (err) {
       console.error('fetchFormData error:', err);
     }
@@ -404,11 +452,29 @@ export default function ObservationsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionLoading, currentUser?.id]);
 
-  // ── Actions ───────────────────────────────────────────────────────────
+  // When staff selection changes, reload rubrics filtered by their role
+  useEffect(() => {
+    if (form.staffId) {
+      fetchRubricsForStaff(form.staffId);
+      setForm((prev) => ({ ...prev, rubricId: '', workflowId: '' }));
+    }
+  }, [form.staffId, fetchRubricsForStaff]);
+
+  // When rubric is selected, auto-populate workflowId from rubric data
+  const handleRubricChange = (rubricId: string) => {
+    const found = rubricList.find((r) => r.id === rubricId);
+    setForm((prev) => ({
+      ...prev,
+      rubricId,
+      workflowId: found?.workflowId ?? '',
+    }));
+  };
+
+  // ── Actions ──────────────────────────────────────────────────────────────
 
   const createObservation = async () => {
     if (!form.staffId || !form.rubricId) {
-      showAlert('error', 'Please select a staff member and rubric.');
+      showAlert('error', 'Please select a staff member and observation form.');
       return;
     }
     setCreating(true);
@@ -417,9 +483,10 @@ export default function ObservationsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          staffId:   form.staffId,
-          rubricId:  form.rubricId,
-          managerId: isAdmin ? (form.managerId && form.managerId !== 'self' ? form.managerId : undefined) : undefined,
+          staffId:    form.staffId,
+          rubricId:   form.rubricId,
+          workflowId: form.workflowId || undefined,
+          managerId:  isAdmin ? (form.managerId && form.managerId !== 'self' ? form.managerId : undefined) : undefined,
         }),
       });
       const json = await res.json();
@@ -427,9 +494,9 @@ export default function ObservationsPage() {
         showAlert('error', json.error || 'Failed to create observation.');
         return;
       }
-      setForm({ staffId: '', managerId: '', rubricId: '' });
+      setForm({ staffId: '', managerId: '', rubricId: '', workflowId: '' });
       setShowForm(false);
-      showAlert('success', 'Observation created and manager has been notified.');
+      showAlert('success', 'Observation created. Staff has been notified.');
       await fetchObservations();
       await loadDetail(json.id);
     } catch {
@@ -451,9 +518,8 @@ export default function ObservationsPage() {
       showAlert('error', json.error || 'Failed to save answer.');
       return;
     }
-    // Update answers from save response directly
     const json = await res.json();
-    const raw = json.data;
+    const raw  = json.data;
     const savedAnswer = raw ? {
       ...raw,
       indicatorId:    raw["indicator_id"]    ?? raw.indicatorId    ?? indicatorId,
@@ -467,9 +533,7 @@ export default function ObservationsPage() {
           (a) => (a.indicatorId ?? (a as any).indicator_id) === indicatorId
         ) ?? -1;
         const newAnswers = existingIdx >= 0
-          ? prev.answers!.map((a, i) =>
-              i === existingIdx ? { ...a, ...savedAnswer } : a
-            )
+          ? prev.answers!.map((a, i) => i === existingIdx ? { ...a, ...savedAnswer } : a)
           : [...(prev.answers ?? []), savedAnswer];
         return { ...prev, answers: newAnswers };
       });
@@ -480,10 +544,10 @@ export default function ObservationsPage() {
     if (!selected) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/observations/${selected.id}/submit`, { method: 'PATCH' });
+      const res  = await fetch(`/api/observations/${selected.id}/submit`, { method: 'PATCH' });
       const json = await res.json();
       if (!res.ok) { showAlert('error', json.error || 'Failed to submit.'); return; }
-      showAlert('success', 'Observation submitted. Staff will receive an email notification.');
+      showAlert('success', 'Observation submitted. Staff has been notified and will acknowledge.');
       await fetchObservations();
       await loadDetail(selected.id);
     } catch {
@@ -497,7 +561,7 @@ export default function ObservationsPage() {
     if (!selected) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/observations/${selected.id}/acknowledge`, { method: 'PATCH' });
+      const res  = await fetch(`/api/observations/${selected.id}/acknowledge`, { method: 'PATCH' });
       const json = await res.json();
       if (!res.ok) { showAlert('error', json.error || 'Failed to acknowledge.'); return; }
       showAlert('success', 'Observation acknowledged successfully.');
@@ -510,7 +574,7 @@ export default function ObservationsPage() {
     }
   };
 
-  // ── Computed ──────────────────────────────────────────────────────────
+  // ── Computed ──────────────────────────────────────────────────────────────
 
   const allIndicators = selected?.rubric?.sections?.flatMap((s) => s.indicators) ?? [];
 
@@ -520,25 +584,28 @@ export default function ObservationsPage() {
     );
     if (!answer) return false;
     const qType = (ind as any).question_type ?? 'SCALE';
-    if (qType === 'SCALE') return (answer.score ?? 0) > 0;
-    if (qType === 'TEXT') return !!(answer.textValue ?? (answer as any).text_value);
+    if (qType === 'SCALE')  return (answer.score ?? 0) > 0;
+    if (qType === 'TEXT')   return !!(answer.textValue ?? (answer as any).text_value);
     if (qType === 'CHOICE') return !!(answer.selectedOption ?? (answer as any).selected_option);
     return (answer.score ?? 0) > 0;
   }).length;
 
+  // Manager can edit if they are the assigned manager and status is draft
   const canEdit =
     selected?.status === 'draft' &&
     (selected?.managerId === currentUser?.id || isAdmin);
 
   const canSubmit = canEdit && filledCount > 0;
 
+  // Only the staff member (or admin) can acknowledge — after manager submits
   const canAcknowledge =
     selected?.status === 'submitted' &&
     (selected?.staffId === currentUser?.id || isAdmin);
 
+  // Only managers/admins can create
   const canCreate = isAdmin || isManager;
 
-  // ── Render ────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   if (sessionLoading) {
     return (
@@ -564,17 +631,19 @@ export default function ObservationsPage() {
                 : isDirector
                 ? 'Monitor all completed observations'
                 : isManager
-                ? 'Fill in observation forms assigned to you'
+                ? 'Create observations for staff and fill in the observation form'
                 : 'View and acknowledge your observation results'}
             </p>
+            {/* Staff notice */}
+            {isStaff && !isManager && !isAdmin && (
+              <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground bg-muted/40 border border-border/40 rounded-lg px-3 py-2 w-fit">
+                <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+                Observations are filled by your manager. You can view results and acknowledge once submitted.
+              </div>
+            )}
             <div className="flex gap-1 mt-2">
               {roles.map((r) => (
-                <Badge key={r} variant="secondary" className="text-xs capitalize">
-                  {r === 'admin' ? 'Admin'
-                    : r === 'manager' ? 'Manager'
-                    : r === 'director' ? 'Director'
-                    : 'Staff'}
-                </Badge>
+                <Badge key={r} variant="secondary" className="text-xs capitalize">{r}</Badge>
               ))}
             </div>
           </div>
@@ -595,19 +664,16 @@ export default function ObservationsPage() {
           </Alert>
         )}
 
-        {/* ── Create Observation Form ─────────────────────────────── */}
+        {/* ── Create Observation Form (Manager / Admin only) ──────────────── */}
         {showForm && canCreate && (
           <Card className="mb-6">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Shield className="w-4 h-4 text-muted-foreground" />
                 New Observation
-                {isAdmin && (
-                  <span className="text-xs text-muted-foreground font-normal">(Admin)</span>
-                )}
-                {!isAdmin && isManager && (
-                  <span className="text-xs text-muted-foreground font-normal">(Manager)</span>
-                )}
+                <span className="text-xs text-muted-foreground font-normal">
+                  {isAdmin ? '(Admin)' : '(Manager)'}
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -618,7 +684,10 @@ export default function ObservationsPage() {
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">
                     Staff to observe <span className="text-destructive">*</span>
                   </label>
-                  <Select value={form.staffId} onValueChange={(val) => setForm({ ...form, staffId: val })}>
+                  <Select
+                    value={form.staffId}
+                    onValueChange={(val) => setForm((prev) => ({ ...prev, staffId: val }))}
+                  >
                     <SelectTrigger><SelectValue placeholder="Select staff..." /></SelectTrigger>
                     <SelectContent>
                       {staffList.map((s) => (
@@ -630,29 +699,45 @@ export default function ObservationsPage() {
                   </Select>
                 </div>
 
-                {/* Select Rubric */}
+                {/* Select Rubric / Workflow — filtered by staff's role */}
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                    Rubric form <span className="text-destructive">*</span>
+                    Observation form <span className="text-destructive">*</span>
+                    {form.staffId && rubricList.length === 0 && (
+                      <span className="text-amber-600 font-normal ml-1">
+                        — no forms assigned to this staff's role
+                      </span>
+                    )}
                   </label>
-                  <Select value={form.rubricId} onValueChange={(val) => setForm({ ...form, rubricId: val })}>
-                    <SelectTrigger><SelectValue placeholder="Select rubric..." /></SelectTrigger>
+                  <Select
+                    value={form.rubricId}
+                    onValueChange={handleRubricChange}
+                    disabled={!form.staffId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={form.staffId ? 'Select form...' : 'Select staff first'} />
+                    </SelectTrigger>
                     <SelectContent>
                       {rubricList.map((r) => (
-                        <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.name}
+                          {r.workflowName && (
+                            <span className="text-muted-foreground text-xs ml-1">({r.workflowName})</span>
+                          )}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                {/* Select Manager — Admin only */}
+                {/* Admin only: assign to a specific manager */}
                 {isAdmin && (
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-1.5">
                       Assign to Manager
                       <span className="text-muted-foreground font-normal ml-1">(optional)</span>
                     </label>
-                    <Select value={form.managerId} onValueChange={(val) => setForm({ ...form, managerId: val })}>
+                    <Select value={form.managerId} onValueChange={(val) => setForm((prev) => ({ ...prev, managerId: val }))}>
                       <SelectTrigger><SelectValue placeholder="Default (myself)" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="self">Default (myself)</SelectItem>
@@ -675,14 +760,14 @@ export default function ObservationsPage() {
                   className="gap-2"
                 >
                   {creating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Create &amp; Assign
+                  Create &amp; Notify Staff
                 </Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* ── Main Grid ──────────────────────────────────────────── */}
+        {/* ── Main Grid ──────────────────────────────────────────────────── */}
         <div className="grid grid-cols-5 gap-6">
 
           {/* Left: Observation List */}
@@ -705,6 +790,11 @@ export default function ObservationsPage() {
                   {canCreate && (
                     <p className="text-xs text-muted-foreground/70 mt-1">
                       Click &quot;New Observation&quot; to get started
+                    </p>
+                  )}
+                  {!canCreate && (
+                    <p className="text-xs text-muted-foreground/70 mt-1">
+                      Your manager will create observations for you
                     </p>
                   )}
                 </div>
@@ -782,9 +872,23 @@ export default function ObservationsPage() {
                       <span>Acknowledged: {new Date(selected.acknowledgedAt).toLocaleDateString('en-GB')}</span>
                     )}
                   </div>
+
+                  {/* Role-based context hint */}
+                  {canEdit && (
+                    <div className="mt-2 text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 flex-shrink-0" />
+                      You are filling this observation form as manager. Staff will acknowledge after you submit.
+                    </div>
+                  )}
+                  {!canEdit && selected.status === 'submitted' && canAcknowledge && (
+                    <div className="mt-2 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+                      <Eye className="w-3.5 h-3.5 flex-shrink-0" />
+                      Your manager has submitted this observation. Please review and acknowledge.
+                    </div>
+                  )}
                 </div>
 
-                {/* Progress bar */}
+                {/* Progress bar (manager view only) */}
                 {canEdit && allIndicators.length > 0 && (
                   <div className="px-6 py-3 bg-muted/30 border-b border-border/50">
                     <div className="flex items-center justify-between mb-1.5">
@@ -829,38 +933,18 @@ export default function ObservationsPage() {
                             No indicators in this section
                           </p>
                         ) : section.indicators.map((indicator) => {
-                          const answer = selected.answers?.find((a) => (a.indicatorId ?? (a as any).indicator_id) === indicator.id);
+                          const answer = selected.answers?.find(
+                            (a) => (a.indicatorId ?? (a as any).indicator_id) === indicator.id
+                          );
 
+                          // Staff only sees read-only view — never editable
                           if (!canEdit) {
                             return (
-                              <div key={indicator.id} className="border border-border/50 rounded-xl p-4 mb-3 bg-muted/20">
-                                <p className="text-sm font-medium text-foreground mb-2">{indicator.name}</p>
-                                {indicator.description && (
-                                  <p className="text-xs text-muted-foreground mb-3">{indicator.description}</p>
-                                )}
-                                {answer && answer.score > 0 ? (
-                                  <div className="flex gap-6">
-                                    <div>
-                                      <span className="text-xs text-muted-foreground block mb-0.5">Score</span>
-                                      <span className="text-2xl font-bold text-foreground">{answer.score}</span>
-                                      <span className="text-xs text-muted-foreground ml-1">/ 100</span>
-                                    </div>
-                                    {answer.note && (
-                                      <div className="flex-1">
-                                        <span className="text-xs text-muted-foreground block mb-0.5">Notes</span>
-                                        <p className="text-sm text-foreground">{answer.note}</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <p className="text-xs text-muted-foreground italic">
-                                    Not yet filled in by manager
-                                  </p>
-                                )}
-                              </div>
+                              <AnswerReadOnly key={indicator.id} indicator={indicator} answer={answer} />
                             );
                           }
 
+                          // Manager fills the form
                           return (
                             <AnswerInput
                               key={indicator.id}
@@ -905,6 +989,7 @@ export default function ObservationsPage() {
                 {(canSubmit || canAcknowledge) && (
                   <div className="px-6 py-4 border-t border-border/50 bg-muted/20">
 
+                    {/* Manager submits */}
                     {canSubmit && (
                       <div className="flex items-center justify-between gap-4">
                         <p className="text-xs text-muted-foreground">
@@ -914,11 +999,12 @@ export default function ObservationsPage() {
                         </p>
                         <Button onClick={handleSubmit} disabled={actionLoading} className="gap-2 flex-shrink-0">
                           {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                          Submit Observation
+                          Submit to Staff
                         </Button>
                       </div>
                     )}
 
+                    {/* Staff acknowledges */}
                     {canAcknowledge && (
                       <div className="flex items-center justify-between gap-4">
                         <div>
