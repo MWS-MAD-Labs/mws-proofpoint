@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
+import { randomUUID } from "crypto";
 
-// POST /api/rubrics/indicators - Create new indicator
+const VALID_QUESTION_TYPES = ["SCALE", "CHOICE", "TEXT"];
+
 export async function POST(request: Request) {
     try {
         const session = await auth();
@@ -11,17 +13,28 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { section_id, name, description, sort_order, evidence_guidance, score_options } = body;
+        const { section_id, name, description, sort_order, evidence_guidance,
+                score_options, question_type, score_min, score_max, score_step, placeholder_text } = body;
 
         if (!section_id || !name) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
+        const finalQuestionType = VALID_QUESTION_TYPES.includes(question_type) ? question_type : "SCALE";
+        const id = randomUUID();
+
         const newIndicator = await queryOne(
-            `INSERT INTO rubric_indicators (section_id, name, description, sort_order, evidence_guidance, score_options)
-             VALUES ($1, $2, $3, $4, $5, $6)
+            `INSERT INTO rubric_indicators
+             (id, section_id, name, description, sort_order, evidence_guidance,
+              score_options, question_type, score_min, score_max, score_step, placeholder_text)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
              RETURNING *`,
-            [section_id, name, description, sort_order || 0, evidence_guidance, score_options ? JSON.stringify(score_options) : null]
+            [id, section_id, name, description ?? null, sort_order || 0,
+             evidence_guidance ?? null,
+             score_options ? JSON.stringify(score_options) : null,
+             finalQuestionType,
+             score_min ?? null, score_max ?? null, score_step ?? null,
+             placeholder_text ?? null]
         );
 
         return NextResponse.json({ data: newIndicator }, { status: 201 });
@@ -31,7 +44,6 @@ export async function POST(request: Request) {
     }
 }
 
-// PATCH /api/rubrics/indicators - Update indicator
 export async function PATCH(request: Request) {
     try {
         const session = await auth();
@@ -40,22 +52,35 @@ export async function PATCH(request: Request) {
         }
 
         const body = await request.json();
-        const { id, name, description, sort_order, evidence_guidance, score_options } = body;
+        const { id, name, description, sort_order, evidence_guidance,
+                score_options, question_type, score_min, score_max, score_step, placeholder_text } = body;
 
         if (!id) {
             return NextResponse.json({ error: "Indicator ID is required" }, { status: 400 });
         }
 
+        const finalQuestionType = question_type && VALID_QUESTION_TYPES.includes(question_type)
+            ? question_type : undefined;
+
         const updatedIndicator = await queryOne(
-            `UPDATE rubric_indicators 
-             SET name = COALESCE($1, name), 
-                 description = COALESCE($2, description), 
-                 sort_order = COALESCE($3, sort_order),
-                 evidence_guidance = COALESCE($4, evidence_guidance),
-                 score_options = COALESCE($5, score_options)
-             WHERE id = $6
+            `UPDATE rubric_indicators
+             SET name               = COALESCE($1, name),
+                 description        = COALESCE($2, description),
+                 sort_order         = COALESCE($3, sort_order),
+                 evidence_guidance  = COALESCE($4, evidence_guidance),
+                 score_options      = COALESCE($5, score_options),
+                 question_type      = COALESCE($6::\"IndicatorQuestionType\", question_type),
+                 score_min          = COALESCE($7, score_min),
+                 score_max          = COALESCE($8, score_max),
+                 score_step         = COALESCE($9, score_step),
+                 placeholder_text   = COALESCE($10, placeholder_text)
+             WHERE id = $11
              RETURNING *`,
-            [name, description, sort_order, evidence_guidance, score_options ? JSON.stringify(score_options) : null, id]
+            [name, description, sort_order, evidence_guidance,
+             score_options ? JSON.stringify(score_options) : null,
+             finalQuestionType ?? null,
+             score_min ?? null, score_max ?? null, score_step ?? null,
+             placeholder_text ?? null, id]
         );
 
         if (!updatedIndicator) {
@@ -69,7 +94,6 @@ export async function PATCH(request: Request) {
     }
 }
 
-// DELETE /api/rubrics/indicators - Delete indicator
 export async function DELETE(request: Request) {
     try {
         const session = await auth();
@@ -85,7 +109,6 @@ export async function DELETE(request: Request) {
         }
 
         await query(`DELETE FROM rubric_indicators WHERE id = $1`, [id]);
-
         return NextResponse.json({ message: "Indicator deleted successfully" });
     } catch (error) {
         console.error("Delete indicator error:", error);

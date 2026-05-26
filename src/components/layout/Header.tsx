@@ -17,10 +17,10 @@ import {
   Moon,
   Sun,
   Settings,
-  Target,
+  Eye,
+  ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Logo } from "@/components/ui/logo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +41,6 @@ export function Header({ className }: HeaderProps) {
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
-    // Check initial theme from localStorage or document
     const savedTheme = localStorage.getItem("theme");
     const isDarkMode = savedTheme
       ? savedTheme === "dark"
@@ -49,7 +48,6 @@ export function Header({ className }: HeaderProps) {
 
     setIsDark(isDarkMode);
 
-    // Ensure class is applied if it was missing
     if (isDarkMode) {
       document.documentElement.classList.add("dark");
     } else {
@@ -80,6 +78,12 @@ export function Header({ className }: HeaderProps) {
       show: true,
     },
     {
+      path: "/observations",
+      label: "Observations",
+      icon: Eye,
+      show: true,
+    },
+    {
       path: "/manager",
       label: "Team",
       icon: Users,
@@ -87,15 +91,9 @@ export function Header({ className }: HeaderProps) {
     },
     {
       path: "/director",
-      label: "Organization",
+      label: "Organisation",
       icon: Building2,
       show: isDirector || isAdmin,
-    },
-    {
-      path: "/strategic-plans",
-      label: "Strategic Plans",
-      icon: Target,
-      show: true,
     },
     {
       path: "/rubrics",
@@ -120,8 +118,21 @@ export function Header({ className }: HeaderProps) {
     >
       <div className="container h-full flex items-center justify-between">
         {/* Logo */}
-        <Link href="/dashboard" className="shrink-0">
-          <Logo />
+        <Link href="/dashboard" className="flex items-center gap-3 group">
+          <div className="relative">
+            <div className="absolute inset-0 bg-primary rounded-xl blur-lg opacity-40 group-hover:opacity-60 transition-opacity" />
+            <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-primary glow-primary group-hover:scale-105 transition-transform">
+              <Activity className="h-5 w-5 text-primary-foreground" />
+            </div>
+          </div>
+          <div>
+            <h1 className="text-lg font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+              ProofPoint
+            </h1>
+            <p className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground font-medium">
+              Command Center
+            </p>
+          </div>
         </Link>
 
         {/* Nav */}
@@ -220,10 +231,7 @@ export function Header({ className }: HeaderProps) {
                 </div>
 
                 <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
-                  <Link
-                    href="/dashboard"
-                    className="flex items-center gap-2 p-2"
-                  >
+                  <Link href="/dashboard" className="flex items-center gap-2 p-2">
                     <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center">
                       <LayoutDashboard className="h-4 w-4 text-foreground" />
                     </div>
@@ -241,10 +249,7 @@ export function Header({ className }: HeaderProps) {
                 </DropdownMenuItem>
 
                 <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
-                  <Link
-                    href="/settings/notifications"
-                    className="flex items-center gap-2 p-2"
-                  >
+                  <Link href="/settings/notifications" className="flex items-center gap-2 p-2">
                     <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center">
                       <Settings className="h-4 w-4 text-foreground" />
                     </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
+import { randomUUID } from "crypto";
 
 // POST /api/rubrics/sections - Create new section
 export async function POST(request: Request) {
@@ -17,11 +18,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
+        const id = randomUUID();
+
         const newSection = await queryOne(
-            `INSERT INTO rubric_sections (template_id, name, weight, sort_order)
-             VALUES ($1, $2, $3, $4)
+            `INSERT INTO rubric_sections (id, template_id, name, weight, sort_order)
+             VALUES ($1, $2, $3, $4, $5)
              RETURNING *`,
-            [template_id, name, weight, sort_order || 0]
+            [id, template_id, name, weight, sort_order || 0]
         );
 
         return NextResponse.json({ data: newSection }, { status: 201 });
