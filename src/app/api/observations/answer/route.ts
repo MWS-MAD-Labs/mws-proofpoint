@@ -28,7 +28,7 @@ export async function POST(request: Request) {
 
     // Get observation - use explicit column aliases to avoid camelCase issues
     const observation = (await queryOne(
-      `SELECT id, "managerId" as manager_id, "staffId" as staff_id
+      `SELECT id, "managerId" as manager_id, "staffId" as staff_id, status
        FROM observations WHERE id = $1`,
       [observationId],
     )) as any;
@@ -41,11 +41,21 @@ export async function POST(request: Request) {
 
     const userRoles = (session.user as any).roles ?? [];
     const isAdmin = userRoles.includes("admin");
-    const isManager = observation.manager_id === session.user.id;
-    const isStaff = observation.staff_id === session.user.id;
+    const isAssignedManager = observation.manager_id === session.user.id;
 
-    if (!isAdmin && !isManager && !isStaff)
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!isAdmin && !isAssignedManager) {
+      return NextResponse.json(
+        { error: "Only the assigned manager can fill observation forms." },
+        { status: 403 },
+      );
+    }
+
+    if (observation.status !== "draft") {
+      return NextResponse.json(
+        { error: "Only draft observations can be edited." },
+        { status: 400 },
+      );
+    }
 
     // Get question_type
     const indicator = (await queryOne(
