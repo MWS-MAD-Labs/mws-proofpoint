@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS "observations_workflow_definition_id_idx"
 
 -- 3. Ensure observations table has createdById so we can track who created (the manager).
 ALTER TABLE observations
-  ADD COLUMN IF NOT EXISTS created_by_id TEXT
+  ADD COLUMN IF NOT EXISTS created_by_id UUID
     REFERENCES users(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS "observations_created_by_id_idx"
