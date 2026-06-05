@@ -1,4 +1,5 @@
 // src/app/api/observations/[id]/route.ts
+
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
@@ -15,16 +16,23 @@ export async function GET(
     const user = { id: session.user.id, roles: (session.user as any).roles ?? [] };
     const { id } = await params;
 
-    // Get observation with staff, manager, rubric info
     const observation = await queryOne(
       `SELECT
-         o.id, o."staffId", o."managerId", o."rubricId",
-         o.status, o.type, o.title, o.description,
-         o.created_at as "createdAt", o.updated_at as "updatedAt",
-         o.submitted_at as "submittedAt",
-         o.acknowledged_at as "acknowledgedAt",
-         su.id as staff_id, su.email as staff_email, sp.full_name as staff_name,
-         mu.id as manager_id, mu.email as manager_email, mp.full_name as manager_name
+         o.id,
+         o."staffId",
+         o."managerId",
+         o.template_id   AS "templateId",
+         o.status,
+         o.created_at    AS "createdAt",
+         o.updated_at    AS "updatedAt",
+         o.submitted_at  AS "submittedAt",
+         o.acknowledged_at AS "acknowledgedAt",
+         su.id           AS staff_id,
+         su.email        AS staff_email,
+         sp.full_name    AS staff_name,
+         mu.id           AS manager_id,
+         mu.email        AS manager_email,
+         mp.full_name    AS manager_name
        FROM observations o
        LEFT JOIN users su ON su.id = o."staffId"
        LEFT JOIN profiles sp ON sp.user_id = su.id
@@ -45,28 +53,31 @@ export async function GET(
     if (!isAdmin && !isDirector && !isManager && !isStaff)
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
 
-    // Get rubric with sections and indicators
     const rubricSections = await query(
       `SELECT
-         rs.id as section_id, rs.name as section_name,
-         rs.weight, rs.sort_order as section_order,
-         ri.id as indicator_id, ri.name as indicator_name,
-         ri.description as indicator_description,
-         ri.evidence_guidance, ri.sort_order as indicator_order,
-         ri.question_type, ri.score_options
+         rs.id             AS section_id,
+         rs.name           AS section_name,
+         rs.weight,
+         rs.sort_order     AS section_order,
+         ri.id             AS indicator_id,
+         ri.name           AS indicator_name,
+         ri.description    AS indicator_description,
+         ri.evidence_guidance,
+         ri.sort_order     AS indicator_order,
+         ri.question_type,
+         ri.score_options
        FROM rubric_sections rs
        LEFT JOIN rubric_indicators ri ON ri.section_id = rs.id
        WHERE rs.template_id = $1
        ORDER BY rs.sort_order ASC, ri.sort_order ASC`,
-      [observation.rubricId]
+      [observation.templateId]
     ) as any[];
 
     const rubricName = await queryOne(
       `SELECT name FROM rubric_templates WHERE id = $1`,
-      [observation.rubricId]
+      [observation.templateId]
     ) as any;
 
-    // Build sections tree
     const sectionsMap: Record<string, any> = {};
     for (const row of rubricSections) {
       if (!sectionsMap[row.section_id]) {
@@ -85,13 +96,12 @@ export async function GET(
           description:      row.indicator_description,
           evidenceGuidance: row.evidence_guidance,
           sort_order:       row.indicator_order,
-          question_type:    row.question_type ?? "SCALE",
-          score_options:    row.score_options ?? [],
+          question_type:    row.question_type  ?? "SCALE",
+          score_options:    row.score_options  ?? [],
         });
       }
     }
 
-    // Get answers
     const answers = await query(
       `SELECT * FROM observation_answers WHERE observation_id = $1`,
       [id]
@@ -105,29 +115,31 @@ export async function GET(
       selectedOption: a.selected_option ?? null,
     }));
 
-    const mapped = {
-      id:          observation.id,
-      staffId:     observation.staffId,
-      managerId:   observation.managerId,
-      rubricId:    observation.rubricId,
-      status:      observation.status,
-      type:        observation.type,
-      title:       observation.title,
-      description: observation.description,
-      createdAt:   observation.createdAt,
-      updatedAt:   observation.updatedAt,
-      submittedAt: observation.submittedAt,
-      staff:   observation.staff_id   ? { id: observation.staff_id,   email: observation.staff_email,   profile: { fullName: observation.staff_name   } } : null,
-      manager: observation.manager_id ? { id: observation.manager_id, email: observation.manager_email, profile: { fullName: observation.manager_name } } : null,
+    return NextResponse.json({
+      id:             observation.id,
+      staffId:        observation.staffId,
+      managerId:      observation.managerId,
+      templateId:     observation.templateId,
+      rubricId:       observation.templateId,
+      status:         observation.status,
+      createdAt:      observation.createdAt,
+      updatedAt:      observation.updatedAt,
+      submittedAt:    observation.submittedAt,
+      acknowledgedAt: observation.acknowledgedAt,
+      staff: observation.staff_id
+        ? { id: observation.staff_id, email: observation.staff_email, profile: { fullName: observation.staff_name } }
+        : null,
+      manager: observation.manager_id
+        ? { id: observation.manager_id, email: observation.manager_email, profile: { fullName: observation.manager_name } }
+        : null,
       rubric: {
-        id:       observation.rubricId,
+        id:       observation.templateId,
         name:     rubricName?.name ?? "",
         sections: Object.values(sectionsMap),
       },
       answers: normalizedAnswers,
-    };
+    });
 
-    return NextResponse.json(mapped);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("GET /api/observations/[id] error:", error);

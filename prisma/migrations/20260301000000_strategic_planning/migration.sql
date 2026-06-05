@@ -15,22 +15,22 @@ ALTER TABLE "kpi_domains" ADD COLUMN IF NOT EXISTS "code" TEXT;
 ALTER TABLE "kpi_domains" ADD COLUMN IF NOT EXISTS "legacy_code" TEXT;
 ALTER TABLE "kpi_standards" ADD COLUMN IF NOT EXISTS "code" TEXT;
 ALTER TABLE "kpi_standards" ADD COLUMN IF NOT EXISTS "legacy_code" TEXT;
-ALTER TABLE "kpi_standards" ADD COLUMN IF NOT EXISTS "template_id" UUID;
+ALTER TABLE "kpi_standards" ADD COLUMN IF NOT EXISTS "template_id" TEXT;
 ALTER TABLE "kpis" ADD COLUMN IF NOT EXISTS "code" TEXT;
 ALTER TABLE "kpis" ADD COLUMN IF NOT EXISTS "legacy_code" TEXT;
-ALTER TABLE "kpis" ADD COLUMN IF NOT EXISTS "template_id" UUID;
+ALTER TABLE "kpis" ADD COLUMN IF NOT EXISTS "template_id" TEXT;
 
 UPDATE "kpi_domains"
 SET "legacy_code" = COALESCE("legacy_code", substring("name" from '^(D[0-9]+)'));
 
 UPDATE "kpi_standards" s
-SET "template_id" = d."template_id",
+SET "template_id" = d."template_id"::uuid,
     "legacy_code" = COALESCE(s."legacy_code", substring(s."name" from '^(Standard [0-9]+|S[0-9]+)'))
 FROM "kpi_domains" d
 WHERE s."domain_id" = d."id";
 
 UPDATE "kpis" k
-SET "template_id" = s."template_id",
+SET "template_id" = s."template_id"::uuid,
     "legacy_code" = COALESCE(k."legacy_code", substring(k."name" from '^(KPI [0-9]+(\.[0-9]+)?|K[0-9]+)'))
 FROM "kpi_standards" s
 WHERE k."standard_id" = s."id";

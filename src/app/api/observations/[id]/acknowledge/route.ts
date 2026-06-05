@@ -1,4 +1,8 @@
 // src/app/api/observations/[id]/acknowledge/route.ts
+// Milestone 4: Staff acknowledges the submitted observation.
+// Status: submitted → acknowledged.
+// Staff does NOT fill any form — they only confirm receipt.
+
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { queryOne } from "@/lib/db";
@@ -28,7 +32,7 @@ export async function PATCH(
        LEFT JOIN profiles sp ON sp.user_id = su.id
        LEFT JOIN users mu ON mu.id = o."managerId"
        LEFT JOIN profiles mp ON mp.user_id = mu.id
-       LEFT JOIN rubric_templates rt ON rt.id = o."rubricId"
+       LEFT JOIN rubric_templates rt ON rt.id = o.template_id
        WHERE o.id = $1`,
       [id]
     ) as any;
@@ -36,29 +40,36 @@ export async function PATCH(
     if (!observation)
       return NextResponse.json({ error: "Observation not found." }, { status: 404 });
 
-    if (observation.status !== "pending")
+    // ── AC: Only the staff member (or admin) can acknowledge
+    if (!isAdmin && observation.staffId !== user.id)
       return NextResponse.json(
-        { error: "Observation must be 'pending' before it can be acknowledged." },
+        { error: "Forbidden: only the observed staff member can acknowledge this observation." },
+        { status: 403 }
+      );
+
+    if (observation.status !== "submitted")
+      return NextResponse.json(
+        { error: "Observation must be 'submitted' before it can be acknowledged." },
         { status: 400 }
       );
 
-    if (!isAdmin && observation.staffId !== user.id)
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-
     const updated = await queryOne(
       `UPDATE observations
-       SET status = 'acknowledged', acknowledged_at = NOW(), updated_at = NOW()
-       WHERE id = $1
-       RETURNING *`,
+      SET status = 'acknowledged', acknowledged_at = NOW(), updated_at = NOW()
+      WHERE id = $1
+      RETURNING *`,
       [id]
     ) as any;
 
+    // Log status change
     await queryOne(
-      `INSERT INTO observation_updates (id, observation_id, updated_by_id, status_from, status_to, notes, created_at)
-       VALUES ($1, $2, $3, 'pending', 'acknowledged', $4, NOW())`,
+      `INSERT INTO observation_updates
+         (id, observation_id, updated_by_id, status_from, status_to, notes, created_at)
+       VALUES ($1, $2, $3, 'submitted', 'acknowledged', $4, NOW())`,
       [randomUUID(), id, user.id, `Acknowledged by ${isAdmin ? "admin" : "staff"}`]
-    ).catch((err: unknown) => console.error("ObservationUpdate error:", err));
+    ).catch((err: unknown) => console.error("ObservationUpdate log error:", err));
 
+    // Notify manager & admin
     const adminUser = await queryOne(
       `SELECT u.email FROM users u
        JOIN user_roles ur ON ur.user_id = u.id

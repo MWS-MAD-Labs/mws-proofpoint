@@ -1,27 +1,61 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useCallback } from 'react';
-import { useSession } from 'next-auth/react';
-import { Header } from '@/components/layout/Header';
+// src/app/observations/page.tsx
+// Milestone 4: Manager Observation Runtime
+//
+// Acceptance criteria:
+//   ✓ Observation is created by manager, not staff.
+//   ✓ Staff does not fill the form (read-only view for staff).
+//   ✓ Manager cannot use workflows not assigned to the staff's role.
+//   ✓ Manager can create observation for staff.
+//   ✓ Manager selects observation type (workflow/rubric).
+//   ✓ Manager fills form.
+//   ✓ Manager submits.
+//   ✓ Staff is notified (via API) and can acknowledge.
+
+import { useEffect, useState, useCallback } from "react";
+import { useSession } from "next-auth/react";
+import { Header } from "@/components/layout/Header";
 import {
-  Loader2, ClipboardList, CheckCircle2, Clock, Send, Eye,
-  ChevronRight, User, BookOpen, Plus, X, AlertCircle, Shield,
+  Loader2,
+  ClipboardList,
+  CheckCircle2,
+  Clock,
+  Send,
+  Eye,
+  ChevronRight,
+  User,
+  BookOpen,
+  Plus,
+  X,
+  AlertCircle,
+  Shield,
   FileText,
-} from 'lucide-react';
+  Lock,
+} from "lucide-react";
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ObservationStatus = 'draft' | 'pending' | 'submitted' | 'reviewed' | 'acknowledged';
+type ObservationStatus =
+  | "draft"
+  | "pending"
+  | "submitted"
+  | "reviewed"
+  | "acknowledged";
 
 interface Observation {
   id: string;
@@ -29,15 +63,20 @@ interface Observation {
   staffId: string;
   managerId: string | null;
   rubricId: string;
+  workflowDefinitionId?: string | null;
   submittedAt: string | null;
   acknowledgedAt: string | null;
-  staff?:   { id: string; email: string; profile?: { fullName: string | null } };
-  manager?: { id: string; email: string; profile?: { fullName: string | null } };
-  rubric?:  { id: string; name: string };
+  staff?: { id: string; email: string; profile?: { fullName: string | null } };
+  manager?: {
+    id: string;
+    email: string;
+    profile?: { fullName: string | null };
+  };
+  rubric?: { id: string; name: string };
   answers?: Answer[];
 }
 
-interface ObservationDetail extends Omit<Observation, 'rubric'> {
+interface ObservationDetail extends Omit<Observation, "rubric"> {
   rubric?: {
     id: string;
     name: string;
@@ -77,7 +116,11 @@ interface StatusHistory {
   statusTo: string;
   notes: string | null;
   createdAt: string;
-  updatedBy?: { id: string; email: string; profile?: { fullName: string | null } };
+  updatedBy?: {
+    id: string;
+    email: string;
+    profile?: { fullName: string | null };
+  };
 }
 
 interface UserData {
@@ -90,21 +133,23 @@ interface UserData {
 interface RubricData {
   id: string;
   name: string;
+  workflowId?: string | null;
+  workflowName?: string | null;
 }
 
 // ─── Hook: session + role ─────────────────────────────────────────────────────
 
 function useCurrentUser() {
   const { data: session, status } = useSession();
-  const isLoading = status === 'loading';
+  const isLoading = status === "loading";
 
   if (!session?.user) {
     return {
       currentUser: null,
       roles: [] as string[],
-      isManager:  false,
-      isStaff:    false,
-      isAdmin:    false,
+      isManager: false,
+      isStaff: false,
+      isAdmin: false,
       isDirector: false,
       isLoading,
     };
@@ -114,48 +159,76 @@ function useCurrentUser() {
 
   return {
     currentUser: {
-      id:    (session.user as any).id as string,
-      email: session.user.email ?? '',
-      name:  session.user.name ?? null,
+      id: (session.user as any).id as string,
+      email: session.user.email ?? "",
+      name: session.user.name ?? null,
       roles,
     },
     roles,
-    isManager:  roles.includes('manager') || roles.includes('admin'),
-    isStaff:    roles.includes('staff'),
-    isAdmin:    roles.includes('admin'),
-    isDirector: roles.includes('director'),
+    isManager: roles.includes("manager") || roles.includes("admin"),
+    isStaff:
+      roles.includes("staff") &&
+      !roles.includes("manager") &&
+      !roles.includes("admin"),
+    isAdmin: roles.includes("admin"),
+    isDirector: roles.includes("director"),
     isLoading,
   };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fullName(u?: { email: string; profile?: { fullName: string | null } | null }) {
-  return u?.profile?.fullName || u?.email || '—';
+function fullName(u?: {
+  email: string;
+  profile?: { fullName: string | null } | null;
+}) {
+  return u?.profile?.fullName || u?.email || "—";
 }
 
-// ─── Status Badge Config ──────────────────────────────────────────────────────
+// ─── Status Badge ─────────────────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<string, { label: string; icon: any; cls: string }> = {
-  draft:        { label: 'Draft',        icon: Clock,        cls: 'bg-zinc-100 text-zinc-600 border-zinc-200'        },
-  pending:      { label: 'Pending',      icon: Clock,        cls: 'bg-amber-50 text-amber-700 border-amber-200'      },
-  submitted:    { label: 'Submitted',    icon: Send,         cls: 'bg-blue-50 text-blue-700 border-blue-200'         },
-  reviewed:     { label: 'Reviewed',     icon: Eye,          cls: 'bg-purple-50 text-purple-700 border-purple-200'   },
-  acknowledged: { label: 'Acknowledged', icon: CheckCircle2, cls: 'bg-emerald-50 text-emerald-700 border-emerald-200'},
-};
+const STATUS_CONFIG: Record<string, { label: string; icon: any; cls: string }> =
+  {
+    draft: {
+      label: "Draft (Manager filling)",
+      icon: Clock,
+      cls: "bg-zinc-100 text-zinc-600 border-zinc-200",
+    },
+    submitted: {
+      label: "Submitted (Awaiting ack)",
+      icon: Send,
+      cls: "bg-blue-50 text-blue-700 border-blue-200",
+    },
+    reviewed: {
+      label: "Reviewed",
+      icon: Eye,
+      cls: "bg-purple-50 text-purple-700 border-purple-200",
+    },
+    acknowledged: {
+      label: "Acknowledged",
+      icon: CheckCircle2,
+      cls: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    },
+  };
 
 function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] ?? { label: status, icon: Eye, cls: 'bg-zinc-100 text-zinc-600 border-zinc-200' };
+  const cfg = STATUS_CONFIG[status] ?? {
+    label: status,
+    icon: Eye,
+    cls: "bg-zinc-100 text-zinc-600 border-zinc-200",
+  };
   const Icon = cfg.icon;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${cfg.cls}`}>
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${cfg.cls}`}
+    >
       <Icon className="w-3 h-3" />
       {cfg.label}
     </span>
   );
 }
 
-// ─── Score Input Component (auto-save on blur) ────────────────────────────────
+// ─── Answer Input (manager only) ─────────────────────────────────────────────
 
 function AnswerInput({
   indicator,
@@ -166,34 +239,48 @@ function AnswerInput({
   indicator: Indicator;
   answer?: Answer;
   disabled: boolean;
-  onSave: (indicatorId: string, payload: Record<string, unknown>) => Promise<void>;
+  onSave: (
+    indicatorId: string,
+    payload: Record<string, unknown>,
+  ) => Promise<void>;
 }) {
-  const qType = indicator.question_type ?? 'SCALE';
-  const [score,          setScore]          = useState(answer?.score && answer.score > 0 ? answer.score.toString() : '');
-  const [note,           setNote]           = useState(answer?.note ?? '');
-  const [textValue,      setTextValue]      = useState(answer?.textValue ?? (answer as any)?.text_value ?? '');
-  const [selectedOption, setSelectedOption] = useState(answer?.selectedOption ?? (answer as any)?.selected_option ?? '');
-  const [saving,         setSaving]         = useState(false);
-  const [saved,          setSaved]          = useState(false);
+  const qType = indicator.question_type ?? "SCALE";
+  const [score, setScore] = useState(
+    answer?.score && answer.score > 0 ? answer.score.toString() : "",
+  );
+  const [note, setNote] = useState(answer?.note ?? "");
+  const [textValue, setTextValue] = useState(
+    answer?.textValue ?? (answer as any)?.text_value ?? "",
+  );
+  const [selectedOption, setSelectedOption] = useState(
+    answer?.selectedOption ?? (answer as any)?.selected_option ?? "",
+  );
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    setScore(answer?.score && answer.score > 0 ? answer.score.toString() : '');
-    setNote(answer?.note ?? '');
-    setTextValue(answer?.textValue ?? (answer as any)?.text_value ?? '');
-    setSelectedOption(answer?.selectedOption ?? (answer as any)?.selected_option ?? '');
+    setScore(answer?.score && answer.score > 0 ? answer.score.toString() : "");
+    setNote(answer?.note ?? "");
+    setTextValue(answer?.textValue ?? (answer as any)?.text_value ?? "");
+    setSelectedOption(
+      answer?.selectedOption ?? (answer as any)?.selected_option ?? "",
+    );
   }, [answer?.score, answer?.note, answer?.textValue, answer?.selectedOption]);
 
   const handleSave = async () => {
     if (disabled) return;
     setSaving(true);
     try {
-      if (qType === 'SCALE') {
+      if (qType === "SCALE") {
         const num = Number(score);
-        if (!score || isNaN(num)) { setSaving(false); return; }
+        if (!score || isNaN(num)) {
+          setSaving(false);
+          return;
+        }
         await onSave(indicator.id, { score: num, note });
-      } else if (qType === 'TEXT') {
+      } else if (qType === "TEXT") {
         await onSave(indicator.id, { textValue });
-      } else if (qType === 'CHOICE') {
+      } else if (qType === "CHOICE") {
         await onSave(indicator.id, { selectedOption });
       }
       setSaved(true);
@@ -203,38 +290,52 @@ function AnswerInput({
     }
   };
 
-  const isFilled = qType === 'SCALE'
-    ? (score !== '' && Number(score) > 0)
-    : qType === 'TEXT'
-    ? textValue.trim() !== ''
-    : selectedOption !== '';
+  const isFilled =
+    qType === "SCALE"
+      ? score !== "" && Number(score) > 0
+      : qType === "TEXT"
+        ? textValue.trim() !== ""
+        : selectedOption !== "";
 
   return (
-    <div className={`border rounded-xl p-4 mb-3 bg-card transition-colors ${
-      isFilled ? 'border-border' : 'border-border/50 hover:border-border'
-    }`}>
+    <div
+      className={`border rounded-xl p-4 mb-3 bg-card transition-colors ${
+        isFilled ? "border-border" : "border-border/50 hover:border-border"
+      }`}
+    >
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isFilled ? 'bg-emerald-500' : 'bg-muted-foreground/30'}`} />
-            <p className="font-medium text-foreground text-sm">{indicator.name}</p>
+            <div
+              className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isFilled ? "bg-emerald-500" : "bg-muted-foreground/30"}`}
+            />
+            <p className="font-medium text-foreground text-sm">
+              {indicator.name}
+            </p>
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground border border-border/50 rounded px-1">
               {qType}
             </span>
           </div>
           {indicator.description && (
-            <p className="text-xs text-muted-foreground mt-0.5 ml-3.5">{indicator.description}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 ml-3.5">
+              {indicator.description}
+            </p>
           )}
         </div>
-        {saving && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground ml-2 flex-shrink-0" />}
-        {saved && !saving && <CheckCircle2 className="w-4 h-4 text-emerald-500 ml-2 flex-shrink-0" />}
+        {saving && (
+          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground ml-2 flex-shrink-0" />
+        )}
+        {saved && !saving && (
+          <CheckCircle2 className="w-4 h-4 text-emerald-500 ml-2 flex-shrink-0" />
+        )}
       </div>
 
-      {/* SCALE: numeric score + notes */}
-      {qType === 'SCALE' && (
+      {qType === "SCALE" && (
         <div className="flex gap-3 items-start">
           <div className="flex-shrink-0">
-            <label className="block text-xs text-muted-foreground mb-1 font-medium">Score (1–100)</label>
+            <label className="block text-xs text-muted-foreground mb-1 font-medium">
+              Score (1–100)
+            </label>
             <Input
               type="number"
               min={1}
@@ -248,7 +349,9 @@ function AnswerInput({
             />
           </div>
           <div className="flex-1">
-            <label className="block text-xs text-muted-foreground mb-1 font-medium">Notes</label>
+            <label className="block text-xs text-muted-foreground mb-1 font-medium">
+              Notes
+            </label>
             <Textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -262,10 +365,11 @@ function AnswerInput({
         </div>
       )}
 
-      {/* TEXT: free text response */}
-      {qType === 'TEXT' && (
+      {qType === "TEXT" && (
         <div>
-          <label className="block text-xs text-muted-foreground mb-1 font-medium">Response</label>
+          <label className="block text-xs text-muted-foreground mb-1 font-medium">
+            Response
+          </label>
           <Textarea
             value={textValue}
             onChange={(e) => setTextValue(e.target.value)}
@@ -278,21 +382,27 @@ function AnswerInput({
         </div>
       )}
 
-      {/* CHOICE: single select from options */}
-      {qType === 'CHOICE' && (
+      {qType === "CHOICE" && (
         <div>
-          <label className="block text-xs text-muted-foreground mb-1 font-medium">Select an option</label>
+          <label className="block text-xs text-muted-foreground mb-1 font-medium">
+            Select an option
+          </label>
           {indicator.score_options && indicator.score_options.length > 0 ? (
             <div className="flex flex-col gap-2">
               {indicator.score_options.map((opt) => (
-                <label key={opt} className="flex items-center gap-2 cursor-pointer">
+                <label
+                  key={opt}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
                   <input
                     type="radio"
                     name={`choice-${indicator.id}`}
                     value={opt}
                     checked={selectedOption === opt}
-                    onChange={() => { setSelectedOption(opt); }}
-                    onBlur={handleSave}
+                    onChange={() => {
+                      setSelectedOption(opt);
+                      void onSave(indicator.id, { selectedOption: opt });
+                    }}
                     disabled={disabled}
                     className="accent-primary"
                   />
@@ -315,28 +425,107 @@ function AnswerInput({
   );
 }
 
+// ─── Read-only Answer View (for staff) ───────────────────────────────────────
+
+function AnswerReadOnly({
+  indicator,
+  answer,
+}: {
+  indicator: Indicator;
+  answer?: Answer;
+}) {
+  const qType = indicator.question_type ?? "SCALE";
+  const textValue = answer?.textValue ?? (answer as any)?.text_value ?? null;
+  const selectedOption =
+    answer?.selectedOption ?? (answer as any)?.selected_option ?? null;
+  const score = answer?.score ?? 0;
+  const note = answer?.note;
+
+  const isEmpty =
+    (qType === "SCALE" && score <= 0) ||
+    (qType === "TEXT" && !textValue) ||
+    (qType === "CHOICE" && !selectedOption);
+
+  return (
+    <div className="border border-border/50 rounded-xl p-4 mb-3 bg-muted/20">
+      <div className="flex items-center gap-2 mb-2">
+        <p className="text-sm font-medium text-foreground">{indicator.name}</p>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground border border-border/50 rounded px-1">
+          {qType}
+        </span>
+      </div>
+      {indicator.description && (
+        <p className="text-xs text-muted-foreground mb-3">
+          {indicator.description}
+        </p>
+      )}
+      {isEmpty ? (
+        <p className="text-xs text-muted-foreground italic">
+          Not yet filled in by manager
+        </p>
+      ) : qType === "SCALE" ? (
+        <div className="flex gap-6">
+          <div>
+            <span className="text-xs text-muted-foreground block mb-0.5">
+              Score
+            </span>
+            <span className="text-2xl font-bold text-foreground">{score}</span>
+            <span className="text-xs text-muted-foreground ml-1">/ 100</span>
+          </div>
+          {note && (
+            <div className="flex-1">
+              <span className="text-xs text-muted-foreground block mb-0.5">
+                Notes
+              </span>
+              <p className="text-sm text-foreground">{note}</p>
+            </div>
+          )}
+        </div>
+      ) : qType === "TEXT" ? (
+        <p className="text-sm text-foreground">{textValue}</p>
+      ) : (
+        <p className="text-sm text-foreground font-medium">{selectedOption}</p>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ObservationsPage() {
   const {
-    currentUser, roles, isManager, isAdmin, isDirector, isLoading: sessionLoading,
+    currentUser,
+    roles,
+    isManager,
+    isAdmin,
+    isDirector,
+    isStaff,
+    isLoading: sessionLoading,
   } = useCurrentUser();
 
-  const [observations,      setObservations]      = useState<Observation[]>([]);
-  const [selected,          setSelected]          = useState<ObservationDetail | null>(null);
-  const [loading,           setLoading]           = useState(true);
-  const [loadingDetail,     setLoadingDetail]     = useState(false);
-  const [actionLoading,     setActionLoading]     = useState(false);
-  const [alert,             setAlert]             = useState<{ type: 'error'|'success'; message: string } | null>(null);
+  const [observations, setObservations] = useState<Observation[]>([]);
+  const [selected, setSelected] = useState<ObservationDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [alert, setAlert] = useState<{
+    type: "error" | "success";
+    message: string;
+  } | null>(null);
 
-  const [staffList,   setStaffList]   = useState<UserData[]>([]);
+  const [staffList, setStaffList] = useState<UserData[]>([]);
   const [managerList, setManagerList] = useState<UserData[]>([]);
-  const [rubricList,  setRubricList]  = useState<RubricData[]>([]);
-  const [form,        setForm]        = useState({ staffId: '', managerId: '', rubricId: '' });
-  const [creating,    setCreating]    = useState(false);
-  const [showForm,    setShowForm]    = useState(false);
+  const [rubricList, setRubricList] = useState<RubricData[]>([]);
+  const [form, setForm] = useState({
+    staffId: "",
+    managerId: "",
+    rubricId: "",
+    workflowId: "",
+  });
+  const [creating, setCreating] = useState(false);
+  const [showForm, setShowForm] = useState(false);
 
-  const showAlert = (type: 'error'|'success', message: string) => {
+  const showAlert = (type: "error" | "success", message: string) => {
     setAlert({ type, message });
     setTimeout(() => setAlert(null), 5000);
   };
@@ -344,42 +533,54 @@ export default function ObservationsPage() {
   const fetchObservations = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/observations');
+      const res = await fetch("/api/observations");
       if (!res.ok) return;
       const json = await res.json();
       const list: Observation[] = Array.isArray(json) ? json : [];
       setObservations(list);
       if (list.length > 0 && !selected) {
         const first = list[0];
-      if (first) loadDetail(first.id);
+        if (first) loadDetail(first.id);
       }
     } catch (err) {
-      console.error('fetchObservations error:', err);
+      console.error("fetchObservations error:", err);
     } finally {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // When staff is selected, fetch available forms for that staff's role
+  const fetchRubricsForStaff = useCallback(async (staffId: string) => {
+    if (!staffId) {
+      setRubricList([]);
+      return;
+    }
+    try {
+      const res = await fetch(
+        `/api/observations/available-forms?staffId=${staffId}`,
+      );
+      const json = await res.json();
+      setRubricList(Array.isArray(json) ? json : []);
+    } catch (err) {
+      console.error("fetchRubricsForStaff error:", err);
+    }
   }, []);
 
   const fetchFormData = useCallback(async () => {
     if (!isAdmin && !isManager) return;
     try {
-      const [resStaff, resManagers, resAssignments] = await Promise.all([
-        fetch('/api/admin/users'),
-        fetch('/api/managers'),
-        fetch('/api/observations/available-forms'),
-      ]);
+      const requests: Promise<Response>[] = [fetch("/api/observations/staff")];
+      if (isAdmin) requests.push(fetch("/api/managers"));
 
-      const rawStaff       = await resStaff.json();
-      const rawManagers    = await resManagers.json();
-      const rawAssignments = await resAssignments.json();
+      const [resStaff, resManagers] = await Promise.all(requests);
+      const rawStaff = await resStaff.json();
+      const rawManagers = resManagers ? await resManagers.json() : [];
 
-      setStaffList(Array.isArray(rawStaff?.data) ? rawStaff.data : Array.isArray(rawStaff) ? rawStaff : []);
+      setStaffList(Array.isArray(rawStaff) ? rawStaff : []);
       setManagerList(Array.isArray(rawManagers) ? rawManagers : []);
-      // Only rubrics that are linked via workflow assignments
-      setRubricList(Array.isArray(rawAssignments) ? rawAssignments : []);
     } catch (err) {
-      console.error('fetchFormData error:', err);
+      console.error("fetchFormData error:", err);
     }
   }, [isAdmin, isManager]);
 
@@ -390,7 +591,7 @@ export default function ObservationsPage() {
       if (!res.ok) return;
       setSelected(await res.json());
     } catch (err) {
-      console.error('loadDetail error:', err);
+      console.error("loadDetail error:", err);
     } finally {
       setLoadingDetail(false);
     }
@@ -401,76 +602,111 @@ export default function ObservationsPage() {
       fetchObservations();
       fetchFormData();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionLoading, currentUser?.id]);
 
-  // ── Actions ───────────────────────────────────────────────────────────
+  // When staff selection changes, reload rubrics filtered by their role
+  useEffect(() => {
+    if (form.staffId) {
+      fetchRubricsForStaff(form.staffId);
+      setForm((prev) => ({ ...prev, rubricId: "", workflowId: "" }));
+    } else {
+      setRubricList([]);
+    }
+  }, [form.staffId, fetchRubricsForStaff]);
+
+  // When rubric is selected, auto-populate workflowId from rubric data
+  const handleRubricChange = (rubricId: string) => {
+    const found = rubricList.find((r) => r.id === rubricId);
+    setForm((prev) => ({
+      ...prev,
+      rubricId,
+      workflowId: found?.workflowId ?? "",
+    }));
+  };
+
+  // ── Actions ──────────────────────────────────────────────────────────────
 
   const createObservation = async () => {
     if (!form.staffId || !form.rubricId) {
-      showAlert('error', 'Please select a staff member and rubric.');
+      showAlert("error", "Please select a staff member and observation form.");
       return;
     }
     setCreating(true);
     try {
-      const res = await fetch('/api/observations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/observations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          staffId:   form.staffId,
-          rubricId:  form.rubricId,
-          managerId: isAdmin ? (form.managerId && form.managerId !== 'self' ? form.managerId : undefined) : undefined,
+          staffId: form.staffId,
+          rubricId: form.rubricId,
+          workflowId: form.workflowId || undefined,
+          managerId: isAdmin
+            ? form.managerId && form.managerId !== "self"
+              ? form.managerId
+              : undefined
+            : undefined,
         }),
       });
       const json = await res.json();
       if (!res.ok) {
-        showAlert('error', json.error || 'Failed to create observation.');
+        showAlert("error", json.error || "Failed to create observation.");
         return;
       }
-      setForm({ staffId: '', managerId: '', rubricId: '' });
+      setForm({ staffId: "", managerId: "", rubricId: "", workflowId: "" });
       setShowForm(false);
-      showAlert('success', 'Observation created and manager has been notified.');
+      showAlert("success", "Observation created. Staff has been notified.");
       await fetchObservations();
       await loadDetail(json.id);
     } catch {
-      showAlert('error', 'A network error occurred.');
+      showAlert("error", "A network error occurred.");
     } finally {
       setCreating(false);
     }
   };
 
-  const saveAnswer = async (indicatorId: string, payload: Record<string, unknown>) => {
+  const saveAnswer = async (
+    indicatorId: string,
+    payload: Record<string, unknown>,
+  ) => {
     if (!selected) return;
-    const res = await fetch('/api/observations/answer', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ observationId: selected.id, indicatorId, ...payload }),
+    const res = await fetch("/api/observations/answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        observationId: selected.id,
+        indicatorId,
+        ...payload,
+      }),
     });
     if (!res.ok) {
       const json = await res.json();
-      showAlert('error', json.error || 'Failed to save answer.');
+      showAlert("error", json.error || "Failed to save answer.");
       return;
     }
-    // Update answers from save response directly
     const json = await res.json();
     const raw = json.data;
-    const savedAnswer = raw ? {
-      ...raw,
-      indicatorId:    raw["indicator_id"]    ?? raw.indicatorId    ?? indicatorId,
-      textValue:      raw["text_value"]      ?? raw.textValue      ?? null,
-      selectedOption: raw["selected_option"] ?? raw.selectedOption ?? null,
-    } : null;
+    const savedAnswer = raw
+      ? {
+          ...raw,
+          indicatorId: raw["indicator_id"] ?? raw.indicatorId ?? indicatorId,
+          textValue: raw["text_value"] ?? raw.textValue ?? null,
+          selectedOption: raw["selected_option"] ?? raw.selectedOption ?? null,
+        }
+      : null;
     if (savedAnswer) {
       setSelected((prev) => {
         if (!prev) return prev;
-        const existingIdx = prev.answers?.findIndex(
-          (a) => (a.indicatorId ?? (a as any).indicator_id) === indicatorId
-        ) ?? -1;
-        const newAnswers = existingIdx >= 0
-          ? prev.answers!.map((a, i) =>
-              i === existingIdx ? { ...a, ...savedAnswer } : a
-            )
-          : [...(prev.answers ?? []), savedAnswer];
+        const existingIdx =
+          prev.answers?.findIndex(
+            (a) => (a.indicatorId ?? (a as any).indicator_id) === indicatorId,
+          ) ?? -1;
+        const newAnswers =
+          existingIdx >= 0
+            ? prev.answers!.map((a, i) =>
+                i === existingIdx ? { ...a, ...savedAnswer } : a,
+              )
+            : [...(prev.answers ?? []), savedAnswer];
         return { ...prev, answers: newAnswers };
       });
     }
@@ -480,14 +716,22 @@ export default function ObservationsPage() {
     if (!selected) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/observations/${selected.id}/submit`, { method: 'PATCH' });
+      const res = await fetch(`/api/observations/${selected.id}/submit`, {
+        method: "PATCH",
+      });
       const json = await res.json();
-      if (!res.ok) { showAlert('error', json.error || 'Failed to submit.'); return; }
-      showAlert('success', 'Observation submitted. Staff will receive an email notification.');
+      if (!res.ok) {
+        showAlert("error", json.error || "Failed to submit.");
+        return;
+      }
+      showAlert(
+        "success",
+        "Observation submitted. Staff has been notified and will acknowledge.",
+      );
       await fetchObservations();
       await loadDetail(selected.id);
     } catch {
-      showAlert('error', 'A network error occurred.');
+      showAlert("error", "A network error occurred.");
     } finally {
       setActionLoading(false);
     }
@@ -497,48 +741,59 @@ export default function ObservationsPage() {
     if (!selected) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/observations/${selected.id}/acknowledge`, { method: 'PATCH' });
+      const res = await fetch(`/api/observations/${selected.id}/acknowledge`, {
+        method: "PATCH",
+      });
       const json = await res.json();
-      if (!res.ok) { showAlert('error', json.error || 'Failed to acknowledge.'); return; }
-      showAlert('success', 'Observation acknowledged successfully.');
+      if (!res.ok) {
+        showAlert("error", json.error || "Failed to acknowledge.");
+        return;
+      }
+      showAlert("success", "Observation acknowledged successfully.");
       await fetchObservations();
       await loadDetail(selected.id);
     } catch {
-      showAlert('error', 'A network error occurred.');
+      showAlert("error", "A network error occurred.");
     } finally {
       setActionLoading(false);
     }
   };
 
-  // ── Computed ──────────────────────────────────────────────────────────
+  // ── Computed ──────────────────────────────────────────────────────────────
 
-  const allIndicators = selected?.rubric?.sections?.flatMap((s) => s.indicators) ?? [];
+  const allIndicators =
+    selected?.rubric?.sections?.flatMap((s) => s.indicators) ?? [];
 
   const filledCount = allIndicators.filter((ind) => {
     const answer = selected?.answers?.find(
-      (a) => (a.indicatorId ?? (a as any).indicator_id) === ind.id
+      (a) => (a.indicatorId ?? (a as any).indicator_id) === ind.id,
     );
     if (!answer) return false;
-    const qType = (ind as any).question_type ?? 'SCALE';
-    if (qType === 'SCALE') return (answer.score ?? 0) > 0;
-    if (qType === 'TEXT') return !!(answer.textValue ?? (answer as any).text_value);
-    if (qType === 'CHOICE') return !!(answer.selectedOption ?? (answer as any).selected_option);
+    const qType = (ind as any).question_type ?? "SCALE";
+    if (qType === "SCALE") return (answer.score ?? 0) > 0;
+    if (qType === "TEXT")
+      return !!(answer.textValue ?? (answer as any).text_value);
+    if (qType === "CHOICE")
+      return !!(answer.selectedOption ?? (answer as any).selected_option);
     return (answer.score ?? 0) > 0;
   }).length;
 
+  // Manager can edit if they are the assigned manager and status is draft
   const canEdit =
-    selected?.status === 'draft' &&
+    selected?.status === "draft" &&
     (selected?.managerId === currentUser?.id || isAdmin);
 
   const canSubmit = canEdit && filledCount > 0;
 
+  // Only the staff member (or admin) can acknowledge — after manager submits
   const canAcknowledge =
-    selected?.status === 'submitted' &&
+    selected?.status === "pending" &&
     (selected?.staffId === currentUser?.id || isAdmin);
 
+  // Only managers/admins can create
   const canCreate = isAdmin || isManager;
 
-  // ── Render ────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   if (sessionLoading) {
     return (
@@ -553,27 +808,37 @@ export default function ObservationsPage() {
       <Header />
 
       <main className="container mx-auto px-6 py-8 max-w-6xl">
-
         {/* Page Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-semibold text-foreground tracking-tight">Observations</h1>
+            <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+              Observations
+            </h1>
             <p className="text-sm text-muted-foreground mt-1">
               {isAdmin
-                ? 'Manage all observations — create and assign to managers'
+                ? "Manage all observations — create and assign to managers"
                 : isDirector
-                ? 'Monitor all completed observations'
-                : isManager
-                ? 'Fill in observation forms assigned to you'
-                : 'View and acknowledge your observation results'}
+                  ? "Monitor all completed observations"
+                  : isManager
+                    ? "Create observations for staff and fill in the observation form"
+                    : "View and acknowledge your observation results"}
             </p>
+            {/* Staff notice */}
+            {isStaff && !isManager && !isAdmin && (
+              <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground bg-muted/40 border border-border/40 rounded-lg px-3 py-2 w-fit">
+                <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+                Observations are filled by your manager. You can view results
+                and acknowledge once submitted.
+              </div>
+            )}
             <div className="flex gap-1 mt-2">
               {roles.map((r) => (
-                <Badge key={r} variant="secondary" className="text-xs capitalize">
-                  {r === 'admin' ? 'Admin'
-                    : r === 'manager' ? 'Manager'
-                    : r === 'director' ? 'Director'
-                    : 'Staff'}
+                <Badge
+                  key={r}
+                  variant="secondary"
+                  className="text-xs capitalize"
+                >
+                  {r}
                 </Badge>
               ))}
             </div>
@@ -581,45 +846,62 @@ export default function ObservationsPage() {
 
           {canCreate && (
             <Button onClick={() => setShowForm(!showForm)} className="gap-2">
-              {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-              {showForm ? 'Close' : 'New Observation'}
+              {showForm ? (
+                <X className="w-4 h-4" />
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
+              {showForm ? "Close" : "New Observation"}
             </Button>
           )}
         </div>
 
         {/* Alert */}
         {alert && (
-          <Alert variant={alert.type === 'error' ? 'destructive' : 'default'} className="mb-4">
+          <Alert
+            variant={alert.type === "error" ? "destructive" : "default"}
+            className="mb-4"
+          >
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{alert.message}</AlertDescription>
           </Alert>
         )}
 
-        {/* ── Create Observation Form ─────────────────────────────── */}
+        {/* ── Create Observation Form (Manager / Admin only) ──────────────── */}
         {showForm && canCreate && (
           <Card className="mb-6">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Shield className="w-4 h-4 text-muted-foreground" />
                 New Observation
-                {isAdmin && (
-                  <span className="text-xs text-muted-foreground font-normal">(Admin)</span>
-                )}
-                {!isAdmin && isManager && (
-                  <span className="text-xs text-muted-foreground font-normal">(Manager)</span>
-                )}
+                <span className="text-xs text-muted-foreground font-normal">
+                  {isAdmin ? "(Admin)" : "(Manager)"}
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className={`grid gap-4 ${isAdmin ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
-
+              <div
+                className={`grid gap-4 ${isAdmin ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-2"}`}
+              >
                 {/* Select Staff */}
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">
                     Staff to observe <span className="text-destructive">*</span>
                   </label>
-                  <Select value={form.staffId} onValueChange={(val) => setForm({ ...form, staffId: val })}>
-                    <SelectTrigger><SelectValue placeholder="Select staff..." /></SelectTrigger>
+                  <Select
+                    value={form.staffId}
+                    onValueChange={(val) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        staffId: val,
+                        rubricId: "",
+                        workflowId: "",
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select staff..." />
+                    </SelectTrigger>
                     <SelectContent>
                       {staffList.map((s) => (
                         <SelectItem key={s.id} value={s.id}>
@@ -630,30 +912,61 @@ export default function ObservationsPage() {
                   </Select>
                 </div>
 
-                {/* Select Rubric */}
+                {/* Select Rubric / Workflow — filtered by staff's role */}
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                    Rubric form <span className="text-destructive">*</span>
+                    Observation form <span className="text-destructive">*</span>
+                    {form.staffId && rubricList.length === 0 && (
+                      <span className="text-amber-600 font-normal ml-1">
+                        — no forms assigned to this staff's role
+                      </span>
+                    )}
                   </label>
-                  <Select value={form.rubricId} onValueChange={(val) => setForm({ ...form, rubricId: val })}>
-                    <SelectTrigger><SelectValue placeholder="Select rubric..." /></SelectTrigger>
+                  <Select
+                    value={form.rubricId}
+                    onValueChange={handleRubricChange}
+                    disabled={!form.staffId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={
+                          form.staffId ? "Select form..." : "Select staff first"
+                        }
+                      />
+                    </SelectTrigger>
                     <SelectContent>
                       {rubricList.map((r) => (
-                        <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.name}
+                          {r.workflowName && (
+                            <span className="text-muted-foreground text-xs ml-1">
+                              ({r.workflowName})
+                            </span>
+                          )}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                {/* Select Manager — Admin only */}
+                {/* Admin only: assign to a specific manager */}
                 {isAdmin && (
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-1.5">
                       Assign to Manager
-                      <span className="text-muted-foreground font-normal ml-1">(optional)</span>
+                      <span className="text-muted-foreground font-normal ml-1">
+                        (optional)
+                      </span>
                     </label>
-                    <Select value={form.managerId} onValueChange={(val) => setForm({ ...form, managerId: val })}>
-                      <SelectTrigger><SelectValue placeholder="Default (myself)" /></SelectTrigger>
+                    <Select
+                      value={form.managerId}
+                      onValueChange={(val) =>
+                        setForm((prev) => ({ ...prev, managerId: val }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Default (myself)" />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="self">Default (myself)</SelectItem>
                         {managerList.map((m) => (
@@ -668,29 +981,31 @@ export default function ObservationsPage() {
               </div>
 
               <div className="flex justify-end gap-2 mt-4">
-                <Button variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
+                <Button variant="ghost" onClick={() => setShowForm(false)}>
+                  Cancel
+                </Button>
                 <Button
                   onClick={createObservation}
                   disabled={creating || !form.staffId || !form.rubricId}
                   className="gap-2"
                 >
                   {creating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Create &amp; Assign
+                  Create &amp; Notify Staff
                 </Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* ── Main Grid ──────────────────────────────────────────── */}
+        {/* ── Main Grid ──────────────────────────────────────────────────── */}
         <div className="grid grid-cols-5 gap-6">
-
           {/* Left: Observation List */}
           <div className="col-span-2">
             <Card className="overflow-hidden">
               <div className="px-4 py-3 border-b border-border/50">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  {observations.length} Observation{observations.length !== 1 ? 's' : ''}
+                  {observations.length} Observation
+                  {observations.length !== 1 ? "s" : ""}
                 </p>
               </div>
 
@@ -701,10 +1016,17 @@ export default function ObservationsPage() {
               ) : observations.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
                   <ClipboardList className="w-10 h-10 text-muted-foreground/30 mb-3" />
-                  <p className="text-sm font-medium text-muted-foreground">No observations yet</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    No observations yet
+                  </p>
                   {canCreate && (
                     <p className="text-xs text-muted-foreground/70 mt-1">
                       Click &quot;New Observation&quot; to get started
+                    </p>
+                  )}
+                  {!canCreate && (
+                    <p className="text-xs text-muted-foreground/70 mt-1">
+                      Your manager will create observations for you
                     </p>
                   )}
                 </div>
@@ -716,8 +1038,8 @@ export default function ObservationsPage() {
                       onClick={() => loadDetail(obs.id)}
                       className={`w-full text-left px-4 py-3.5 hover:bg-muted/30 transition-colors flex items-center justify-between group ${
                         selected?.id === obs.id
-                          ? 'bg-muted/50 border-l-2 border-l-primary'
-                          : 'border-l-2 border-l-transparent'
+                          ? "bg-muted/50 border-l-2 border-l-primary"
+                          : "border-l-2 border-l-transparent"
                       }`}
                     >
                       <div className="min-w-0 flex-1">
@@ -749,8 +1071,12 @@ export default function ObservationsPage() {
             {!selected ? (
               <Card className="flex flex-col items-center justify-center py-24 text-center">
                 <BookOpen className="w-12 h-12 text-muted-foreground/20 mb-3" />
-                <p className="text-sm font-medium text-muted-foreground">Select an observation from the list</p>
-                <p className="text-xs text-muted-foreground/70 mt-1">Details will appear here</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Select an observation from the list
+                </p>
+                <p className="text-xs text-muted-foreground/70 mt-1">
+                  Details will appear here
+                </p>
               </Card>
             ) : loadingDetail ? (
               <Card className="flex items-center justify-center py-24">
@@ -758,37 +1084,72 @@ export default function ObservationsPage() {
               </Card>
             ) : (
               <Card className="overflow-hidden">
-
                 {/* Detail Header */}
                 <div className="px-6 py-4 border-b border-border/50">
                   <div className="flex items-center justify-between mb-2">
                     <h2 className="text-base font-semibold text-foreground">
-                      {selected.rubric?.name ?? 'Observation Detail'}
+                      {selected.rubric?.name ?? "Observation Detail"}
                     </h2>
                     <StatusBadge status={selected.status} />
                   </div>
                   <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
                     <span className="flex items-center gap-1">
                       <User className="w-3 h-3" />
-                      Staff: <strong className="text-foreground ml-1">{fullName(selected.staff)}</strong>
+                      Staff:{" "}
+                      <strong className="text-foreground ml-1">
+                        {fullName(selected.staff)}
+                      </strong>
                     </span>
                     <span>
-                      Manager: <strong className="text-foreground">{fullName(selected.manager)}</strong>
+                      Manager:{" "}
+                      <strong className="text-foreground">
+                        {fullName(selected.manager)}
+                      </strong>
                     </span>
                     {selected.submittedAt && (
-                      <span>Submitted: {new Date(selected.submittedAt).toLocaleDateString('en-GB')}</span>
+                      <span>
+                        Submitted:{" "}
+                        {new Date(selected.submittedAt).toLocaleDateString(
+                          "en-GB",
+                        )}
+                      </span>
                     )}
                     {selected.acknowledgedAt && (
-                      <span>Acknowledged: {new Date(selected.acknowledgedAt).toLocaleDateString('en-GB')}</span>
+                      <span>
+                        Acknowledged:{" "}
+                        {new Date(selected.acknowledgedAt).toLocaleDateString(
+                          "en-GB",
+                        )}
+                      </span>
                     )}
                   </div>
+
+                  {/* Role-based context hint */}
+                  {canEdit && (
+                    <div className="mt-2 text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 flex-shrink-0" />
+                      You are filling this observation form as manager. Staff
+                      will acknowledge after you submit.
+                    </div>
+                  )}
+                  {!canEdit &&
+                    selected.status === "pending" &&
+                    canAcknowledge && (
+                      <div className="mt-2 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 flex-shrink-0" />
+                        Your manager has submitted this observation. Please
+                        review and acknowledge.
+                      </div>
+                    )}
                 </div>
 
-                {/* Progress bar */}
+                {/* Progress bar (manager view only) */}
                 {canEdit && allIndicators.length > 0 && (
                   <div className="px-6 py-3 bg-muted/30 border-b border-border/50">
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs text-muted-foreground">Completion progress</span>
+                      <span className="text-xs text-muted-foreground">
+                        Completion progress
+                      </span>
                       <span className="text-xs font-medium text-foreground">
                         {filledCount} / {allIndicators.length} indicators
                       </span>
@@ -796,7 +1157,9 @@ export default function ObservationsPage() {
                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary rounded-full transition-all duration-500"
-                        style={{ width: `${allIndicators.length > 0 ? (filledCount / allIndicators.length) * 100 : 0}%` }}
+                        style={{
+                          width: `${allIndicators.length > 0 ? (filledCount / allIndicators.length) * 100 : 0}%`,
+                        }}
                       />
                     </div>
                   </div>
@@ -804,12 +1167,16 @@ export default function ObservationsPage() {
 
                 {/* Sections & Indicators */}
                 <div className="px-6 py-4 max-h-[50vh] overflow-y-auto">
-                  {!selected.rubric?.sections || selected.rubric.sections.length === 0 ? (
+                  {!selected.rubric?.sections ||
+                  selected.rubric.sections.length === 0 ? (
                     <div className="text-center py-10">
                       <FileText className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-                      <p className="text-sm text-destructive font-medium">This rubric has no sections or indicators</p>
+                      <p className="text-sm text-destructive font-medium">
+                        This rubric has no sections or indicators
+                      </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Add sections &amp; indicators to this rubric in the Rubrics menu
+                        Add sections &amp; indicators to this rubric in the
+                        Rubrics menu
                       </p>
                     </div>
                   ) : (
@@ -820,7 +1187,9 @@ export default function ObservationsPage() {
                             {section.name}
                           </h3>
                           {section.weight && (
-                            <span className="text-xs text-muted-foreground">weight {section.weight}%</span>
+                            <span className="text-xs text-muted-foreground">
+                              weight {section.weight}%
+                            </span>
                           )}
                         </div>
 
@@ -828,49 +1197,37 @@ export default function ObservationsPage() {
                           <p className="text-xs text-muted-foreground italic px-1">
                             No indicators in this section
                           </p>
-                        ) : section.indicators.map((indicator) => {
-                          const answer = selected.answers?.find((a) => (a.indicatorId ?? (a as any).indicator_id) === indicator.id);
-
-                          if (!canEdit) {
-                            return (
-                              <div key={indicator.id} className="border border-border/50 rounded-xl p-4 mb-3 bg-muted/20">
-                                <p className="text-sm font-medium text-foreground mb-2">{indicator.name}</p>
-                                {indicator.description && (
-                                  <p className="text-xs text-muted-foreground mb-3">{indicator.description}</p>
-                                )}
-                                {answer && answer.score > 0 ? (
-                                  <div className="flex gap-6">
-                                    <div>
-                                      <span className="text-xs text-muted-foreground block mb-0.5">Score</span>
-                                      <span className="text-2xl font-bold text-foreground">{answer.score}</span>
-                                      <span className="text-xs text-muted-foreground ml-1">/ 100</span>
-                                    </div>
-                                    {answer.note && (
-                                      <div className="flex-1">
-                                        <span className="text-xs text-muted-foreground block mb-0.5">Notes</span>
-                                        <p className="text-sm text-foreground">{answer.note}</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <p className="text-xs text-muted-foreground italic">
-                                    Not yet filled in by manager
-                                  </p>
-                                )}
-                              </div>
+                        ) : (
+                          section.indicators.map((indicator) => {
+                            const answer = selected.answers?.find(
+                              (a) =>
+                                (a.indicatorId ?? (a as any).indicator_id) ===
+                                indicator.id,
                             );
-                          }
 
-                          return (
-                            <AnswerInput
-                              key={indicator.id}
-                              indicator={indicator}
-                              answer={answer}
-                              disabled={false}
-                              onSave={saveAnswer}
-                            />
-                          );
-                        })}
+                            // Staff only sees read-only view — never editable
+                            if (!canEdit) {
+                              return (
+                                <AnswerReadOnly
+                                  key={indicator.id}
+                                  indicator={indicator}
+                                  answer={answer}
+                                />
+                              );
+                            }
+
+                            // Manager fills the form
+                            return (
+                              <AnswerInput
+                                key={indicator.id}
+                                indicator={indicator}
+                                answer={answer}
+                                disabled={false}
+                                onSave={saveAnswer}
+                              />
+                            );
+                          })
+                        )}
                       </div>
                     ))
                   )}
@@ -884,16 +1241,23 @@ export default function ObservationsPage() {
                     </h4>
                     <div className="space-y-2">
                       {selected.updates.map((entry) => (
-                        <div key={entry.id} className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                        <div
+                          key={entry.id}
+                          className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap"
+                        >
                           <span className="font-medium text-foreground">
-                            {entry.updatedBy?.profile?.fullName || entry.updatedBy?.email || '—'}
+                            {entry.updatedBy?.profile?.fullName ||
+                              entry.updatedBy?.email ||
+                              "—"}
                           </span>
                           <span>changed from</span>
                           <StatusBadge status={entry.statusFrom} />
                           <span>to</span>
                           <StatusBadge status={entry.statusTo} />
                           <span className="ml-auto">
-                            {new Date(entry.createdAt).toLocaleDateString('en-GB')}
+                            {new Date(entry.createdAt).toLocaleDateString(
+                              "en-GB",
+                            )}
                           </span>
                         </div>
                       ))}
@@ -904,27 +1268,39 @@ export default function ObservationsPage() {
                 {/* Action Footer */}
                 {(canSubmit || canAcknowledge) && (
                   <div className="px-6 py-4 border-t border-border/50 bg-muted/20">
-
+                    {/* Manager submits */}
                     {canSubmit && (
                       <div className="flex items-center justify-between gap-4">
                         <p className="text-xs text-muted-foreground">
                           {filledCount < allIndicators.length
                             ? `${allIndicators.length - filledCount} indicator(s) remaining`
-                            : '✓ All indicators completed'}
+                            : "✓ All indicators completed"}
                         </p>
-                        <Button onClick={handleSubmit} disabled={actionLoading} className="gap-2 flex-shrink-0">
-                          {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                          Submit Observation
+                        <Button
+                          onClick={handleSubmit}
+                          disabled={actionLoading}
+                          className="gap-2 flex-shrink-0"
+                        >
+                          {actionLoading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Send className="w-4 h-4" />
+                          )}
+                          Submit to Staff
                         </Button>
                       </div>
                     )}
 
+                    {/* Staff acknowledges */}
                     {canAcknowledge && (
                       <div className="flex items-center justify-between gap-4">
                         <div>
-                          <p className="text-sm font-medium text-foreground">Have you reviewed the observation results?</p>
+                          <p className="text-sm font-medium text-foreground">
+                            Have you reviewed the observation results?
+                          </p>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            Click Acknowledge to confirm you have read this result.
+                            Click Acknowledge to confirm you have read this
+                            result.
                           </p>
                         </div>
                         <Button
@@ -932,14 +1308,17 @@ export default function ObservationsPage() {
                           disabled={actionLoading}
                           className="gap-2 flex-shrink-0 bg-emerald-600 hover:bg-emerald-700"
                         >
-                          {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                          {actionLoading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4" />
+                          )}
                           Acknowledge
                         </Button>
                       </div>
                     )}
                   </div>
                 )}
-
               </Card>
             )}
           </div>
