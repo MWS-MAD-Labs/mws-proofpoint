@@ -75,7 +75,7 @@ export async function PATCH(
     // Log status change
     await queryOne(
       `INSERT INTO observation_updates
-         (id, observation_id, updated_by_id, status_from, status_to, notes, created_at)
+         (id, observation_id, updated_by, "statusFrom", "statusTo", notes, created_at)
        VALUES ($1, $2, $3, 'draft', 'submitted', $4, NOW())`,
       [randomUUID(), id, user.id, `Submitted by ${isAdmin ? "admin" : "manager"}`]
     ).catch((err: unknown) => console.error("ObservationUpdate log error:", err));

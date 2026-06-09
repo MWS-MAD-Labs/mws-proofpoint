@@ -13,34 +13,34 @@ function esc(str: string | null | undefined): string {
     .replace(/'/g, "&#39;");
 }
 
-// ✅ FIX: observationId tidak dipakai → prefix _ (reserved untuk link detail masa depan)
+// ── Notify staff when manager creates observation ────────────────────────────
 export async function notifyObservationCreated(
-  managerEmail:   string,
+  staffEmail:     string,
   staffName:      string,
   rubricName:     string,
   _observationId: string
 ) {
   return sendEmail({
-    to:      managerEmail,
+    to:      staffEmail,
     subject: `Observation Baru: ${rubricName}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:600px;">
       <h2>Observation Baru Ditugaskan</h2>
-      <p>Anda ditugaskan untuk mengisi form observasi berikut:</p>
+      <p>Halo <strong>${esc(staffName)}</strong>,</p>
+      <p>Manager Anda telah membuat observation untuk Anda. Anda akan menerima notifikasi saat hasilnya siap untuk ditinjau.</p>
       <table style="border-collapse:collapse;width:100%;margin:12px 0;">
-        <tr><td style="padding:6px 0;color:#555;width:120px;">Staff</td>
-            <td style="font-weight:bold;">${esc(staffName)}</td></tr>
-        <tr><td style="padding:6px 0;color:#555;">Rubric</td>
+        <tr><td style="padding:6px 0;color:#555;width:120px;">Rubric</td>
             <td style="font-weight:bold;">${esc(rubricName)}</td></tr>
       </table>
       <a href="${BASE_URL}/observations"
          style="display:inline-block;background:#16a34a;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold;">
-        Isi Observasi
+        Lihat Observation
       </a>
       <p style="color:#999;font-size:12px;margin-top:24px;">Notifikasi otomatis - jangan balas email ini.</p>
     </div>`,
   });
 }
 
+// ── Notify staff when manager submits (staff needs to acknowledge) ───────────
 export async function notifyObservationSubmitted(
   staffEmail:     string,
   staffName:      string,
@@ -53,7 +53,7 @@ export async function notifyObservationSubmitted(
     html: `<div style="font-family:Arial,sans-serif;max-width:600px;">
       <h2>Hasil Observasi Siap untuk Ditinjau</h2>
       <p>Halo <strong>${esc(staffName)}</strong>,</p>
-      <p>Manager Anda telah menyelesaikan pengisian observasi. Silakan tinjau dan berikan acknowledgement.</p>
+      <p>Manager Anda telah menyelesaikan pengisian observasi. Silakan tinjau hasilnya dan berikan acknowledgement.</p>
       <table style="border-collapse:collapse;width:100%;margin:12px 0;">
         <tr><td style="padding:6px 0;color:#555;width:120px;">Rubric</td>
             <td style="font-weight:bold;">${esc(rubricName)}</td></tr>
@@ -67,6 +67,39 @@ export async function notifyObservationSubmitted(
   });
 }
 
+// ── Milestone 5: Notify manager when staff acknowledges ──────────────────────
+export async function notifyManagerObservationAcknowledged(
+  managerEmail:   string,
+  staffName:      string,
+  managerName:    string,
+  rubricName:     string,
+  _observationId: string
+) {
+  return sendEmail({
+    to:      managerEmail,
+    subject: `✅ Staff Acknowledge Observasi: ${rubricName}`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:600px;">
+      <h2>Observasi Telah Diakui oleh Staff</h2>
+      <p>Halo <strong>${esc(managerName)}</strong>,</p>
+      <p>Staff Anda telah melakukan acknowledgement atas hasil observasi yang Anda isi.</p>
+      <table style="border-collapse:collapse;width:100%;margin:12px 0;">
+        <tr><td style="padding:6px 0;color:#555;width:120px;">Staff</td>
+            <td style="font-weight:bold;">${esc(staffName)}</td></tr>
+        <tr><td style="padding:6px 0;color:#555;">Rubric</td>
+            <td style="font-weight:bold;">${esc(rubricName)}</td></tr>
+        <tr><td style="padding:6px 0;color:#555;">Status</td>
+            <td style="font-weight:bold;color:#16a34a;">Acknowledged ✅</td></tr>
+      </table>
+      <a href="${BASE_URL}/observations"
+         style="display:inline-block;background:#7c3aed;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold;">
+        Lihat Detail
+      </a>
+      <p style="color:#999;font-size:12px;margin-top:24px;">Notifikasi otomatis - jangan balas email ini.</p>
+    </div>`,
+  });
+}
+
+// ── Notify admin when any observation is acknowledged ───────────────────────
 export async function notifyObservationAcknowledged(
   adminEmail:     string,
   staffName:      string,

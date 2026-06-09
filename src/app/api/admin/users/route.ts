@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
+import type { AppRole } from "@prisma/client";
 
 // Helper: cek admin
 async function requireAdmin() {
@@ -96,13 +97,13 @@ export async function POST(request: Request) {
         },
       });
 
-      await tx.userRole.createMany({
-        data: rolesArray.map((role) => ({
-          id:     randomUUID(),
-          userId: user.id,
-          role:   role as any,
-        })),
-      });
+      for (const role of rolesArray) {
+  await tx.$executeRawUnsafe(
+    `INSERT INTO user_roles (id, user_id, role, created_at)
+     VALUES ($1, $2, $3::app_role, NOW())`,
+    randomUUID(), user.id, role
+  );
+}
 
       return user;
     });
@@ -158,13 +159,13 @@ export async function PUT(request: Request) {
         const rolesArray = sanitizeRoles(roles);
         if (rolesArray.length > 0) {
           await tx.userRole.deleteMany({ where: { userId: id } });
-          await tx.userRole.createMany({
-            data: rolesArray.map((role) => ({
-              id:     randomUUID(),
-              userId: id,
-              role:   role as any,
-            })),
-          });
+for (const role of rolesArray) {
+  await tx.$executeRawUnsafe(
+    `INSERT INTO user_roles (id, user_id, role, created_at)
+     VALUES ($1, $2, $3::app_role, NOW())`,
+    randomUUID(), id, role
+  );
+}
         }
       }
     });
