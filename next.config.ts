@@ -7,11 +7,6 @@ const nextConfig: NextConfig = {
   // Enable strict mode for React
   reactStrictMode: true,
 
-  // Disable ESLint during builds to allow deployment
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-
   // Disable TypeScript errors during production builds for Docker deployment
   // Note: TypeScript checking still runs during development
   typescript: {

@@ -1,9 +1,9 @@
 "use client";
 
 // src/app/observations/page.tsx
-// Milestone 4: Manager Observation Runtime
+// Milestone 4 + Milestone 5: Manager Observation Runtime + Staff Acknowledgement
 //
-// Acceptance criteria:
+// Milestone 4 AC (preserved):
 //   ✓ Observation is created by manager, not staff.
 //   ✓ Staff does not fill the form (read-only view for staff).
 //   ✓ Manager cannot use workflows not assigned to the staff's role.
@@ -12,6 +12,14 @@
 //   ✓ Manager fills form.
 //   ✓ Manager submits.
 //   ✓ Staff is notified (via API) and can acknowledge.
+//
+// Milestone 5 AC (new):
+//   ✓ Staff cannot edit scores.
+//   ✓ Staff can only acknowledge observations where they are the subject.
+//   ✓ Manager/admin can see acknowledgement status.
+//   ✓ Staff can view observation result (read-only).
+//   ✓ Staff can acknowledge → status updates to acknowledged.
+//   ✓ Audit trail records acknowledgement (shown in Status History).
 
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
@@ -32,6 +40,7 @@ import {
   Shield,
   FileText,
   Lock,
+  History,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -185,6 +194,17 @@ function fullName(u?: {
   return u?.profile?.fullName || u?.email || "—";
 }
 
+function formatDate(d: string | null | undefined) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { label: string; icon: any; cls: string }> =
@@ -205,7 +225,7 @@ const STATUS_CONFIG: Record<string, { label: string; icon: any; cls: string }> =
       cls: "bg-purple-50 text-purple-700 border-purple-200",
     },
     acknowledged: {
-      label: "Acknowledged",
+      label: "Acknowledged ✓",
       icon: CheckCircle2,
       cls: "bg-emerald-50 text-emerald-700 border-emerald-200",
     },
@@ -228,7 +248,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ─── Answer Input (manager only) ─────────────────────────────────────────────
+// ─── Answer Input (manager only — staff NEVER sees this) ──────────────────────
 
 function AnswerInput({
   indicator,
@@ -425,7 +445,7 @@ function AnswerInput({
   );
 }
 
-// ─── Read-only Answer View (for staff) ───────────────────────────────────────
+// ─── Read-only Answer View (M5: staff view — NEVER editable) ─────────────────
 
 function AnswerReadOnly({
   indicator,
@@ -550,7 +570,6 @@ export default function ObservationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When staff is selected, fetch available forms for that staff's role
   const fetchRubricsForStaff = useCallback(async (staffId: string) => {
     if (!staffId) {
       setRubricList([]);
@@ -605,7 +624,6 @@ export default function ObservationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionLoading, currentUser?.id]);
 
-  // When staff selection changes, reload rubrics filtered by their role
   useEffect(() => {
     if (form.staffId) {
       fetchRubricsForStaff(form.staffId);
@@ -615,7 +633,6 @@ export default function ObservationsPage() {
     }
   }, [form.staffId, fetchRubricsForStaff]);
 
-  // When rubric is selected, auto-populate workflowId from rubric data
   const handleRubricChange = (rubricId: string) => {
     const found = rubricList.find((r) => r.id === rubricId);
     setForm((prev) => ({
@@ -625,7 +642,7 @@ export default function ObservationsPage() {
     }));
   };
 
-  // ── Actions ──────────────────────────────────────────────────────────────
+  // ── Actions ────────────────────────────────────────────────────────────────
 
   const createObservation = async () => {
     if (!form.staffId || !form.rubricId) {
@@ -737,6 +754,7 @@ export default function ObservationsPage() {
     }
   };
 
+  // M5 AC: Staff acknowledges — status submitted → acknowledged
   const handleAcknowledge = async () => {
     if (!selected) return;
     setActionLoading(true);
@@ -749,7 +767,10 @@ export default function ObservationsPage() {
         showAlert("error", json.error || "Failed to acknowledge.");
         return;
       }
-      showAlert("success", "Observation acknowledged successfully.");
+      showAlert(
+        "success",
+        "Observation acknowledged. Manager has been notified.",
+      );
       await fetchObservations();
       await loadDetail(selected.id);
     } catch {
@@ -759,7 +780,7 @@ export default function ObservationsPage() {
     }
   };
 
-  // ── Computed ──────────────────────────────────────────────────────────────
+  // ── Computed ───────────────────────────────────────────────────────────────
 
   const allIndicators =
     selected?.rubric?.sections?.flatMap((s) => s.indicators) ?? [];
@@ -778,22 +799,30 @@ export default function ObservationsPage() {
     return (answer.score ?? 0) > 0;
   }).length;
 
-  // Manager can edit if they are the assigned manager and status is draft
+  // Manager can edit only if they are the assigned manager and status is draft
   const canEdit =
     selected?.status === "draft" &&
-    (selected?.managerId === currentUser?.id || isAdmin);
+    (String(selected?.managerId) === String(currentUser?.id) || isAdmin);
 
   const canSubmit = canEdit && filledCount > 0;
 
-  // Only the staff member (or admin) can acknowledge — after manager submits
+  // M5 AC: Only the staff member WHO IS THE SUBJECT can acknowledge.
+  // Uses String() comparison to safely compare UUID strings.
+  // Status must be "submitted" (not "pending" — that was the old naming).
   const canAcknowledge =
-    selected?.status === "pending" &&
-    (selected?.staffId === currentUser?.id || isAdmin);
+    selected?.status === "submitted" &&
+    String(selected?.staffId) === String(currentUser?.id);
 
   // Only managers/admins can create
   const canCreate = isAdmin || isManager;
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // M5 AC: Manager/admin can see acknowledgement status
+  const showAcknowledgementInfo =
+    (isAdmin || isManager || isDirector) &&
+    selected?.status === "acknowledged" &&
+    selected?.acknowledgedAt;
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   if (sessionLoading) {
     return (
@@ -823,7 +852,7 @@ export default function ObservationsPage() {
                     ? "Create observations for staff and fill in the observation form"
                     : "View and acknowledge your observation results"}
             </p>
-            {/* Staff notice */}
+            {/* M5 AC: Staff notice — cannot edit scores */}
             {isStaff && !isManager && !isAdmin && (
               <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground bg-muted/40 border border-border/40 rounded-lg px-3 py-2 w-fit">
                 <Lock className="w-3.5 h-3.5 flex-shrink-0" />
@@ -918,7 +947,7 @@ export default function ObservationsPage() {
                     Observation form <span className="text-destructive">*</span>
                     {form.staffId && rubricList.length === 0 && (
                       <span className="text-amber-600 font-normal ml-1">
-                        — no forms assigned to this staff's role
+                        — no forms assigned to this staff&apos;s role
                       </span>
                     )}
                   </label>
@@ -997,7 +1026,7 @@ export default function ObservationsPage() {
           </Card>
         )}
 
-        {/* ── Main Grid ──────────────────────────────────────────────────── */}
+        {/* ── Main Grid ─────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-5 gap-6">
           {/* Left: Observation List */}
           <div className="col-span-2">
@@ -1057,6 +1086,14 @@ export default function ObservationsPage() {
                             </span>
                           )}
                         </div>
+                        {/* M5 AC: Show acknowledgedAt in list for manager/admin */}
+                        {obs.acknowledgedAt &&
+                          (isAdmin || isManager || isDirector) && (
+                            <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              Ack {formatDate(obs.acknowledgedAt)}
+                            </p>
+                          )}
                       </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-muted-foreground flex-shrink-0 ml-2" />
                     </button>
@@ -1107,24 +1144,27 @@ export default function ObservationsPage() {
                       </strong>
                     </span>
                     {selected.submittedAt && (
-                      <span>
-                        Submitted:{" "}
-                        {new Date(selected.submittedAt).toLocaleDateString(
-                          "en-GB",
-                        )}
-                      </span>
+                      <span>Submitted: {formatDate(selected.submittedAt)}</span>
                     )}
                     {selected.acknowledgedAt && (
-                      <span>
-                        Acknowledged:{" "}
-                        {new Date(selected.acknowledgedAt).toLocaleDateString(
-                          "en-GB",
-                        )}
+                      <span className="text-emerald-600 font-medium">
+                        ✓ Acknowledged: {formatDate(selected.acknowledgedAt)}
                       </span>
                     )}
                   </div>
 
-                  {/* Role-based context hint */}
+                  {/* M5 AC: Manager/admin acknowledgement status banner */}
+                  {showAcknowledgementInfo && (
+                    <div className="mt-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                      Staff <strong>{fullName(selected.staff)}</strong> has
+                      acknowledged this observation on{" "}
+                      {formatDate(selected.acknowledgedAt)}. This observation is
+                      now complete.
+                    </div>
+                  )}
+
+                  {/* Role-based context hints */}
                   {canEdit && (
                     <div className="mt-2 text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
                       <Shield className="w-3.5 h-3.5 flex-shrink-0" />
@@ -1132,18 +1172,27 @@ export default function ObservationsPage() {
                       will acknowledge after you submit.
                     </div>
                   )}
+                  {/* M5 AC: Staff sees pending acknowledgement notice */}
                   {!canEdit &&
-                    selected.status === "pending" &&
+                    selected.status === "submitted" &&
                     canAcknowledge && (
                       <div className="mt-2 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
                         <Eye className="w-3.5 h-3.5 flex-shrink-0" />
                         Your manager has submitted this observation. Please
-                        review and acknowledge.
+                        review the results below and acknowledge.
                       </div>
                     )}
+                  {/* M5 AC: Staff already acknowledged */}
+                  {!canEdit && selected.status === "acknowledged" && (
+                    <div className="mt-2 text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                      You have acknowledged this observation on{" "}
+                      {formatDate(selected.acknowledgedAt)}.
+                    </div>
+                  )}
                 </div>
 
-                {/* Progress bar (manager view only) */}
+                {/* Progress bar (manager view only, draft status only) */}
                 {canEdit && allIndicators.length > 0 && (
                   <div className="px-6 py-3 bg-muted/30 border-b border-border/50">
                     <div className="flex items-center justify-between mb-1.5">
@@ -1205,7 +1254,7 @@ export default function ObservationsPage() {
                                 indicator.id,
                             );
 
-                            // Staff only sees read-only view — never editable
+                            // M5 AC: Staff ALWAYS sees read-only — never editable
                             if (!canEdit) {
                               return (
                                 <AnswerReadOnly
@@ -1233,11 +1282,12 @@ export default function ObservationsPage() {
                   )}
                 </div>
 
-                {/* Status History */}
+                {/* M5 AC: Audit Trail — visible to manager/admin/director */}
                 {selected.updates && selected.updates.length > 0 && (
                   <div className="px-6 py-4 border-t border-border/50 bg-muted/20">
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                      Status History
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <History className="w-3.5 h-3.5" />
+                      Audit Trail
                     </h4>
                     <div className="space-y-2">
                       {selected.updates.map((entry) => (
@@ -1254,10 +1304,8 @@ export default function ObservationsPage() {
                           <StatusBadge status={entry.statusFrom} />
                           <span>to</span>
                           <StatusBadge status={entry.statusTo} />
-                          <span className="ml-auto">
-                            {new Date(entry.createdAt).toLocaleDateString(
-                              "en-GB",
-                            )}
+                          <span className="ml-auto text-muted-foreground/70">
+                            {formatDate(entry.createdAt)}
                           </span>
                         </div>
                       ))}
@@ -1291,7 +1339,7 @@ export default function ObservationsPage() {
                       </div>
                     )}
 
-                    {/* Staff acknowledges */}
+                    {/* M5 AC: Staff acknowledges — only subject staff can do this */}
                     {canAcknowledge && (
                       <div className="flex items-center justify-between gap-4">
                         <div>
@@ -1300,7 +1348,7 @@ export default function ObservationsPage() {
                           </p>
                           <p className="text-xs text-muted-foreground mt-0.5">
                             Click Acknowledge to confirm you have read this
-                            result.
+                            result. This action cannot be undone.
                           </p>
                         </div>
                         <Button
