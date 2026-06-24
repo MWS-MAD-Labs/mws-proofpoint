@@ -1,0 +1,2 @@
+-- ProofPoint DB init placeholder.
+-- Keep this file present so Docker file bind mounts work.

@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.env
+.env.local
+.env.production
+npm-debug.log*
+README.md
+DEPLOYMENT.md
+PRISMA_SETUP.md
+.gitignore
+deploy.sh
+quick-deploy.sh
+scripts/post-deploy.sh
