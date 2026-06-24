@@ -82,6 +82,7 @@ export async function seedNlsmartackObservations(
     const existing = await client.department.findFirst({ where: { name: dept.name } });
     if (existing) {
       deptIdMap.set(dept.id, existing.id);
+      console.log(`    ⏭️  Department (sudah ada): ${dept.name}`);
       continue;
     }
     const created = await client.department.create({ data: { name: dept.name } });
@@ -108,12 +109,13 @@ export async function seedNlsmartackObservations(
           emailVerified: true,
         },
       });
-      // Set nlsmartrack_id via raw query
       await client.$executeRawUnsafe(
         `UPDATE users SET nlsmartrack_id = $1 WHERE id = $2`,
         u.id, user.id,
       );
       console.log(`    ✅ User: ${email}`);
+    } else {
+      console.log(`    ⏭️  User (sudah ada): ${email}`);
     }
     userIdMap.set(u.id, user.id);
 
@@ -128,20 +130,17 @@ export async function seedNlsmartackObservations(
       },
     });
 
-    // Set migration_source via raw query
     await client.$executeRawUnsafe(
       `UPDATE profiles SET migration_source = 'nlsmartrack' WHERE user_id = $1`,
       user.id,
     );
 
-    // Upsert role
     await client.userRole.upsert({
       where:  { userId_role: { userId: user.id, role: role as any } },
       update: {},
       create: { userId: user.id, role: role as any },
     });
 
-    // Log ke migration_log
     await client.$executeRawUnsafe(
       `INSERT INTO migration_log (entity_type, source_id, target_id, notes)
        VALUES ('user', $1, $2, 'imported from nlsmartrack')
@@ -153,79 +152,99 @@ export async function seedNlsmartackObservations(
   // ── 3. Observations ────────────────────────────────────────────────────────
   console.log("\n📋  [3/3] Import observations...");
 
-  const defaultRubric = await client.rubricTemplate.findFirst({
+  // Load semua rubric template ke Map untuk lookup cepat
+  const allTemplates = await client.rubricTemplate.findMany({
+    select: { id: true, name: true },
+  });
+  const templateMap = new Map<string, string>(
+    allTemplates.map((t) => [t.name.toLowerCase().trim(), t.id])
+  );
+
+  console.log(`    📚 Rubric templates tersedia: ${allTemplates.length}`);
+
+  // Fallback: gunakan template pertama CLASSROOM_OBSERVATION jika nama tidak match
+  const fallbackTemplate = await client.rubricTemplate.findFirst({
     where: { templateType: "CLASSROOM_OBSERVATION" },
   });
 
-  if (!defaultRubric) {
-    console.warn("⚠️  Tidak ada rubric CLASSROOM_OBSERVATION. Observation dilewati.");
-  } else {
-    for (const obs of data.observations) {
-      const staffId   = userIdMap.get(obs.staff_id);
-      const managerId = userIdMap.get(obs.manager_id) ?? null;
+  let importedCount = 0;
+  let skippedCount  = 0;
+  let errorCount    = 0;
 
-      if (!staffId) {
-        console.warn(`    ⚠️  Staff ID ${obs.staff_id} tidak ditemukan, skip.`);
-        continue;
-      }
+  for (const obs of data.observations) {
+    const staffId   = userIdMap.get(obs.staff_id);
+    const managerId = userIdMap.get(obs.manager_id) ?? null;
 
-      // Cek duplikat
-      const existing = await client.$queryRawUnsafe<any[]>(
-        `SELECT id FROM observations WHERE nlsmartrack_id = $1 LIMIT 1`,
-        obs.id,
-      );
-      if (existing.length > 0) continue;
-
-      const status  = mapObservationStatus(obs.status);
-     const created = await client.observation.create({
-  data: {
-    staffId,
-    managerId,
-
-    template_id: defaultRubric.id,
-
-    status: status as any,
-
-    submittedAt: obs.submitted_at
-      ? new Date(obs.submitted_at)
-      : null,
-
-    acknowledgedAt: obs.acknowledged_at
-      ? new Date(obs.acknowledged_at)
-      : null,
-
-    createdAt: new Date(obs.created_at),
-  },
-});
-
-      // Set nlsmartrack_id
-      await client.$executeRawUnsafe(
-        `UPDATE observations SET nlsmartrack_id = $1 WHERE id = $2`,
-        obs.id, created.id,
-      );
-
-      // Audit trail
-      await client.observationUpdate.create({
-        data: {
-          observationId: created.id,
-          statusFrom:    null,
-          statusTo:      status,
-          notes:         "Imported from NLSmartrack",
-        },
-      });
-
-      // Log
-      await client.$executeRawUnsafe(
-        `INSERT INTO migration_log (entity_type, source_id, target_id, notes)
-         VALUES ('observation', $1, $2, 'imported from nlsmartrack')`,
-        obs.id, created.id,
-      );
-
-      console.log(`    ✅ Observation: ${obs.id} → ${created.id} (${status})`);
+    if (!staffId) {
+      console.warn(`    ⚠️  Staff ID ${obs.staff_id} tidak ditemukan, skip.`);
+      errorCount++;
+      continue;
     }
+
+    // Cek duplikat
+    const existing = await client.$queryRawUnsafe<any[]>(
+      `SELECT id FROM observations WHERE nlsmartrack_id = $1 LIMIT 1`,
+      obs.id,
+    );
+    if (existing.length > 0) {
+      skippedCount++;
+      continue;
+    }
+
+    // Cari rubric template berdasarkan nama (case-insensitive)
+    const rubricKey    = obs.rubric_name.toLowerCase().trim();
+    const templateId   = templateMap.get(rubricKey) ?? fallbackTemplate?.id;
+
+    if (!templateId) {
+      console.warn(`    ⚠️  Template "${obs.rubric_name}" tidak ditemukan dan tidak ada fallback, skip obs ${obs.id}.`);
+      errorCount++;
+      continue;
+    }
+
+    const status  = mapObservationStatus(obs.status);
+    const created = await client.observation.create({
+      data: {
+        staffId,
+        managerId,
+        template_id:    templateId,
+        status:         status as any,
+        submittedAt:    obs.submitted_at    ? new Date(obs.submitted_at)    : null,
+        acknowledgedAt: obs.acknowledged_at ? new Date(obs.acknowledged_at) : null,
+        createdAt:      new Date(obs.created_at),
+      },
+    });
+
+    // Set nlsmartrack_id
+    await client.$executeRawUnsafe(
+      `UPDATE observations SET nlsmartrack_id = $1 WHERE id = $2`,
+      obs.id, created.id,
+    );
+
+    // Audit trail
+    await client.observationUpdate.create({
+      data: {
+        observationId: created.id,
+        statusFrom:    null,
+        statusTo:      status,
+        notes:         `Imported from NLSmartrack (rubric: ${obs.rubric_name})`,
+      },
+    });
+
+    // Migration log
+    await client.$executeRawUnsafe(
+      `INSERT INTO migration_log (entity_type, source_id, target_id, notes)
+       VALUES ('observation', $1, $2, $3)`,
+      obs.id, created.id, `imported from nlsmartrack, rubric: ${obs.rubric_name}`,
+    );
+
+    console.log(`    ✅ Observation ${obs.id} → ${created.id} [${obs.rubric_name}] (${status})`);
+    importedCount++;
   }
 
-  console.log("\n✅  Import NLSmartrack selesai!");
+  console.log(`\n✅  Import NLSmartrack selesai!`);
+  console.log(`    ✅ Imported  : ${importedCount} observations`);
+  console.log(`    ⏭️  Skipped   : ${skippedCount} observations (duplikat)`);
+  console.log(`    ⚠️  Errors    : ${errorCount} observations`);
 }
 
 if (process.argv[1]?.endsWith("seed-nlsmartrack-observations.ts")) {
