@@ -3,7 +3,7 @@ services:
   # Next.js Application (Frontend + API)
   # ============================================
   app:
-    image: ghcr.io/mws-mad-labs/proofpoint:latest
+    image: ghcr.io/mws-mad-labs/mws-proofpoint:${PROOFPOINT_IMAGE_TAG:-latest}
     # To build locally instead, comment out 'image' and uncomment:
     # build:
     #   context: .
