@@ -321,6 +321,24 @@ class ApiClient {
     return this.request(`/departments?id=${id}`, { method: "DELETE" });
   }
 
+  // Admin - Department role memberships
+  async getDepartmentRoleMemberships(): Promise<ApiResponse<unknown[]>> {
+    return this.request("/admin/department-role-memberships");
+  }
+
+  async updateDepartmentRoleMemberships(
+    departmentRoleId: string,
+    userIds: string[],
+  ): Promise<ApiResponse<{ department_role_id: string; user_ids: string[] }>> {
+    return this.request("/admin/department-role-memberships", {
+      method: "PUT",
+      body: JSON.stringify({
+        department_role_id: departmentRoleId,
+        user_ids: userIds,
+      }),
+    });
+  }
+
   // Admin - Department Roles
   async getDepartmentRoles(departmentId?: string): Promise<ApiResponse<unknown[]>> {
     const query = departmentId ? `?departmentId=${departmentId}` : "";

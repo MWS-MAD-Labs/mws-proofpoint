@@ -21,11 +21,24 @@ export async function GET() {
     }
 
     const params: string[] = [];
-    let departmentFilter = "";
+    let assignmentFilter = "";
 
     if (!isAdmin) {
-      departmentFilter = `AND p.department_id = (
-        SELECT department_id FROM profiles WHERE user_id = $1
+      assignmentFilter = `AND EXISTS (
+        SELECT 1
+          FROM department_role_memberships staff_membership
+          JOIN department_roles staff_role
+            ON staff_role.id = staff_membership.department_role_id
+           AND staff_role.role::text = 'staff'
+          JOIN department_role_memberships manager_membership
+            ON manager_membership.department_role_id IN (
+              SELECT manager_role.id
+                FROM department_roles manager_role
+               WHERE manager_role.department_id = staff_role.department_id
+                 AND manager_role.role::text = 'manager'
+            )
+         WHERE staff_membership.user_id = u.id
+           AND manager_membership.user_id = $1
       )`;
       params.push(session.user.id);
     }
@@ -36,10 +49,10 @@ export async function GET() {
          u.email,
          p.full_name as "fullName"
        FROM users u
-       JOIN user_roles ur ON ur.user_id = u.id AND ur.role = 'staff'
+       JOIN user_roles ur ON ur.user_id = u.id AND ur.role::text = 'staff'
        LEFT JOIN profiles p ON p.user_id = u.id
        WHERE u.status = 'active'
-         ${departmentFilter}
+         ${assignmentFilter}
        ORDER BY p.full_name ASC NULLS LAST, u.email ASC`,
       params
     ) as any[];

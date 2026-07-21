@@ -198,19 +198,28 @@ export async function POST(req: Request) {
     }
 
     if (!isAdmin) {
-      const sameDepartment = await queryOne(
+      const managesStaff = await queryOne(
         `SELECT 1
-         FROM profiles manager_profile
-         WHERE manager_profile.user_id = $1
-           AND manager_profile.department_id = $2`,
-        [user.id, staff.departmentId],
+           FROM department_role_memberships staff_membership
+           JOIN department_roles staff_role
+             ON staff_role.id = staff_membership.department_role_id
+            AND staff_role.role::text = 'staff'
+           JOIN department_roles manager_role
+             ON manager_role.department_id = staff_role.department_id
+            AND manager_role.role::text = 'manager'
+           JOIN department_role_memberships manager_membership
+             ON manager_membership.department_role_id = manager_role.id
+          WHERE staff_membership.user_id = $1
+            AND manager_membership.user_id = $2
+          LIMIT 1`,
+        [staffId, user.id],
       );
 
-      if (!sameDepartment) {
+      if (!managesStaff) {
         return NextResponse.json(
           {
             error:
-              "Managers can only create observations for staff in their department.",
+              "Managers can only create observations for staff assigned to their departments.",
           },
           { status: 403 },
         );

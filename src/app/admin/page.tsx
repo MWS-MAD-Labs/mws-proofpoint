@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { Header } from '@/components/layout/Header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -64,6 +64,10 @@ import { UserManagementModal } from '@/components/admin/UserManagementModal';
 import { DepartmentModal } from '@/components/admin/DepartmentModal';
 import { WorkflowEditor } from '@/components/admin/WorkflowEditor';
 import { AdminAssessmentReview } from '@/components/admin/AdminAssessmentReview';
+import {
+    DepartmentRoleAssignmentDialog,
+    type DepartmentRoleAssignment,
+} from '@/components/admin/DepartmentRoleAssignmentDialog';
 
 interface User {
     id: string;
@@ -107,6 +111,9 @@ function AdminContent() {
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [deptModalOpen, setDeptModalOpen] = useState(false);
     const [editingDept, setEditingDept] = useState<Department | null>(null);
+    const [roleAssignments, setRoleAssignments] = useState<DepartmentRoleAssignment[]>([]);
+    const [selectedRoleAssignment, setSelectedRoleAssignment] = useState<DepartmentRoleAssignment | null>(null);
+    const [roleAssignmentOpen, setRoleAssignmentOpen] = useState(false);
 
     // Delete confirmation
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -140,14 +147,17 @@ function AdminContent() {
         return colors[Math.abs(hash) % colors.length];
     };
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         setLoading(true);
-        const [usersRes, deptsRes] = await Promise.all([
+        const [usersRes, deptsRes, assignmentsRes] = await Promise.all([
             api.getAdminUsers(),
             api.getDepartments(),
+            api.getDepartmentRoleMemberships(),
         ]);
 
-        if (!usersRes.error && usersRes.data) {
+        if (usersRes.error) {
+            toast({ title: 'Unable to load users', description: usersRes.error.message, variant: 'destructive' });
+        } else if (usersRes.data) {
             setUsers((usersRes.data as User[]).map(user => ({
                 ...user,
                 roles: user.roles || ['staff'],
@@ -155,16 +165,24 @@ function AdminContent() {
             })));
         }
 
-        if (!deptsRes.error && deptsRes.data) {
+        if (deptsRes.error) {
+            toast({ title: 'Unable to load departments', description: deptsRes.error.message, variant: 'destructive' });
+        } else if (deptsRes.data) {
             setDepartments(deptsRes.data as Department[]);
         }
 
+        if (assignmentsRes.error) {
+            toast({ title: 'Unable to load role assignments', description: assignmentsRes.error.message, variant: 'destructive' });
+        } else if (assignmentsRes.data) {
+            setRoleAssignments(assignmentsRes.data as DepartmentRoleAssignment[]);
+        }
+
         setLoading(false);
-    };
+    }, [toast]);
 
     useEffect(() => {
-        fetchData();
-    }, []);
+        void fetchData();
+    }, [fetchData]);
 
     const filteredUsers = users.filter(u =>
         u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -238,13 +256,25 @@ function AdminContent() {
     };
 
     // Get available roles based on hierarchy level
-    const getAvailableRoles = (level: string): string[] => {
-        switch (level) {
-            case 'root': return ['manager', 'staff'];
-            case 'department': return ['manager', 'staff'];
-            case 'subdepartment': return ['supervisor', 'staff'];
-            default: return ['staff'];
+    const getAvailableRoles = (): string[] => ['manager', 'staff'];
+
+    const findRoleAssignment = (departmentId: string | null, role: string) =>
+        roleAssignments.find(assignment =>
+            assignment.department_id === departmentId && assignment.role === role
+        ) ?? null;
+
+    const manageRoleAssignment = (departmentId: string | null, role: string) => {
+        const assignment = findRoleAssignment(departmentId, role);
+        if (!assignment) {
+            toast({
+                title: 'Role configuration unavailable',
+                description: 'Refresh the page and try again.',
+                variant: 'destructive',
+            });
+            return;
         }
+        setSelectedRoleAssignment(assignment);
+        setRoleAssignmentOpen(true);
     };
 
     const getRoleBadgeStyle = (role: string) => {
@@ -267,7 +297,7 @@ function AdminContent() {
             const isExpanded = expandedDepts.has(dept.id);
             const children = getChildren(dept.id);
             const hasChildren = children.length > 0;
-            const availableRoles = getAvailableRoles(dept.hierarchy_level);
+            const availableRoles = getAvailableRoles();
             const deptStyle = getDeptColor(dept.name);
 
             const roleHoldersByRole: Record<string, RoleHolder[]> = {};
@@ -326,10 +356,18 @@ function AdminContent() {
                                         const holders = roleHoldersByRole[role] || [];
                                         return (
                                             <div key={role} className="p-3 rounded-lg bg-white/40 border border-black/5 hover:bg-white/60 transition-colors">
-                                                <div className="flex items-center gap-1 mb-2">
+                                                <div className="flex items-center justify-between gap-1 mb-2">
                                                     <Badge variant="outline" className={`text-[9px] uppercase font-bold ${getRoleBadgeStyle(role)}`}>
                                                         {role}
                                                     </Badge>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-6 px-2 text-[10px]"
+                                                        onClick={() => manageRoleAssignment(dept.id, role)}
+                                                    >
+                                                        Manage
+                                                    </Button>
                                                 </div>
                                                 {holders.length > 0 ? (
                                                     <div className="space-y-1.5">
@@ -666,52 +704,68 @@ function AdminContent() {
                                         <div className="grid grid-cols-2 gap-3">
                                             {/* Director */}
                                             <div className="p-3 rounded-lg bg-background border">
-                                                <Badge variant="outline" className="text-[10px] uppercase bg-emerald-100 text-emerald-700 border-emerald-200 mb-2">
-                                                    Director
-                                                </Badge>
+                                                <div className="mb-2 flex items-center justify-between gap-2">
+                                                    <Badge variant="outline" className="text-[10px] uppercase bg-emerald-100 text-emerald-700 border-emerald-200">
+                                                        Director
+                                                    </Badge>
+                                                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => manageRoleAssignment(null, 'director')}>
+                                                        Manage
+                                                    </Button>
+                                                </div>
                                                 <div className="space-y-1">
-                                                    {users.filter(u => u.roles?.includes('director')).slice(0, 3).map(u => (
+                                                    {(findRoleAssignment(null, 'director')?.assignees ?? []).map(assignee => (
                                                         <button
-                                                            key={u.id}
+                                                            key={assignee.user_id}
                                                             onClick={() => {
-                                                                setEditingUser(u);
-                                                                setUserModalOpen(true);
+                                                                const user = users.find(candidate => candidate.id === assignee.user_id);
+                                                                if (user) {
+                                                                    setEditingUser(user);
+                                                                    setUserModalOpen(true);
+                                                                }
                                                             }}
                                                             className="flex items-center gap-2 text-xs w-full hover:bg-black/5 p-1 rounded transition-colors text-left"
                                                         >
                                                             <div className="w-5 h-5 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600 text-[10px] font-bold shrink-0">
-                                                                {u.full_name?.charAt(0) || '?'}
+                                                                {assignee.full_name?.charAt(0) || '?'}
                                                             </div>
-                                                            <span className="truncate flex-1 font-medium">{u.full_name || u.email}</span>
+                                                            <span className="truncate flex-1 font-medium">{assignee.full_name || assignee.email}</span>
                                                         </button>
                                                     ))}
-                                                    {users.filter(u => u.roles?.includes('director')).length === 0 && (
+                                                    {(findRoleAssignment(null, 'director')?.assignees.length ?? 0) === 0 && (
                                                         <span className="text-[10px] text-muted-foreground italic">No director assigned</span>
                                                     )}
                                                 </div>
                                             </div>
                                             {/* Admin */}
                                             <div className="p-3 rounded-lg bg-background border">
-                                                <Badge variant="outline" className="text-[10px] uppercase bg-rose-100 text-rose-700 border-rose-200 mb-2">
-                                                    Admin
-                                                </Badge>
+                                                <div className="mb-2 flex items-center justify-between gap-2">
+                                                    <Badge variant="outline" className="text-[10px] uppercase bg-rose-100 text-rose-700 border-rose-200">
+                                                        Admin
+                                                    </Badge>
+                                                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => manageRoleAssignment(null, 'admin')}>
+                                                        Manage
+                                                    </Button>
+                                                </div>
                                                 <div className="space-y-1">
-                                                    {users.filter(u => u.roles?.includes('admin')).slice(0, 3).map(u => (
+                                                    {(findRoleAssignment(null, 'admin')?.assignees ?? []).map(assignee => (
                                                         <button
-                                                            key={u.id}
+                                                            key={assignee.user_id}
                                                             onClick={() => {
-                                                                setEditingUser(u);
-                                                                setUserModalOpen(true);
+                                                                const user = users.find(candidate => candidate.id === assignee.user_id);
+                                                                if (user) {
+                                                                    setEditingUser(user);
+                                                                    setUserModalOpen(true);
+                                                                }
                                                             }}
                                                             className="flex items-center gap-2 text-xs w-full hover:bg-black/5 p-1 rounded transition-colors text-left"
                                                         >
                                                             <div className="w-5 h-5 rounded-full bg-rose-500/10 flex items-center justify-center text-rose-600 text-[10px] font-bold shrink-0">
-                                                                {u.full_name?.charAt(0) || '?'}
+                                                                {assignee.full_name?.charAt(0) || '?'}
                                                             </div>
-                                                            <span className="truncate flex-1 font-medium">{u.full_name || u.email}</span>
+                                                            <span className="truncate flex-1 font-medium">{assignee.full_name || assignee.email}</span>
                                                         </button>
                                                     ))}
-                                                    {users.filter(u => u.roles?.includes('admin')).length === 0 && (
+                                                    {(findRoleAssignment(null, 'admin')?.assignees.length ?? 0) === 0 && (
                                                         <span className="text-[10px] text-muted-foreground italic">No admin assigned</span>
                                                     )}
                                                 </div>
@@ -755,6 +809,14 @@ function AdminContent() {
                 department={editingDept}
                 departments={departments}
                 onSuccess={fetchData}
+            />
+
+            <DepartmentRoleAssignmentDialog
+                open={roleAssignmentOpen}
+                onOpenChange={setRoleAssignmentOpen}
+                assignment={selectedRoleAssignment}
+                users={users}
+                onSaved={fetchData}
             />
 
             {/* Delete Confirmation */}
