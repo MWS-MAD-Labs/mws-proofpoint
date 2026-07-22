@@ -1,0 +1,444 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { canTransitionObservation, normalizeObservationStatus } from "./lifecycle";
+import { getObservationPermissions } from "./permissions";
+import {
+  calculateObservationProgress,
+  findIncompleteRequiredIndicators,
+  isObservationAnswerComplete,
+} from "./validation";
+import type { ObservationIndicatorForProgress } from "../types";
+import {
+  observationReopenSchema,
+  parseObservationListQuery,
+} from "../schemas";
+import {
+  getObservationAgeStart,
+  getObservationPrimaryAction,
+  getObservationStageActivity,
+  getObservationStageTimestamp,
+  shouldShowObservationResponses,
+  sortObservationActivity,
+} from "../detailPresentation";
+import type {
+  ObservationActivityEntry,
+  ObservationPermissions,
+} from "../types";
+import {
+  acknowledgeObservation,
+  reopenObservation,
+  saveObservationAnswer,
+} from "../api/queries";
+
+const draft = { status: "draft" as const, staffId: "staff", managerId: "manager" };
+
+test("draft responses are hidden from staff and directors", () => {
+  assert.equal(
+    getObservationPermissions({ id: "staff", roles: ["staff"] }, draft)
+      .canViewResponses,
+    false,
+  );
+  assert.equal(
+    getObservationPermissions({ id: "director", roles: ["director"] }, draft)
+      .canViewResponses,
+    false,
+  );
+});
+
+test("admin and assigned manager can view and edit draft responses", () => {
+  for (const actor of [
+    { id: "admin", roles: ["admin"] },
+    { id: "manager", roles: ["manager"] },
+  ]) {
+    const permissions = getObservationPermissions(actor, draft);
+    assert.equal(permissions.canViewResponses, true);
+    assert.equal(permissions.canEdit, true);
+    assert.equal(permissions.canSubmit, true);
+    assert.equal(permissions.canDelete, true);
+  }
+});
+
+test("a manager who is the subject receives subject permissions", () => {
+  const permissions = getObservationPermissions(
+    { id: "staff", roles: ["manager", "staff"] },
+    draft,
+  );
+  assert.equal(permissions.canViewRecord, true);
+  assert.equal(permissions.canViewResponses, false);
+  assert.equal(permissions.canEdit, false);
+});
+
+test("detail permissions cover the role and lifecycle action matrix", () => {
+  const records = {
+    draft: { status: "draft" as const, staffId: "staff", managerId: "manager" },
+    submitted: {
+      status: "submitted" as const,
+      staffId: "staff",
+      managerId: "manager",
+    },
+    acknowledged: {
+      status: "acknowledged" as const,
+      staffId: "staff",
+      managerId: "manager",
+    },
+  };
+
+  const managerDraft = getObservationPermissions(
+    { id: "manager", roles: ["manager"] },
+    records.draft,
+  );
+  assert.equal(managerDraft.canSubmit, true);
+  assert.equal(managerDraft.canViewResponses, true);
+
+  const staffDraft = getObservationPermissions(
+    { id: "staff", roles: ["staff"] },
+    records.draft,
+  );
+  assert.equal(staffDraft.canViewRecord, true);
+  assert.equal(staffDraft.canViewResponses, false);
+  assert.equal(staffDraft.canAcknowledge, false);
+  assert.equal(staffDraft.canDelete, false);
+
+  const staffSubmitted = getObservationPermissions(
+    { id: "staff", roles: ["staff"] },
+    records.submitted,
+  );
+  assert.equal(staffSubmitted.canViewResponses, true);
+  assert.equal(staffSubmitted.canAcknowledge, true);
+
+  const directorDraft = getObservationPermissions(
+    { id: "director", roles: ["director"] },
+    records.draft,
+  );
+  const directorSubmitted = getObservationPermissions(
+    { id: "director", roles: ["director"] },
+    records.submitted,
+  );
+  assert.equal(directorDraft.canViewResponses, false);
+  assert.equal(directorSubmitted.canViewResponses, true);
+
+  const adminSubmitted = getObservationPermissions(
+    { id: "admin", roles: ["admin"] },
+    records.submitted,
+  );
+  const adminCompleted = getObservationPermissions(
+    { id: "admin", roles: ["admin"] },
+    records.acknowledged,
+  );
+  assert.equal(adminSubmitted.canReopen, true);
+  assert.equal(adminSubmitted.canDelete, true);
+  assert.equal(adminCompleted.canReopen, true);
+  assert.equal(adminCompleted.canDelete, false);
+  assert.equal(adminCompleted.canAcknowledge, false);
+});
+
+test("only canonical lifecycle transitions are allowed", () => {
+  assert.equal(canTransitionObservation("draft", "submitted"), true);
+  assert.equal(canTransitionObservation("submitted", "acknowledged"), true);
+  assert.equal(canTransitionObservation("submitted", "draft"), true);
+  assert.equal(canTransitionObservation("acknowledged", "draft"), true);
+  assert.equal(canTransitionObservation("draft", "acknowledged"), false);
+  assert.equal(normalizeObservationStatus("pending"), "draft");
+  assert.equal(normalizeObservationStatus("reviewed"), "submitted");
+  assert.equal(
+    normalizeObservationStatus("reviewed", "2026-07-18T00:00:00Z"),
+    "acknowledged",
+  );
+});
+
+test("zero-value placeholder rows are incomplete", () => {
+  assert.equal(isObservationAnswerComplete("SCALE", { score: 0 }), false);
+  assert.equal(isObservationAnswerComplete("TEXT", { textValue: "  " }), false);
+  assert.equal(
+    isObservationAnswerComplete(
+      "CHOICE",
+      { selectedOption: "unknown" },
+      ["yes", "no"],
+    ),
+    false,
+  );
+});
+
+test("list query parsing falls back for invalid values", () => {
+  const parsed = parseObservationListQuery(
+    new URLSearchParams({
+      status: "invalid",
+      page: "0",
+      pageSize: "999",
+      sort: "unknown",
+      overdue: "maybe",
+    }),
+  );
+
+  assert.equal(parsed.status, undefined);
+  assert.equal(parsed.page, 1);
+  assert.equal(parsed.pageSize, 20);
+  assert.equal(parsed.sort, "updated_desc");
+  assert.equal(parsed.overdue, undefined);
+});
+
+test("detail presentation selects the permitted primary action", () => {
+  const base: ObservationPermissions = {
+    canViewRecord: true,
+    canViewResponses: true,
+    canEdit: false,
+    canSubmit: false,
+    canAcknowledge: false,
+    canReopen: false,
+    canReassign: false,
+    canDelete: false,
+  };
+
+  assert.equal(getObservationPrimaryAction({ ...base, canEdit: true }), "edit");
+  assert.equal(
+    getObservationPrimaryAction({ ...base, canAcknowledge: true }),
+    "acknowledge",
+  );
+  assert.equal(getObservationPrimaryAction({ ...base, canReopen: true }), "reopen");
+  assert.equal(getObservationPrimaryAction(base), null);
+});
+
+test("reopen reason validation trims input and requires useful context", () => {
+  assert.equal(observationReopenSchema.safeParse({ reason: "too short" }).success, false);
+  assert.deepEqual(
+    observationReopenSchema.parse({ reason: "  Needs score correction  " }),
+    { reason: "Needs score correction" },
+  );
+});
+
+test("detail privacy uses only server-derived response permission", () => {
+  assert.equal(
+    shouldShowObservationResponses({
+      canViewRecord: true,
+      canViewResponses: false,
+      canEdit: false,
+      canSubmit: false,
+      canAcknowledge: false,
+      canReopen: false,
+      canReassign: false,
+      canDelete: false,
+    }),
+    false,
+  );
+});
+
+test("detail lifecycle timestamps reflect reopen and current-stage aging", () => {
+  const observation = {
+    status: "draft" as const,
+    createdAt: "2026-07-01T00:00:00.000Z",
+    reopenedAt: "2026-07-10T00:00:00.000Z",
+    submittedAt: null,
+    acknowledgedAt: null,
+  };
+  assert.equal(
+    getObservationStageTimestamp(observation, "draft"),
+    observation.reopenedAt,
+  );
+  assert.equal(getObservationAgeStart(observation), observation.reopenedAt);
+});
+
+test("detail activity is ordered newest first and supports an empty state", () => {
+  const activity: ObservationActivityEntry[] = [
+    {
+      id: "older",
+      eventType: "submitted",
+      statusFrom: "draft",
+      statusTo: "submitted",
+      notes: null,
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedBy: null,
+    },
+    {
+      id: "newer",
+      eventType: "acknowledged",
+      statusFrom: "submitted",
+      statusTo: "acknowledged",
+      notes: null,
+      createdAt: "2026-07-02T00:00:00.000Z",
+      updatedBy: null,
+    },
+  ];
+  assert.deepEqual(sortObservationActivity(activity).map((entry) => entry.id), [
+    "newer",
+    "older",
+  ]);
+  assert.deepEqual(sortObservationActivity([]), []);
+  assert.equal(
+    getObservationStageActivity(activity, "acknowledged")?.id,
+    "newer",
+  );
+});
+
+test("acknowledge and reopen clients use stable PATCH endpoints", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{
+    url: string;
+    method: string | undefined;
+    body: string | undefined;
+  }> = [];
+  globalThis.fetch = async (input, init) => {
+    requests.push({
+      url: String(input),
+      method: init?.method,
+      body: typeof init?.body === "string" ? init.body : undefined,
+    });
+    return new Response(null, { status: 204 });
+  };
+
+  try {
+    await acknowledgeObservation("observation-1", {
+      response: "I have reviewed this observation.",
+    });
+    await reopenObservation("observation-1", {
+      reason: "Needs score correction",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(requests, [
+    {
+      url: "/api/observations/observation-1/acknowledge",
+      method: "PATCH",
+      body: JSON.stringify({
+        response: "I have reviewed this observation.",
+      }),
+    },
+    {
+      url: "/api/observations/observation-1/reopen",
+      method: "PATCH",
+      body: JSON.stringify({ reason: "Needs score correction" }),
+    },
+  ]);
+});
+
+test("answer client uses the typed per-indicator PUT endpoint", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{
+    url: string;
+    method: string | undefined;
+    body: string | undefined;
+  }> = [];
+  globalThis.fetch = async (input, init) => {
+    requests.push({
+      url: String(input),
+      method: init?.method,
+      body: typeof init?.body === "string" ? init.body : undefined,
+    });
+    return new Response(
+      JSON.stringify({
+        answer: {
+          id: "answer-1",
+          indicatorId: "indicator-1",
+          observationId: "observation-1",
+          score: 82,
+          note: "Evidence",
+          evidence: null,
+          textValue: null,
+          selectedOption: null,
+          selectedOptions: null,
+          createdAt: "2026-07-18T00:00:00.000Z",
+          updatedAt: "2026-07-18T00:00:01.000Z",
+        },
+        savedAt: "2026-07-18T00:00:01.000Z",
+        progress: {
+          requiredAnswered: 1,
+          requiredTotal: 2,
+          optionalAnswered: 0,
+          optionalTotal: 0,
+          percentage: 50,
+        },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  };
+
+  try {
+    const result = await saveObservationAnswer(
+      "observation-1",
+      "indicator-1",
+      { type: "SCALE", score: 82, note: "Evidence" },
+    );
+    assert.equal(result.progress.percentage, 50);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(requests, [
+    {
+      url: "/api/observations/observation-1/answers/indicator-1",
+      method: "PUT",
+      body: JSON.stringify({ type: "SCALE", score: 82, note: "Evidence" }),
+    },
+  ]);
+});
+
+test("transition clients surface API errors", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ error: "Not permitted" }), {
+      status: 403,
+      headers: { "content-type": "application/json" },
+    });
+
+  try {
+    await assert.rejects(
+      () =>
+        reopenObservation("observation-1", {
+          reason: "Needs score correction",
+        }),
+      /Not permitted/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("progress and incomplete required indicators use answer semantics", () => {
+  const indicators: ObservationIndicatorForProgress[] = [
+    {
+      id: "scale",
+      name: "Scale",
+      sectionId: "section",
+      sectionName: "Section",
+      questionType: "SCALE",
+      isRequired: true,
+      answer: { score: 0 },
+    },
+    {
+      id: "text",
+      name: "Text",
+      sectionId: "section",
+      sectionName: "Section",
+      questionType: "TEXT",
+      isRequired: true,
+      answer: { textValue: "complete" },
+    },
+    {
+      id: "choice",
+      name: "Choice",
+      sectionId: "section",
+      sectionName: "Section",
+      questionType: "CHOICE",
+      isRequired: false,
+      scoreOptions: ["yes", "no"],
+      answer: { selectedOption: "yes" },
+    },
+  ];
+
+  assert.deepEqual(calculateObservationProgress(indicators), {
+    requiredAnswered: 1,
+    requiredTotal: 2,
+    optionalAnswered: 1,
+    optionalTotal: 1,
+    percentage: 50,
+  });
+  assert.deepEqual(findIncompleteRequiredIndicators(indicators), [
+    {
+      sectionId: "section",
+      sectionName: "Section",
+      indicatorId: "scale",
+      indicatorName: "Scale",
+    },
+  ]);
+});

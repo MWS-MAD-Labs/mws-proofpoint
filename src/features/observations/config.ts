@@ -1,0 +1,3 @@
+export const OBSERVATION_STALE_DAYS = 7;
+export const OBSERVATION_ATTENTION_LIMIT = 5;
+export const OBSERVATION_RECENT_LIMIT = 5;

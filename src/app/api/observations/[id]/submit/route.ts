@@ -3,39 +3,98 @@
 // On submit, status moves draft → submitted, and staff is notified.
 
 import { type NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { query, queryOne } from "@/lib/db";
+import { getObservationSession } from "@/features/observations/server/auth";
+import { pool, query, queryOne } from "@/lib/db";
+import { getObservationPermissions } from "@/features/observations/server/permissions";
+import { assertObservationTransition } from "@/features/observations/server/lifecycle";
+import { findIncompleteRequiredIndicators } from "@/features/observations/server/validation";
+import type {
+  ObservationIndicatorForProgress,
+  ObservationQuestionType,
+  ObservationStatus,
+} from "@/features/observations/types";
 import { notifyObservationSubmitted } from "@/lib/notifications/observation-notifications";
 import { randomUUID } from "crypto";
+
+interface SubmitObservationRow {
+  id: string;
+  staffId: string;
+  managerId: string | null;
+  templateId: string;
+  status: ObservationStatus;
+  staffEmail: string;
+  staffName: string | null;
+  rubricName: string | null;
+}
+
+interface SubmitIndicatorRow {
+  sectionId: string;
+  sectionName: string;
+  indicatorId: string;
+  indicatorName: string;
+  questionType: string | null;
+  isRequired: boolean | null;
+  scoreOptions: unknown;
+  score: number | null;
+  textValue: string | null;
+  selectedOption: string | null;
+}
+
+interface SubmittedObservationRow {
+  id: string;
+  status: ObservationStatus;
+  submittedAt: Date | string;
+  acknowledgedAt: Date | string | null;
+}
+
+function questionType(value: string | null): ObservationQuestionType {
+  return value === "TEXT" || value === "CHOICE" ? value : "SCALE";
+}
+
+function stringOptions(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((option): option is string => typeof option === "string")
+    : [];
+}
+
+function serializeDate(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : value;
+}
 
 export async function PATCH(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await auth();
+    const session = await getObservationSession();
     if (!session?.user?.id)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const user = {
       id: session.user.id,
-      roles: (session.user as any).roles ?? [],
+      roles: (session.user as { roles?: string[] }).roles ?? [],
     };
     const isAdmin = user.roles.includes("admin");
     const { id } = await params;
 
     // Load observation
-    const observation = (await queryOne(
-      `SELECT o.id, o."staffId", o."managerId", o.status,
-              su.email as staff_email, sp.full_name as staff_name,
-              rt.name as rubric_name
+    const observation = await queryOne<SubmitObservationRow>(
+      `SELECT
+         o.id,
+         o."staffId",
+         o."managerId",
+         o.template_id AS "templateId",
+         o.status,
+         su.email AS "staffEmail",
+         sp.full_name AS "staffName",
+         rt.name AS "rubricName"
        FROM observations o
-       LEFT JOIN users su ON su.id = o."staffId"
+       JOIN users su ON su.id = o."staffId"
        LEFT JOIN profiles sp ON sp.user_id = su.id
        LEFT JOIN rubric_templates rt ON rt.id = o.template_id
        WHERE o.id = $1`,
       [id],
-    )) as any;
+    );
 
     if (!observation)
       return NextResponse.json(
@@ -43,71 +102,138 @@ export async function PATCH(
         { status: 404 },
       );
 
-    // ── AC: Only the manager who created this observation (or admin) can submit
-    if (!isAdmin && observation.managerId !== user.id)
+    const permissions = getObservationPermissions(user, {
+      status: observation.status,
+      staffId: String(observation.staffId),
+      managerId: observation.managerId ? String(observation.managerId) : null,
+    });
+
+    if (!permissions.canSubmit)
       return NextResponse.json(
         {
           error:
-            "Forbidden: only the assigned manager can submit this observation.",
+            observation.status === "draft"
+              ? "Forbidden: only the assigned manager can submit this observation."
+              : "Only draft observations can be submitted.",
         },
-        { status: 403 },
+        { status: observation.status === "draft" ? 403 : 400 },
       );
 
-    if (observation.status !== "draft")
-      return NextResponse.json(
-        { error: "Only draft observations can be submitted." },
-        { status: 400 },
-      );
+    assertObservationTransition("draft", "submitted");
 
-    // Verify at least one indicator has been answered
-    const answers = (await query(
-      `SELECT score, note, text_value, selected_option
-       FROM observation_answers WHERE observation_id = $1`,
-      [id],
-    )) as any[];
-
-    const hasAnswer = answers.some(
-      (a) => (a.score ?? 0) > 0 || a.text_value || a.selected_option,
+    const indicatorRows = await query<SubmitIndicatorRow>(
+      `SELECT
+         rs.id AS "sectionId",
+         rs.name AS "sectionName",
+         ri.id AS "indicatorId",
+         ri.name AS "indicatorName",
+         ri.question_type AS "questionType",
+         ri.is_required AS "isRequired",
+         ri.score_options AS "scoreOptions",
+         oa.score,
+         oa.text_value AS "textValue",
+         oa.selected_option AS "selectedOption"
+       FROM rubric_sections rs
+       JOIN rubric_indicators ri ON ri.section_id = rs.id
+       LEFT JOIN observation_answers oa
+         ON oa.observation_id = $1 AND oa.indicator_id = ri.id
+       WHERE rs.template_id = $2
+       ORDER BY rs.sort_order ASC, ri.sort_order ASC`,
+      [id, observation.templateId],
     );
-    if (!hasAnswer)
-      return NextResponse.json(
-        { error: "Please fill in at least one indicator before submitting." },
-        { status: 400 },
-      );
 
-    // Update status: draft → submitted
-    const updated = (await queryOne(
-      `UPDATE observations
-      SET status = 'submitted', submitted_at = NOW(), updated_at = NOW()
-      WHERE id = $1
-      RETURNING *`,
-      [id],
-    )) as any;
-
-    // Log status change
-    await queryOne(
-      `INSERT INTO observation_updates
-         (id, observation_id, updated_by_id, status_from, status_to, notes, created_at)
-       VALUES ($1, $2, $3, 'draft', 'submitted', $4, NOW())`,
-      [
-        randomUUID(),
-        id,
-        user.id,
-        `Submitted by ${isAdmin ? "admin" : "manager"}`,
-      ],
-    ).catch((err: unknown) =>
-      console.error("ObservationUpdate log error:", err),
+    const indicators: ObservationIndicatorForProgress[] = indicatorRows.map(
+      (row) => ({
+        id: row.indicatorId,
+        name: row.indicatorName,
+        sectionId: row.sectionId,
+        sectionName: row.sectionName,
+        questionType: questionType(row.questionType),
+        isRequired: row.isRequired ?? true,
+        scoreOptions: stringOptions(row.scoreOptions),
+        answer: {
+          score: row.score,
+          textValue: row.textValue,
+          selectedOption: row.selectedOption,
+        },
+      }),
     );
+    const incomplete = findIncompleteRequiredIndicators(indicators);
+
+    if (incomplete.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Observation is incomplete.",
+          code: "INCOMPLETE_REQUIRED_INDICATORS",
+          incomplete,
+        },
+        { status: 422 },
+      );
+    }
+
+    const client = await pool.connect();
+    let updated: SubmittedObservationRow;
+    try {
+      await client.query("BEGIN");
+      const updateResult = await client.query<SubmittedObservationRow>(
+        `UPDATE observations
+         SET status = 'submitted',
+             submitted_at = NOW(),
+             acknowledged_at = NULL,
+             acknowledgement_response = NULL,
+             updated_at = NOW()
+         WHERE id = $1 AND status = 'draft'
+         RETURNING
+           id,
+           status,
+           submitted_at AS "submittedAt",
+           acknowledged_at AS "acknowledgedAt"`,
+        [id],
+      );
+      const updatedRow = updateResult.rows[0];
+      if (!updatedRow) throw new Error("Observation status changed before submit.");
+      updated = updatedRow;
+
+      await client.query(
+        `INSERT INTO observation_updates
+           (id, observation_id, updated_by_id, status_from, status_to, event_type, notes, created_at)
+         VALUES ($1, $2, $3, 'draft', 'submitted', 'submitted', $4, NOW())`,
+        [
+          randomUUID(),
+          id,
+          user.id,
+          `Submitted by ${isAdmin ? "admin" : "manager"}`,
+        ],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
 
     // Notify staff
     await notifyObservationSubmitted(
-      observation.staff_email,
-      observation.staff_name ?? observation.staff_email,
-      observation.rubric_name ?? "Observation",
+      observation.staffEmail,
+      observation.staffName ?? observation.staffEmail,
+      observation.rubricName ?? "Observation",
       id,
     ).catch((err: unknown) => console.error("Submit notification error:", err));
 
-    return NextResponse.json(updated);
+    return NextResponse.json({
+      id: updated.id,
+      status: updated.status,
+      submittedAt: serializeDate(updated.submittedAt),
+      acknowledgedAt: updated.acknowledgedAt
+        ? serializeDate(updated.acknowledgedAt)
+        : null,
+      permissions: getObservationPermissions(user, {
+        status: "submitted",
+        staffId: String(observation.staffId),
+        managerId: observation.managerId ? String(observation.managerId) : null,
+      }),
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("PATCH /api/observations/[id]/submit error:", error);

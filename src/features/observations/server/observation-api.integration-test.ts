@@ -1,0 +1,929 @@
+import assert from "node:assert/strict";
+import test, { after } from "node:test";
+import { randomUUID } from "node:crypto";
+import { NextRequest } from "next/server";
+import { pool, query, queryOne } from "@/lib/db";
+import { POST as createObservationRoute } from "@/app/api/observations/route";
+import {
+  DELETE as deleteObservationRoute,
+  GET as getObservationRoute,
+  PATCH as updateObservationRoute,
+} from "@/app/api/observations/[id]/route";
+import { PUT as saveAnswerRoute } from "@/app/api/observations/[id]/answers/[indicatorId]/route";
+import { PATCH as submitObservationRoute } from "@/app/api/observations/[id]/submit/route";
+import { PATCH as acknowledgeObservationRoute } from "@/app/api/observations/[id]/acknowledge/route";
+import { PATCH as reopenObservationRoute } from "@/app/api/observations/[id]/reopen/route";
+import { GET as listCreationStaffRoute } from "@/app/api/observations/staff/route";
+import { GET as listAvailableFormsRoute } from "@/app/api/observations/available-forms/route";
+import { setObservationTestActor } from "./auth";
+import { observationListQuerySchema } from "../schemas";
+import type {
+  ObservationActor,
+  ObservationSummaryCounts,
+} from "../types";
+import {
+  queryObservationList,
+  queryObservationSummary,
+} from "./queries";
+
+interface Fixture {
+  prefix: string;
+  departmentAId: string;
+  departmentBId: string;
+  rubricId: string;
+  managerA: ObservationActor;
+  managerB: ObservationActor;
+  staffA: ObservationActor;
+  staffB: ObservationActor;
+  director: ObservationActor;
+  admin: ObservationActor;
+  observationIds: string[];
+}
+
+const countsKeys: Array<keyof ObservationSummaryCounts> = [
+  "draft",
+  "awaitingAcknowledgement",
+  "completed",
+  "actionRequired",
+  "overdue",
+  "stale",
+  "completedThisMonth",
+];
+
+function listInput(overrides: Record<string, unknown> = {}) {
+  return observationListQuerySchema.parse({
+    q: overrides.q ?? "",
+    page: overrides.page ?? 1,
+    pageSize: overrides.pageSize ?? 20,
+    ...overrides,
+  });
+}
+
+async function insertFixture(): Promise<Fixture> {
+  const suffix = randomUUID();
+  const prefix = `phase1-${suffix}`;
+  const departmentAId = randomUUID();
+  const departmentBId = randomUUID();
+  const rubricId = randomUUID();
+  const sectionId = randomUUID();
+  const requiredIndicatorId = randomUUID();
+  const optionalIndicatorId = randomUUID();
+  const managerAId = randomUUID();
+  const managerBId = randomUUID();
+  const staffAId = randomUUID();
+  const staffBId = randomUUID();
+  const directorId = randomUUID();
+  const adminId = randomUUID();
+
+  await query(
+    `INSERT INTO departments (id, name, created_at, updated_at)
+     VALUES ($1, $2, NOW(), NOW()), ($3, $4, NOW(), NOW())`,
+    [departmentAId, `${prefix}-department-a`, departmentBId, `${prefix}-department-b`],
+  );
+
+  const users = [
+    [managerAId, `${prefix}-manager-a@example.test`, "manager", departmentAId],
+    [managerBId, `${prefix}-manager-b@example.test`, "manager", departmentBId],
+    [staffAId, `${prefix}-staff-a@example.test`, "staff", departmentAId],
+    [staffBId, `${prefix}-staff-b@example.test`, "staff", departmentBId],
+    [directorId, `${prefix}-director@example.test`, "director", departmentAId],
+    [adminId, `${prefix}-admin@example.test`, "admin", departmentAId],
+  ] as const;
+
+  for (const [userId, email, role, departmentId] of users) {
+    await query(
+      `INSERT INTO users
+         (id, email, password_hash, email_verified, status, created_at, updated_at)
+       VALUES ($1, $2, 'integration-test', true, 'active', NOW(), NOW())`,
+      [userId, email],
+    );
+    await query(
+      `INSERT INTO profiles
+         (id, user_id, email, full_name, department_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+      [randomUUID(), userId, email, `${prefix}-${role}`, departmentId],
+    );
+    await query(
+      `INSERT INTO user_roles (id, user_id, role)
+       VALUES ($1, $2, $3)`,
+      [randomUUID(), userId, role],
+    );
+  }
+
+  await query(
+    `INSERT INTO rubric_templates
+       (id, name, description, department_id, is_global, is_active, created_by,
+        created_at, updated_at, template_type)
+     VALUES ($1, $2, $3, $4, false, true, $5, NOW(), NOW(), 'CLASSROOM_OBSERVATION')`,
+    [rubricId, `${prefix}-rubric`, "Phase 1 integration fixture", departmentAId, adminId],
+  );
+  await query(
+    `INSERT INTO rubric_sections (id, template_id, name, weight, sort_order, created_at)
+     VALUES ($1, $2, $3, 100, 0, NOW())`,
+    [sectionId, rubricId, `${prefix}-section`],
+  );
+  await query(
+    `INSERT INTO rubric_indicators
+       (id, section_id, name, sort_order, question_type, is_required, created_at)
+     VALUES
+       ($1, $3, $4, 0, 'SCALE', true, NOW()),
+       ($2, $3, $5, 1, 'TEXT', false, NOW())`,
+    [
+      requiredIndicatorId,
+      optionalIndicatorId,
+      sectionId,
+      `${prefix}-required`,
+      `${prefix}-optional`,
+    ],
+  );
+
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const stale = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000);
+  const currentMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 2, 12));
+  const observationIds: string[] = [];
+
+  const records = [
+    {
+      title: `${prefix}-01-overdue-draft`,
+      staffId: staffAId,
+      managerId: managerAId,
+      status: "draft",
+      observationDate: now,
+      dueAt: yesterday,
+      updatedAt: stale,
+      submittedAt: null,
+      acknowledgedAt: null,
+    },
+    {
+      title: `${prefix}-02-submitted`,
+      staffId: staffAId,
+      managerId: managerAId,
+      status: "submitted",
+      observationDate: now,
+      dueAt: tomorrow,
+      updatedAt: now,
+      submittedAt: now,
+      acknowledgedAt: null,
+    },
+    ...Array.from({ length: 8 }, (_, index) => ({
+      title: `${prefix}-${String(index + 3).padStart(2, "0")}-acknowledged`,
+      staffId: staffAId,
+      managerId: managerAId,
+      status: "acknowledged",
+      observationDate: now,
+      dueAt: tomorrow,
+      updatedAt: new Date(now.getTime() - index * 1000),
+      submittedAt: currentMonth,
+      acknowledgedAt: currentMonth,
+    })),
+    {
+      title: `${prefix}-11-other-manager-draft`,
+      staffId: staffBId,
+      managerId: managerBId,
+      status: "draft",
+      observationDate: now,
+      dueAt: tomorrow,
+      updatedAt: now,
+      submittedAt: null,
+      acknowledgedAt: null,
+    },
+    {
+      title: `${prefix}-12-outside-date`,
+      staffId: staffBId,
+      managerId: managerBId,
+      status: "acknowledged",
+      observationDate: new Date("2020-01-15T12:00:00.000Z"),
+      dueAt: new Date("2020-01-20T12:00:00.000Z"),
+      updatedAt: new Date("2020-01-20T12:00:00.000Z"),
+      submittedAt: new Date("2020-01-19T12:00:00.000Z"),
+      acknowledgedAt: new Date("2020-01-20T12:00:00.000Z"),
+    },
+  ] as const;
+
+  for (const record of records) {
+    const observationId = randomUUID();
+    observationIds.push(observationId);
+    await query(
+      `INSERT INTO observations
+         (id, "staffId", "managerId", template_id, status, type, title, description,
+          created_at, updated_at, observation_date, due_at, submitted_at, acknowledged_at)
+       VALUES ($1, $2, $3, $4, $5, 'MANAGER', $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        observationId,
+        record.staffId,
+        record.managerId,
+        rubricId,
+        record.status,
+        record.title,
+        "Phase 1 integration fixture",
+        record.updatedAt,
+        record.updatedAt,
+        record.observationDate,
+        record.dueAt,
+        record.submittedAt,
+        record.acknowledgedAt,
+      ],
+    );
+  }
+
+  await query(
+    `INSERT INTO observation_answers
+       (id, observation_id, indicator_id, score, note, created_at, updated_at)
+     VALUES ($1, $2, $3, 80, 'complete', NOW(), NOW())`,
+    [randomUUID(), observationIds[0], requiredIndicatorId],
+  );
+
+  return {
+    prefix,
+    departmentAId,
+    departmentBId,
+    rubricId,
+    managerA: { id: managerAId, roles: ["manager"] },
+    managerB: { id: managerBId, roles: ["manager"] },
+    staffA: { id: staffAId, roles: ["staff"] },
+    staffB: { id: staffBId, roles: ["staff"] },
+    director: { id: directorId, roles: ["director"] },
+    admin: { id: adminId, roles: ["admin"] },
+    observationIds,
+  };
+}
+
+async function cleanupFixture(fixture: Fixture): Promise<void> {
+  await query(`DELETE FROM observations WHERE id::text = ANY($1::text[])`, [fixture.observationIds]);
+  await query(`DELETE FROM rubric_templates WHERE id::text = $1`, [fixture.rubricId]);
+  await query(
+    `DELETE FROM users WHERE id::text = ANY($1::text[])`,
+    [[
+      fixture.managerA.id,
+      fixture.managerB.id,
+      fixture.staffA.id,
+      fixture.staffB.id,
+      fixture.director.id,
+      fixture.admin.id,
+    ]],
+  );
+  await query(`DELETE FROM departments WHERE id::text = ANY($1::text[])`, [
+    [fixture.departmentAId, fixture.departmentBId],
+  ]);
+}
+
+function assertCountDelta(
+  before: ObservationSummaryCounts,
+  after: ObservationSummaryCounts,
+  expected: Partial<ObservationSummaryCounts>,
+): void {
+  for (const key of countsKeys) {
+    assert.equal(
+      after[key] - before[key],
+      expected[key] ?? 0,
+      `unexpected ${key} delta`,
+    );
+  }
+}
+
+test("Phase 1 list and summary queries enforce role scope, filters, pagination, and privacy", async () => {
+  let fixture: Fixture | null = null;
+  try {
+    const temporaryActors = {
+      admin: { id: randomUUID(), roles: ["admin"] } satisfies ObservationActor,
+      director: { id: randomUUID(), roles: ["director"] } satisfies ObservationActor,
+      manager: { id: randomUUID(), roles: ["manager"] } satisfies ObservationActor,
+      staff: { id: randomUUID(), roles: ["staff"] } satisfies ObservationActor,
+    };
+    const baseline = {
+      admin: (await queryObservationSummary(temporaryActors.admin)).counts,
+      director: (await queryObservationSummary(temporaryActors.director)).counts,
+      manager: (await queryObservationSummary(temporaryActors.manager)).counts,
+      staff: (await queryObservationSummary(temporaryActors.staff)).counts,
+    };
+
+    fixture = await insertFixture();
+    const all = listInput({ q: fixture.prefix });
+
+    const [adminList, directorList, managerList, staffList, managerBList, staffBList] =
+      await Promise.all([
+        queryObservationList(fixture.admin, all),
+        queryObservationList(fixture.director, all),
+        queryObservationList(fixture.managerA, all),
+        queryObservationList(fixture.staffA, all),
+        queryObservationList(fixture.managerB, all),
+        queryObservationList(fixture.staffB, all),
+      ]);
+
+    assert.equal(adminList.pagination.total, 12);
+    assert.equal(directorList.pagination.total, 12);
+    assert.equal(managerList.pagination.total, 10);
+    assert.equal(staffList.pagination.total, 10);
+    assert.equal(managerBList.pagination.total, 2);
+    assert.equal(staffBList.pagination.total, 2);
+    assert.ok(adminList.data.every((item) => !("answers" in item)));
+    assert.equal(
+      managerList.data.find((item) => item.title?.includes("overdue-draft"))?.progress
+        ?.requiredAnswered,
+      1,
+    );
+    assert.equal(
+      staffList.data.find((item) => item.title?.includes("overdue-draft"))?.progress,
+      null,
+    );
+    assert.equal(
+      directorList.data.find((item) => item.title?.includes("overdue-draft"))?.progress,
+      null,
+    );
+
+    const filterCases: Array<[string, Record<string, unknown>, number]> = [
+      ["status", { q: fixture.prefix, status: "draft" }, 2],
+      ["staff", { q: fixture.prefix, staffId: fixture.staffA.id }, 10],
+      ["manager", { q: fixture.prefix, managerId: fixture.managerB.id }, 2],
+      ["department", { q: fixture.prefix, departmentId: fixture.departmentAId }, 10],
+      ["rubric", { q: fixture.prefix, rubricId: fixture.rubricId }, 12],
+      ["action required", { q: fixture.prefix, actionRequired: "true" }, 1],
+      ["overdue", { q: fixture.prefix, overdue: "true" }, 1],
+    ];
+    for (const [name, input, expected] of filterCases) {
+      const result = await queryObservationList(fixture.admin, listInput(input));
+      assert.equal(result.pagination.total, expected, `${name} filter`);
+    }
+
+    const managerMe = await queryObservationList(
+      fixture.managerA,
+      listInput({ q: fixture.prefix, managerId: "me" }),
+    );
+    assert.equal(managerMe.pagination.total, 10);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const dateRange = await queryObservationList(
+      fixture.admin,
+      listInput({ q: fixture.prefix, from: today, to: today }),
+    );
+    assert.equal(dateRange.pagination.total, 11);
+
+    const pageOne = await queryObservationList(
+      fixture.admin,
+      listInput({ q: fixture.prefix, page: 1, pageSize: 10, sort: "created_asc" }),
+    );
+    const pageTwo = await queryObservationList(
+      fixture.admin,
+      listInput({ q: fixture.prefix, page: 2, pageSize: 10, sort: "created_asc" }),
+    );
+    assert.deepEqual(pageOne.pagination, {
+      page: 1,
+      pageSize: 10,
+      total: 12,
+      totalPages: 2,
+    });
+    assert.equal(pageOne.data.length, 10);
+    assert.equal(pageTwo.data.length, 2);
+    assert.equal(
+      new Set([...pageOne.data, ...pageTwo.data].map((item) => item.id)).size,
+      12,
+    );
+
+    const dueAscending = await queryObservationList(
+      fixture.admin,
+      listInput({ q: fixture.prefix, sort: "due_asc" }),
+    );
+    assert.ok(
+      Date.parse(dueAscending.data[0]!.dueAt!) <=
+        Date.parse(dueAscending.data.at(-1)!.dueAt!),
+    );
+
+    const [adminSummary, directorSummary, managerSummary, staffSummary] =
+      await Promise.all([
+        queryObservationSummary(fixture.admin),
+        queryObservationSummary(fixture.director),
+        queryObservationSummary(fixture.managerA),
+        queryObservationSummary(fixture.staffA),
+      ]);
+
+    assertCountDelta(baseline.admin, adminSummary.counts, {
+      draft: 2,
+      awaitingAcknowledgement: 1,
+      completed: 9,
+      actionRequired: 1,
+      overdue: 1,
+      stale: 1,
+      completedThisMonth: 8,
+    });
+    assertCountDelta(baseline.director, directorSummary.counts, {
+      draft: 2,
+      awaitingAcknowledgement: 1,
+      completed: 9,
+      actionRequired: 1,
+      overdue: 1,
+      stale: 1,
+      completedThisMonth: 8,
+    });
+    assertCountDelta(baseline.manager, managerSummary.counts, {
+      draft: 1,
+      awaitingAcknowledgement: 1,
+      completed: 8,
+      actionRequired: 1,
+      overdue: 1,
+      stale: 1,
+      completedThisMonth: 8,
+    });
+    assertCountDelta(baseline.staff, staffSummary.counts, {
+      draft: 1,
+      awaitingAcknowledgement: 1,
+      completed: 8,
+      actionRequired: 1,
+      overdue: 1,
+      stale: 1,
+      completedThisMonth: 8,
+    });
+
+    for (const summary of [adminSummary, directorSummary, managerSummary, staffSummary]) {
+      assert.ok(summary.needsAttention.length <= 5);
+      assert.ok(summary.recent.length <= 5);
+      assert.deepEqual(
+        summary.pipeline.map((item) => item.count),
+        [
+          summary.counts.draft,
+          summary.counts.awaitingAcknowledgement,
+          summary.counts.completed,
+        ],
+      );
+    }
+  } finally {
+    if (fixture) await cleanupFixture(fixture);
+  }
+});
+
+interface WorkflowFixture {
+  prefix: string;
+  departmentAId: string;
+  departmentBId: string;
+  rubricAId: string;
+  rubricBId: string;
+  workflowAId: string;
+  requiredIndicatorId: string;
+  optionalIndicatorId: string;
+  managerA: ObservationActor;
+  managerB: ObservationActor;
+  staffA: ObservationActor;
+  staffB: ObservationActor;
+  admin: ObservationActor;
+  userIds: string[];
+  observationIds: string[];
+}
+
+async function insertWorkflowFixture(): Promise<WorkflowFixture> {
+  const prefix = `phase6-${randomUUID()}`;
+  const departmentAId = randomUUID();
+  const departmentBId = randomUUID();
+  const rubricAId = randomUUID();
+  const rubricBId = randomUUID();
+  const workflowAId = randomUUID();
+  const workflowBId = randomUUID();
+  const departmentRoleAId = randomUUID();
+  const departmentRoleBId = randomUUID();
+  const sectionAId = randomUUID();
+  const sectionBId = randomUUID();
+  const requiredIndicatorId = randomUUID();
+  const optionalIndicatorId = randomUUID();
+  const managerAId = randomUUID();
+  const managerBId = randomUUID();
+  const staffAId = randomUUID();
+  const staffBId = randomUUID();
+  const adminId = randomUUID();
+  const userIds = [managerAId, managerBId, staffAId, staffBId, adminId];
+
+  await query(
+    `INSERT INTO departments (id, name, created_at, updated_at)
+     VALUES ($1, $2, NOW(), NOW()), ($3, $4, NOW(), NOW())`,
+    [departmentAId, `${prefix}-department-a`, departmentBId, `${prefix}-department-b`],
+  );
+
+  const users = [
+    [managerAId, `${prefix}-manager-a@example.test`, "manager", departmentAId],
+    [managerBId, `${prefix}-manager-b@example.test`, "manager", departmentBId],
+    [staffAId, `${prefix}-staff-a@example.test`, "staff", departmentAId],
+    [staffBId, `${prefix}-staff-b@example.test`, "staff", departmentBId],
+    [adminId, `${prefix}-admin@example.test`, "admin", departmentAId],
+  ] as const;
+  for (const [userId, email, role, departmentId] of users) {
+    await query(
+      `INSERT INTO users
+         (id, email, password_hash, email_verified, status, created_at, updated_at)
+       VALUES ($1, $2, 'integration-test', true, 'active', NOW(), NOW())`,
+      [userId, email],
+    );
+    await query(
+      `INSERT INTO profiles
+         (id, user_id, email, full_name, department_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+      [randomUUID(), userId, email, `${prefix}-${role}`, departmentId],
+    );
+    await query(
+      `INSERT INTO user_roles (id, user_id, role)
+       VALUES ($1, $2, $3)`,
+      [randomUUID(), userId, role],
+    );
+  }
+
+  await query(
+    `INSERT INTO department_roles
+       (id, department_id, role, name, created_at, updated_at)
+     VALUES
+       ($1, $2, 'staff', $3, NOW(), NOW()),
+       ($4, $5, 'staff', $6, NOW(), NOW())`,
+    [
+      departmentRoleAId,
+      departmentAId,
+      `${prefix}-staff-role-a`,
+      departmentRoleBId,
+      departmentBId,
+      `${prefix}-staff-role-b`,
+    ],
+  );
+  await query(
+    `INSERT INTO workflow_definitions (id, name, type, description, created_at)
+     VALUES
+       ($1, $2, 'CLASSROOM_OBSERVATION', $3, NOW()),
+       ($4, $5, 'CLASSROOM_OBSERVATION', $6, NOW())`,
+    [
+      workflowAId,
+      `${prefix}-workflow-a`,
+      "Phase 6 route integration workflow A",
+      workflowBId,
+      `${prefix}-workflow-b`,
+      "Phase 6 route integration workflow B",
+    ],
+  );
+  await query(
+    `INSERT INTO rubric_templates
+       (id, name, description, department_id, is_global, is_active, created_by,
+        created_at, updated_at, template_type)
+     VALUES
+       ($1, $2, $3, $4, false, true, $5, NOW(), NOW(), 'CLASSROOM_OBSERVATION'),
+       ($6, $7, $8, $9, false, true, $5, NOW(), NOW(), 'CLASSROOM_OBSERVATION')`,
+    [
+      rubricAId,
+      `${prefix}-rubric-a`,
+      "Assigned to department A staff",
+      departmentAId,
+      adminId,
+      rubricBId,
+      `${prefix}-rubric-b`,
+      "Assigned to department B staff",
+      departmentBId,
+    ],
+  );
+  await query(
+    `INSERT INTO rubric_sections (id, template_id, name, weight, sort_order, created_at)
+     VALUES
+       ($1, $2, $3, 100, 0, NOW()),
+       ($4, $5, $6, 100, 0, NOW())`,
+    [sectionAId, rubricAId, `${prefix}-section-a`, sectionBId, rubricBId, `${prefix}-section-b`],
+  );
+  await query(
+    `INSERT INTO rubric_indicators
+       (id, section_id, name, sort_order, question_type, is_required, created_at)
+     VALUES
+       ($1, $3, $4, 0, 'SCALE', true, NOW()),
+       ($2, $3, $5, 1, 'TEXT', false, NOW()),
+       ($6, $7, $8, 0, 'SCALE', true, NOW())`,
+    [
+      requiredIndicatorId,
+      optionalIndicatorId,
+      sectionAId,
+      `${prefix}-required`,
+      `${prefix}-optional`,
+      randomUUID(),
+      sectionBId,
+      `${prefix}-other-required`,
+    ],
+  );
+  await query(
+    `INSERT INTO role_workflow_assignments
+       (id, department_role_id, workflow_id, rubric_id, is_active, created_at)
+     VALUES
+       ($1, $2, $3, $4, true, NOW()),
+       ($5, $6, $7, $8, true, NOW())`,
+    [
+      randomUUID(),
+      departmentRoleAId,
+      workflowAId,
+      rubricAId,
+      randomUUID(),
+      departmentRoleBId,
+      workflowBId,
+      rubricBId,
+    ],
+  );
+
+  return {
+    prefix,
+    departmentAId,
+    departmentBId,
+    rubricAId,
+    rubricBId,
+    workflowAId,
+    requiredIndicatorId,
+    optionalIndicatorId,
+    managerA: { id: managerAId, roles: ["manager"] },
+    managerB: { id: managerBId, roles: ["manager"] },
+    staffA: { id: staffAId, roles: ["staff"] },
+    staffB: { id: staffBId, roles: ["staff"] },
+    admin: { id: adminId, roles: ["admin"] },
+    userIds,
+    observationIds: [],
+  };
+}
+
+async function cleanupWorkflowFixture(fixture: WorkflowFixture): Promise<void> {
+  if (fixture.observationIds.length > 0) {
+    await query(`DELETE FROM observations WHERE id::text = ANY($1::text[])`, [fixture.observationIds]);
+  }
+  await query(`DELETE FROM rubric_templates WHERE id::text = ANY($1::text[])`, [
+    [fixture.rubricAId, fixture.rubricBId],
+  ]);
+  await query(
+    `DELETE FROM role_workflow_assignments
+     WHERE workflow_id IN (SELECT id FROM workflow_definitions WHERE name LIKE $1)`,
+    [`${fixture.prefix}%`],
+  );
+  await query(`DELETE FROM workflow_definitions WHERE name LIKE $1`, [
+    `${fixture.prefix}%`,
+  ]);
+  await query(`DELETE FROM users WHERE id::text = ANY($1::text[])`, [fixture.userIds]);
+  await query(`DELETE FROM departments WHERE id::text = ANY($1::text[])`, [
+    [fixture.departmentAId, fixture.departmentBId],
+  ]);
+}
+
+function jsonRequest(url: string, method: string, body?: unknown): NextRequest {
+  return new NextRequest(url, {
+    method,
+    headers: body === undefined ? undefined : { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+async function responseBody<T>(response: Response): Promise<T> {
+  return response.json() as Promise<T>;
+}
+
+test("draft and pending observations can be deleted, but completed observations are retained", async () => {
+  let fixture: WorkflowFixture | null = null;
+  try {
+    fixture = await insertWorkflowFixture();
+    const managerDraftId = randomUUID();
+    const adminDraftId = randomUUID();
+    const submittedId = randomUUID();
+    const acknowledgedId = randomUUID();
+    fixture.observationIds.push(
+      managerDraftId,
+      adminDraftId,
+      submittedId,
+      acknowledgedId,
+    );
+
+    await query(
+      `INSERT INTO observations
+         (id, "staffId", "managerId", template_id, status, created_at, updated_at)
+       VALUES
+         ($1, $2, $3, $4, 'draft', NOW(), NOW()),
+         ($5, $2, $3, $4, 'draft', NOW(), NOW()),
+         ($6, $2, $3, $4, 'submitted', NOW(), NOW()),
+         ($7, $2, $3, $4, 'acknowledged', NOW(), NOW())`,
+      [
+        managerDraftId,
+        fixture.staffA.id,
+        fixture.managerA.id,
+        fixture.rubricAId,
+        adminDraftId,
+        submittedId,
+        acknowledgedId,
+      ],
+    );
+
+    setObservationTestActor(fixture.managerB);
+    const forbiddenResponse = await deleteObservationRoute(
+      jsonRequest(`http://localhost/api/observations/${managerDraftId}`, "DELETE"),
+      { params: Promise.resolve({ id: managerDraftId }) },
+    );
+    assert.equal(forbiddenResponse.status, 403);
+
+    setObservationTestActor(fixture.managerA);
+    const managerDeleteResponse = await deleteObservationRoute(
+      jsonRequest(`http://localhost/api/observations/${managerDraftId}`, "DELETE"),
+      { params: Promise.resolve({ id: managerDraftId }) },
+    );
+    assert.equal(managerDeleteResponse.status, 200);
+    assert.equal(
+      await queryOne(`SELECT id FROM observations WHERE id = $1`, [managerDraftId]),
+      null,
+    );
+
+    const submittedResponse = await deleteObservationRoute(
+      jsonRequest(`http://localhost/api/observations/${submittedId}`, "DELETE"),
+      { params: Promise.resolve({ id: submittedId }) },
+    );
+    assert.equal(submittedResponse.status, 200);
+    assert.equal(
+      await queryOne(`SELECT id FROM observations WHERE id = $1`, [submittedId]),
+      null,
+    );
+
+    const completedResponse = await deleteObservationRoute(
+      jsonRequest(`http://localhost/api/observations/${acknowledgedId}`, "DELETE"),
+      { params: Promise.resolve({ id: acknowledgedId }) },
+    );
+    assert.equal(completedResponse.status, 409);
+
+    setObservationTestActor(fixture.admin);
+    const adminDeleteResponse = await deleteObservationRoute(
+      jsonRequest(`http://localhost/api/observations/${adminDraftId}`, "DELETE"),
+      { params: Promise.resolve({ id: adminDraftId }) },
+    );
+    assert.equal(adminDeleteResponse.status, 200);
+    assert.equal(
+      await queryOne(`SELECT id FROM observations WHERE id = $1`, [adminDraftId]),
+      null,
+    );
+  } finally {
+    setObservationTestActor(null);
+    if (fixture) await cleanupWorkflowFixture(fixture);
+  }
+});
+
+test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, and canonical response fields", async () => {
+  let fixture: WorkflowFixture | null = null;
+  try {
+    fixture = await insertWorkflowFixture();
+    const dueAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    setObservationTestActor(fixture.managerA);
+    const managerStaffResponse = await listCreationStaffRoute();
+    assert.equal(managerStaffResponse.status, 200);
+    const managerStaff = await responseBody<Array<{ id: string }>>(managerStaffResponse);
+    assert.deepEqual(managerStaff.map((person) => person.id), [fixture.staffA.id]);
+
+    const forbiddenForms = await listAvailableFormsRoute(
+      jsonRequest(
+        `http://localhost/api/observations/available-forms?staffId=${fixture.staffB.id}`,
+        "GET",
+      ),
+    );
+    assert.equal(forbiddenForms.status, 403);
+
+    const invalidCombination = await createObservationRoute(
+      jsonRequest("http://localhost/api/observations", "POST", {
+        staffId: fixture.staffA.id,
+        rubricId: fixture.rubricBId,
+        dueAt,
+      }),
+    );
+    assert.equal(invalidCombination.status, 403);
+
+    const wrongDepartment = await createObservationRoute(
+      jsonRequest("http://localhost/api/observations", "POST", {
+        staffId: fixture.staffB.id,
+        rubricId: fixture.rubricBId,
+        dueAt,
+      }),
+    );
+    assert.equal(wrongDepartment.status, 403);
+
+    const createdResponse = await createObservationRoute(
+      jsonRequest("http://localhost/api/observations", "POST", {
+        staffId: fixture.staffA.id,
+        rubricId: fixture.rubricAId,
+        workflowId: fixture.workflowAId,
+        dueAt,
+        title: `${fixture.prefix}-workflow`,
+      }),
+    );
+    assert.equal(createdResponse.status, 201);
+    const created = await responseBody<{ observation: { id: string; manager: { id: string } } }>(
+      createdResponse,
+    );
+    fixture.observationIds.push(created.observation.id);
+    assert.equal(created.observation.manager.id, fixture.managerA.id);
+
+    setObservationTestActor(fixture.staffA);
+    const privateDraftResponse = await getObservationRoute(
+      new NextRequest(`http://localhost/api/observations/${created.observation.id}`),
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(privateDraftResponse.status, 200);
+    const privateDraft = await responseBody<Record<string, unknown>>(privateDraftResponse);
+    const privateObservation = privateDraft.observation as Record<string, unknown>;
+    assert.equal("answers" in privateObservation, false);
+    assert.equal(privateObservation.progress, null);
+
+    setObservationTestActor(fixture.managerA);
+    const invalidIndicatorResponse = await saveAnswerRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}/answers/${fixture.optionalIndicatorId}`,
+        "PUT",
+        { type: "TEXT", textValue: "" },
+      ) as Parameters<typeof saveAnswerRoute>[0],
+      {
+        params: Promise.resolve({
+          id: created.observation.id,
+          indicatorId: fixture.optionalIndicatorId,
+        }),
+      },
+    );
+    assert.equal(invalidIndicatorResponse.status, 422);
+
+    const savedResponse = await saveAnswerRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}/answers/${fixture.requiredIndicatorId}`,
+        "PUT",
+        { type: "SCALE", score: 88, note: "Meets expectations" },
+      ) as Parameters<typeof saveAnswerRoute>[0],
+      {
+        params: Promise.resolve({
+          id: created.observation.id,
+          indicatorId: fixture.requiredIndicatorId,
+        }),
+      },
+    );
+    assert.equal(savedResponse.status, 200);
+    const saved = await responseBody<Record<string, unknown>>(savedResponse);
+    assert.equal("indicator_id" in (saved.answer as Record<string, unknown>), false);
+    assert.equal((saved.answer as Record<string, unknown>).indicatorId, fixture.requiredIndicatorId);
+
+    const submittedResponse = await submitObservationRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}/submit`,
+        "PATCH",
+      ) as Parameters<typeof submitObservationRoute>[0],
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(submittedResponse.status, 200);
+    const submitted = await responseBody<Record<string, unknown>>(submittedResponse);
+    assert.equal(submitted.status, "submitted");
+    assert.equal("submitted_at" in submitted, false);
+
+    setObservationTestActor(fixture.staffA);
+    const staffReportResponse = await getObservationRoute(
+      new NextRequest(`http://localhost/api/observations/${created.observation.id}`),
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    const staffReport = await responseBody<{ observation: { answers?: unknown[] } }>(staffReportResponse);
+    assert.equal(staffReport.observation.answers?.length, 1);
+
+    const acknowledgedResponse = await acknowledgeObservationRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}/acknowledge`,
+        "PATCH",
+        { response: "I have reviewed and understood this observation." },
+      ) as Parameters<typeof acknowledgeObservationRoute>[0],
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(acknowledgedResponse.status, 200);
+    assert.equal((await responseBody<{ status: string }>(acknowledgedResponse)).status, "acknowledged");
+
+    setObservationTestActor(fixture.admin);
+    const reassignedResponse = await updateObservationRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}`,
+        "PATCH",
+        { managerId: fixture.managerB.id },
+      ) as Parameters<typeof updateObservationRoute>[0],
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(reassignedResponse.status, 200);
+    const reassigned = await queryOne<{ managerId: string }>(
+      `SELECT "managerId" FROM observations WHERE id = $1`,
+      [created.observation.id],
+    );
+    assert.equal(reassigned?.managerId, fixture.managerB.id);
+
+    const reopenedResponse = await reopenObservationRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}/reopen`,
+        "PATCH",
+        { reason: "Correct the final report before publication." },
+      ) as Parameters<typeof reopenObservationRoute>[0],
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(reopenedResponse.status, 200);
+    assert.equal((await responseBody<{ status: string }>(reopenedResponse)).status, "draft");
+
+    setObservationTestActor(fixture.staffA);
+    const reopenedPrivateResponse = await getObservationRoute(
+      new NextRequest(`http://localhost/api/observations/${created.observation.id}`),
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    const reopenedPrivate = await responseBody<{ observation: Record<string, unknown> }>(
+      reopenedPrivateResponse,
+    );
+    assert.equal("answers" in reopenedPrivate.observation, false);
+  } finally {
+    setObservationTestActor(null);
+    if (fixture) await cleanupWorkflowFixture(fixture);
+  }
+});
+
+after(async () => {
+  setObservationTestActor(null);
+  await pool.end();
+});

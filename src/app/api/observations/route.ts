@@ -1,125 +1,65 @@
-// src/app/api/observations/route.ts
-// Milestone 4: Manager observation runtime
-
-import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { query, queryOne } from "@/lib/db";
-import { notifyObservationCreated } from "@/lib/notifications/observation-notifications";
 import { randomUUID } from "crypto";
+import { NextResponse } from "next/server";
+import { getObservationSession } from "@/features/observations/server/auth";
+import { pool, queryOne } from "@/lib/db";
+import { notifyObservationAssigned } from "@/lib/notifications/observation-notifications";
+import { parseObservationListQuery } from "@/features/observations/schemas";
+import { queryObservationList } from "@/features/observations/server/queries";
+import type { CreateObservationInput, CreateObservationResponse } from "@/features/observations/types";
 
-// ── GET /api/observations ─────────────────────────────────────────────────────
+interface PersonRow {
+  id: string;
+  email: string;
+  fullName: string | null;
+  departmentId?: string | null;
+  hasStaffRole?: boolean;
+  hasManagerRole?: boolean;
+}
+
+interface RubricAssignmentRow {
+  id: string;
+  name: string;
+  workflowId: string;
+}
+
+function optionalText(value: unknown, maxLength: number): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > maxLength) {
+    throw new Error(`Text must be ${maxLength} characters or fewer.`);
+  }
+  return trimmed;
+}
+
+function parseDate(value: unknown, field: string, required = false): Date | null {
+  if (typeof value !== "string" || !value.trim()) {
+    if (required) throw new Error(`${field} is required.`);
+    return null;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error(`${field} is invalid.`);
+  return date;
+}
+
+function startOfToday(): Date {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
+
 export async function GET(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id)
+  const session = await getObservationSession();
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
+  }
   const user = {
     id: session.user.id,
-    roles: (session.user as any).roles ?? [],
+    roles: (session.user as { roles?: string[] }).roles ?? [],
   };
-  const isAdmin = user.roles.includes("admin");
-  const isDirector = user.roles.includes("director");
-  const isManager = user.roles.includes("manager");
-
-  const { searchParams } = new URL(req.url);
-  const status = searchParams.get("status");
-
   try {
-    let whereClause = "WHERE 1=1";
-    const params: string[] = [];
-    let paramIdx = 1;
-
-    if (!isAdmin && !isDirector) {
-      if (isManager) {
-        whereClause += ` AND o."managerId" = $${paramIdx++}`;
-        params.push(user.id);
-      } else {
-        whereClause += ` AND o."staffId" = $${paramIdx++}`;
-        params.push(user.id);
-      }
-    }
-
-    if (status) {
-      whereClause += ` AND o.status = $${paramIdx++}`;
-      params.push(status);
-    }
-
-    const observations = (await query(
-      `SELECT
-         o.id,
-         o."staffId",
-         o."managerId",
-         o.template_id   AS "rubricId",
-         o.status,
-         o.created_at    AS "createdAt",
-         o.updated_at    AS "updatedAt",
-         o.submitted_at  AS "submittedAt",
-         o.acknowledged_at AS "acknowledgedAt",
-         su.id           AS staff_id,
-         su.email        AS staff_email,
-         sp.full_name    AS staff_full_name,
-         mu.id           AS manager_id,
-         mu.email        AS manager_email,
-         mp.full_name    AS manager_full_name,
-         rt.id           AS rubric_id,
-         rt.name         AS rubric_name
-       FROM observations o
-       LEFT JOIN users su            ON su.id = o."staffId"
-       LEFT JOIN profiles sp         ON sp.user_id = su.id
-       LEFT JOIN users mu            ON mu.id = o."managerId"
-       LEFT JOIN profiles mp         ON mp.user_id = mu.id
-       LEFT JOIN rubric_templates rt ON rt.id = o.template_id
-       ${whereClause}
-       ORDER BY o.created_at DESC`,
-      params,
-    )) as any[];
-
-    const obsIds = observations.map((o: any) => o.id);
-    let answers: any[] = [];
-    if (obsIds.length > 0) {
-      answers = (await query(
-        `SELECT * FROM observation_answers WHERE observation_id = ANY($1)`,
-        [obsIds],
-      )) as any[];
-    }
-
-    const mapped = observations.map((o: any) => ({
-      id: o.id,
-      staffId: o.staffId,
-      managerId: o.managerId,
-      rubricId: o.rubricId,
-      status: o.status,
-      createdAt: o.createdAt,
-      updatedAt: o.updatedAt,
-      submittedAt: o.submittedAt,
-      acknowledgedAt: o.acknowledgedAt,
-      staff: o.staff_id
-        ? {
-            id: o.staff_id,
-            email: o.staff_email,
-            profile: { fullName: o.staff_full_name },
-          }
-        : null,
-      manager: o.manager_id
-        ? {
-            id: o.manager_id,
-            email: o.manager_email,
-            profile: { fullName: o.manager_full_name },
-          }
-        : null,
-      rubric: o.rubric_id ? { id: o.rubric_id, name: o.rubric_name } : null,
-      answers: answers
-        .filter((a: any) => a.observation_id === o.id)
-        .map((a: any) => ({
-          ...a,
-          indicatorId: a.indicator_id,
-          observationId: a.observation_id,
-          textValue: a.text_value,
-          selectedOption: a.selected_option,
-        })),
-    }));
-
-    return NextResponse.json(mapped);
+    const input = parseObservationListQuery(new URL(req.url).searchParams);
+    return NextResponse.json(await queryObservationList(user, input));
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("GET /api/observations error:", error);
@@ -127,33 +67,31 @@ export async function GET(req: Request) {
   }
 }
 
-// ── POST /api/observations ────────────────────────────────────────────────────
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id)
+  const session = await getObservationSession();
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const user = {
     id: session.user.id,
-    roles: (session.user as any).roles ?? [],
+    roles: (session.user as { roles?: string[] }).roles ?? [],
   };
   const isAdmin = user.roles.includes("admin");
   const isManager = user.roles.includes("manager");
-
   if (!isAdmin && !isManager) {
     return NextResponse.json(
-      { error: "Only managers can create observations." },
+      { error: "Only managers and administrators can create observations." },
       { status: 403 },
     );
   }
 
   try {
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as Partial<CreateObservationInput>;
     const staffId = body.staffId?.trim();
     const rubricId = body.rubricId?.trim();
-    const workflowId = body.workflowId?.trim();
+    const workflowId = body.workflowId?.trim() || null;
     const managerId = isAdmin ? body.managerId?.trim() || user.id : user.id;
-
     if (!staffId || !rubricId) {
       return NextResponse.json(
         { error: "staffId and rubricId are required." },
@@ -161,18 +99,26 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!isAdmin && staffId === user.id) {
+    const title = optionalText(body.title, 200);
+    const description = optionalText(body.description, 2000);
+    const observationDate = parseDate(body.observationDate, "Observation date");
+    const dueAt = parseDate(body.dueAt, "Due date", true)!;
+    if (dueAt < startOfToday()) {
       return NextResponse.json(
-        { error: "Managers cannot create observations for themselves." },
+        { error: "Due date cannot be in the past." },
+        { status: 400 },
+      );
+    }
+    if (observationDate && dueAt < observationDate) {
+      return NextResponse.json(
+        { error: "Due date cannot precede the observation date." },
         { status: 400 },
       );
     }
 
-    const staff = (await queryOne(
+    const staff = await queryOne<PersonRow>(
       `SELECT
-         u.id,
-         u.email,
-         p.full_name AS "fullName",
+         u.id, u.email, p.full_name AS "fullName",
          p.department_id AS "departmentId",
          bool_or(ur.role = 'staff') AS "hasStaffRole"
        FROM users u
@@ -181,145 +127,149 @@ export async function POST(req: Request) {
        WHERE u.id = $1 AND u.status = 'active'
        GROUP BY u.id, u.email, p.full_name, p.department_id`,
       [staffId],
-    )) as any;
-
+    );
     if (!staff) {
-      return NextResponse.json(
-        { error: "Staff member not found." },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: "Staff member not found." }, { status: 404 });
     }
-
     if (!staff.hasStaffRole) {
       return NextResponse.json(
-        { error: "Selected user must have the staff role." },
+        { error: "Selected user must be active and have the staff role." },
         { status: 400 },
       );
     }
-
-    if (!isAdmin) {
-      const managesStaff = await queryOne(
-        `SELECT 1
-           FROM department_role_memberships staff_membership
-           JOIN department_roles staff_role
-             ON staff_role.id = staff_membership.department_role_id
-            AND staff_role.role::text = 'staff'
-           JOIN department_roles manager_role
-             ON manager_role.department_id = staff_role.department_id
-            AND manager_role.role::text = 'manager'
-           JOIN department_role_memberships manager_membership
-             ON manager_membership.department_role_id = manager_role.id
-          WHERE staff_membership.user_id = $1
-            AND manager_membership.user_id = $2
-          LIMIT 1`,
-        [staffId, user.id],
+    if (!isAdmin && staffId === user.id) {
+      return NextResponse.json(
+        { error: "Managers cannot create observations for themselves." },
+        { status: 400 },
       );
-
-      if (!managesStaff) {
+    }
+    if (!isAdmin) {
+      const sameDepartment = await queryOne(
+        `SELECT 1 FROM profiles WHERE user_id = $1 AND department_id = $2`,
+        [user.id, staff.departmentId],
+      );
+      if (!sameDepartment) {
         return NextResponse.json(
-          {
-            error:
-              "Managers can only create observations for staff assigned to their departments.",
-          },
+          { error: "Managers can only create observations for staff in their department." },
           { status: 403 },
         );
       }
     }
 
-    const rubric = (await queryOne(
-      `SELECT rt.id, rt.name, rt.template_type AS "templateType",
-              json_agg(
-                json_build_object(
-                  'id', rs.id, 'name', rs.name,
-                  'indicators', (
-                    SELECT json_agg(json_build_object('id', ri.id, 'name', ri.name))
-                    FROM rubric_indicators ri WHERE ri.section_id = rs.id
-                  )
-                )
-              ) FILTER (WHERE rs.id IS NOT NULL) AS sections
-       FROM rubric_templates rt
-       LEFT JOIN rubric_sections rs ON rs.template_id = rt.id
-       WHERE rt.id = $1
-       GROUP BY rt.id`,
-      [rubricId],
-    )) as any;
-
-    if (!rubric) {
-      return NextResponse.json({ error: "Rubric not found." }, { status: 404 });
-    }
-
-    if (rubric.templateType === "KPI_APPRAISAL") {
+    const manager = await queryOne<PersonRow>(
+      `SELECT
+         u.id, u.email, p.full_name AS "fullName",
+         bool_or(ur.role IN ('manager', 'admin')) AS "hasManagerRole"
+       FROM users u
+       LEFT JOIN profiles p ON p.user_id = u.id
+       LEFT JOIN user_roles ur ON ur.user_id = u.id
+       WHERE u.id = $1 AND u.status = 'active'
+       GROUP BY u.id, u.email, p.full_name`,
+      [managerId],
+    );
+    if (!manager || !manager.hasManagerRole) {
       return NextResponse.json(
-        { error: "Cannot use a KPI Appraisal rubric for an observation." },
+        { error: "Assigned manager must be an active manager or administrator." },
+        { status: 400 },
+      );
+    }
+    if (staffId === managerId) {
+      return NextResponse.json(
+        { error: "The assigned manager cannot be the observation subject." },
         { status: 400 },
       );
     }
 
-    const assignment = (await queryOne(
-      `SELECT rwa.workflow_id AS "workflowId"
-       FROM role_workflow_assignments rwa
+    const assignment = await queryOne<RubricAssignmentRow>(
+      `SELECT rt.id, rt.name, rwa.workflow_id AS "workflowId"
+       FROM rubric_templates rt
+       JOIN role_workflow_assignments rwa ON rwa.rubric_id = rt.id
        JOIN workflow_definitions wd ON wd.id = rwa.workflow_id
        JOIN department_roles dr ON dr.id = rwa.department_role_id
        JOIN profiles sp ON sp.user_id = $1
        JOIN user_roles sur ON sur.user_id = $1 AND sur.role = dr.role
-       WHERE rwa.rubric_id = $2
+       WHERE rt.id = $2
+         AND rt.is_active = true
+         AND rt.template_type IN ('CLASSROOM_OBSERVATION', 'GENERIC')
          AND rwa.is_active = true
          AND wd.type = 'CLASSROOM_OBSERVATION'
          AND (dr.department_id = sp.department_id OR dr.department_id IS NULL)
-         AND ($3::text IS NULL OR rwa.workflow_id = $3)
+         AND ($3::text IS NULL OR rwa.workflow_id::text = $3::text)
+       ORDER BY rwa.workflow_id
        LIMIT 1`,
-      [staffId, rubricId, workflowId || null],
-    )) as any;
-
+      [staffId, rubricId, workflowId],
+    );
     if (!assignment) {
       return NextResponse.json(
-        {
-          error:
-            "This observation form is not assigned to the selected staff member's role.",
-        },
+        { error: "This observation form is not assigned to the selected staff member's active role." },
         { status: 403 },
       );
     }
 
-    const obsId = randomUUID();
+    const observationId = randomUUID();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO observations
+           (id, "staffId", "managerId", template_id, status, title, description,
+            observation_date, due_at, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8, NOW(), NOW())`,
+        [
+          observationId,
+          staffId,
+          managerId,
+          rubricId,
+          title,
+          description,
+          observationDate,
+          dueAt,
+        ],
+      );
+      await client.query(
+        `INSERT INTO observation_updates
+           (id, observation_id, updated_by_id, status_from, status_to, event_type, notes, created_at)
+         VALUES ($1, $2, $3, NULL, 'draft', 'created', $4, NOW())`,
+        [randomUUID(), observationId, user.id, "Observation draft created"],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
 
-    const observation = (await queryOne(
-      `INSERT INTO observations
-         (id, "staffId", "managerId", template_id, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, 'draft', NOW(), NOW())
-       RETURNING *`,
-      [obsId, staffId, managerId, rubricId],
-    )) as any;
-
-    if (!observation) {
-      return NextResponse.json(
-        { error: "Failed to create observation." },
-        { status: 500 },
+    if (managerId !== user.id) {
+      await notifyObservationAssigned(
+        manager.email,
+        manager.fullName ?? manager.email,
+        staff.fullName ?? staff.email,
+        assignment.name,
+        observationId,
+      ).catch((error: unknown) =>
+        console.error("Observation assignment notification error:", error),
       );
     }
 
-    const sections = rubric.sections ?? [];
-    const indicators = sections.flatMap((s: any) => s.indicators ?? []);
-    for (const indicator of indicators) {
-      await queryOne(
-        `INSERT INTO observation_answers (id, observation_id, indicator_id, score, note)
-         VALUES ($1, $2, $3, 0, '')
-         ON CONFLICT (observation_id, indicator_id) DO NOTHING`,
-        [randomUUID(), obsId, indicator.id],
-      ).catch(() => {});
-    }
-
-    await notifyObservationCreated(
-      staff.email,
-      staff.fullName || staff.email,
-      rubric.name,
-      obsId,
-    ).catch((err: unknown) => console.error("Notification error:", err));
-
-    return NextResponse.json(observation, { status: 201 });
+    const response: CreateObservationResponse = {
+      observation: {
+        id: observationId,
+        status: "draft",
+        title,
+        description,
+        observationDate: observationDate?.toISOString() ?? null,
+        dueAt: dueAt.toISOString(),
+        staff: { id: staff.id, email: staff.email, fullName: staff.fullName },
+        manager: { id: manager.id, email: manager.email, fullName: manager.fullName },
+        rubric: { id: assignment.id, name: assignment.name },
+      },
+    };
+    return NextResponse.json(response, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("POST /api/observations error:", error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message.includes("characters or fewer") || message.includes("is invalid") || message.includes("is required") ? 400 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

@@ -1,67 +1,66 @@
-// src/app/api/observations/staff/route.ts
-// Manager/admin-safe staff lookup for creating observations.
-
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getObservationSession } from "@/features/observations/server/auth";
 import { query } from "@/lib/db";
+import type { ObservationCreationStaff } from "@/features/observations/types";
+
+interface StaffRow {
+  id: string;
+  email: string;
+  fullName: string | null;
+  departmentId: string | null;
+  departmentName: string | null;
+  roles: string[] | null;
+}
 
 export async function GET() {
   try {
-    const session = await auth();
+    const session = await getObservationSession();
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const roles = (session.user as any).roles ?? [];
+    const roles = (session.user as { roles?: string[] }).roles ?? [];
     const isAdmin = roles.includes("admin");
     const isManager = roles.includes("manager");
-
     if (!isAdmin && !isManager) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const params: string[] = [];
-    let assignmentFilter = "";
-
-    if (!isAdmin) {
-      assignmentFilter = `AND EXISTS (
-        SELECT 1
-          FROM department_role_memberships staff_membership
-          JOIN department_roles staff_role
-            ON staff_role.id = staff_membership.department_role_id
-           AND staff_role.role::text = 'staff'
-          JOIN department_role_memberships manager_membership
-            ON manager_membership.department_role_id IN (
-              SELECT manager_role.id
-                FROM department_roles manager_role
-               WHERE manager_role.department_id = staff_role.department_id
-                 AND manager_role.role::text = 'manager'
-            )
-         WHERE staff_membership.user_id = u.id
-           AND manager_membership.user_id = $1
-      )`;
-      params.push(session.user.id);
-    }
-
-    const staff = await query(
-      `SELECT DISTINCT
+    const staff = await query<StaffRow>(
+      `SELECT
          u.id,
          u.email,
-         p.full_name as "fullName"
+         p.full_name AS "fullName",
+         p.department_id AS "departmentId",
+         d.name AS "departmentName",
+         array_agg(DISTINCT all_roles.role::text ORDER BY all_roles.role::text)
+           FILTER (WHERE all_roles.role IS NOT NULL) AS roles
        FROM users u
-       JOIN user_roles ur ON ur.user_id = u.id AND ur.role::text = 'staff'
+       JOIN user_roles staff_role
+         ON staff_role.user_id = u.id AND staff_role.role = 'staff'
+       LEFT JOIN user_roles all_roles ON all_roles.user_id = u.id
        LEFT JOIN profiles p ON p.user_id = u.id
+       LEFT JOIN departments d ON d.id = p.department_id
        WHERE u.status = 'active'
-         ${assignmentFilter}
+         AND ($1::boolean = true OR p.department_id = (
+           SELECT department_id FROM profiles WHERE user_id = $2
+         ))
+         AND ($1::boolean = true OR u.id <> $2)
+       GROUP BY u.id, u.email, p.full_name, p.department_id, d.name
        ORDER BY p.full_name ASC NULLS LAST, u.email ASC`,
-      params
-    ) as any[];
+      [isAdmin, session.user.id],
+    );
 
-    return NextResponse.json(staff.map((s) => ({
-      id: s.id,
-      email: s.email,
-      profile: { fullName: s.fullName ?? null },
-    })));
+    const response: ObservationCreationStaff[] = staff.map((person) => ({
+      id: person.id,
+      email: person.email,
+      fullName: person.fullName,
+      department: person.departmentId
+        ? { id: person.departmentId, name: person.departmentName ?? "Unassigned" }
+        : null,
+      roles: person.roles ?? ["staff"],
+    }));
+    return NextResponse.json(response);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("GET /api/observations/staff error:", error);
