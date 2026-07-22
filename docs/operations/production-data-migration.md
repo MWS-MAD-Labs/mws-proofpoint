@@ -35,12 +35,12 @@ Source: Komodo stack `proofpoint-staging`, captured after the employee roster re
 
 | Table/state | Expected rows |
 |---|---:|
-| departments | 13 |
+| departments | 12 |
 | users | 74 |
 | active users | 74 |
 | suspended users | 0 |
 | profiles | 74 |
-| user roles | 80 |
+| user roles | 77 |
 | assessments | 7 |
 | assessment questions | 0 |
 | observations | 91 |
@@ -50,20 +50,22 @@ Source: Komodo stack `proofpoint-staging`, captured after the employee roster re
 | notification preferences | 8 |
 | rubric templates | 21 |
 | rubric indicators | 302 |
-| department role memberships | 79 |
+| department role memberships | 77 |
 
 The reconciled roster contains 106 current employees. Of those, 55 matched existing ProofPoint accounts. Another 19 legacy ProofPoint accounts were retained and restored to active status, resulting in 74 active accounts and no suspended accounts. The remaining 51 roster employees must not be created until authoritative email addresses are supplied.
 
 Nickname and job-level fields are intentionally not migrated because ProofPoint does not store them.
 
+The obsolete `Special Education` department was consolidated into `RISE`. Its remaining profile assignment and 11 observation workflow assignments were moved to the corresponding RISE profile/role configuration before deletion. The final source contains one `RISE` department and no `Special Education` department.
+
 ## Local sensitive artifacts
 
 The following files are local-only and ignored by Git:
 
-- `backups/proofpoint-staging-post-reactivation-full-20260722.dump`
-- `backups/proofpoint-staging-post-reactivation-data-20260722.dump`
-- `backups/proofpoint-staging-post-reactivation-20260722.sha256`
-- `backups/proofpoint-staging-post-reactivation-inventory-20260722.txt`
+- `backups/proofpoint-staging-post-rise-merge-full-20260722.dump`
+- `backups/proofpoint-staging-post-rise-merge-data-20260722.dump`
+- `backups/proofpoint-staging-post-rise-merge-20260722.sha256`
+- `backups/proofpoint-staging-post-rise-merge-inventory-20260722.txt`
 - `backups/staging-user-roster-2026-07-21.tsv`
 - `backups/staging-user-roster-missing-accounts-20260721.tsv`
 
@@ -145,7 +147,7 @@ pg_restore \
   --no-owner \
   --no-acl \
   --dbname=proofpoint_next \
-  /secure/path/proofpoint-staging-post-reactivation-full-20260722.dump
+  /secure/path/proofpoint-staging-post-rise-merge-full-20260722.dump
 ```
 
 Do not include staging's `_prisma_migrations` records if production migrations have already initialized the target database; either restore into a completely empty database or exclude/replace `_prisma_migrations` deliberately.
@@ -177,6 +179,8 @@ For a complete staging replacement, compare the output with the expected counts 
 - 74 active and 0 suspended users.
 - Every active profile has a department and job title.
 - `SHIELD` exists exactly once.
+- `RISE` exists exactly once and `Special Education` does not exist.
+- The 11 migrated observation workflow assignments are attached to the RISE staff role.
 - The 51 employees without authoritative emails have not been invented as accounts.
 - Observation pages load for managers and staff.
 - Submitted/acknowledged observation statuses and update history are preserved.

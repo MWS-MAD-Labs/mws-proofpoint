@@ -26,6 +26,20 @@ DECLARE
   violation_count bigint;
 BEGIN
   SELECT count(*) INTO violation_count
+  FROM departments
+  WHERE lower(name) = 'rise';
+  IF violation_count <> 1 THEN
+    RAISE EXCEPTION 'expected exactly one RISE department, found %', violation_count;
+  END IF;
+
+  SELECT count(*) INTO violation_count
+  FROM departments
+  WHERE lower(name) = 'special education';
+  IF violation_count > 0 THEN
+    RAISE EXCEPTION 'obsolete Special Education department still exists';
+  END IF;
+
+  SELECT count(*) INTO violation_count
   FROM profiles p
   LEFT JOIN users u ON u.id = p.user_id
   WHERE u.id IS NULL;
