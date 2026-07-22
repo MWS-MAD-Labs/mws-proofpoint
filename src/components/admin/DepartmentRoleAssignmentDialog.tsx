@@ -64,7 +64,7 @@ export function DepartmentRoleAssignmentDialog({
   const availableUsers = useMemo(() => {
     const term = search.trim().toLowerCase();
     return users
-      .filter((user) => user.status === "active")
+      .filter((user) => user.status !== "deleted")
       .filter((user) => {
         if (!term) return true;
         return [user.full_name, user.email, user.department_name]
@@ -149,7 +149,7 @@ export function DepartmentRoleAssignmentDialog({
         <div className="max-h-[420px] overflow-y-auto rounded-lg border">
           {availableUsers.length === 0 ? (
             <p className="p-8 text-center text-sm text-muted-foreground">
-              No active users match your search.
+              No users match your search.
             </p>
           ) : (
             availableUsers.map((user) => {
@@ -163,9 +163,16 @@ export function DepartmentRoleAssignmentDialog({
                 >
                   <Checkbox checked={checked} aria-label={`Select ${user.full_name || user.email}`} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {user.full_name || user.email}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-medium">
+                        {user.full_name || user.email}
+                      </p>
+                      {user.status !== "active" && (
+                        <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium uppercase text-amber-700">
+                          {user.status}
+                        </span>
+                      )}
+                    </div>
                     <p className="truncate text-xs text-muted-foreground">
                       {user.email}
                       {user.department_name ? ` · ${user.department_name}` : " · Unassigned"}

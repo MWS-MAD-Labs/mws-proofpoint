@@ -78,7 +78,7 @@ export async function GET() {
          FROM department_roles dr
          LEFT JOIN departments d ON d.id = dr.department_id
          LEFT JOIN department_role_memberships drm ON drm.department_role_id = dr.id
-         LEFT JOIN users u ON u.id = drm.user_id AND u.status = 'active'
+         LEFT JOIN users u ON u.id = drm.user_id AND u.status <> 'deleted'
          LEFT JOIN profiles p ON p.user_id = u.id
         WHERE (dr.department_id IS NOT NULL AND dr.role::text IN ('manager', 'staff'))
            OR (dr.department_id IS NULL AND dr.role::text IN ('director', 'admin'))
@@ -158,13 +158,13 @@ export async function PUT(request: Request) {
           `SELECT id::text AS id
              FROM users
             WHERE id::text = ANY($1::text[])
-              AND status = 'active'`,
+              AND status <> 'deleted'`,
           [userIds],
         );
         if (usersResult.rows.length !== userIds.length) {
           await client.query("ROLLBACK");
           return NextResponse.json(
-            { error: "One or more selected users are unavailable." },
+            { error: "One or more selected users are deleted or unavailable." },
             { status: 400 },
           );
         }

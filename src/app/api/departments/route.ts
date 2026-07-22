@@ -35,7 +35,7 @@ export async function GET() {
             `SELECT dr.department_id, u.id AS user_id, p.full_name, u.email, dr.role
              FROM department_role_memberships drm
              JOIN department_roles dr ON dr.id = drm.department_role_id
-             JOIN users u ON u.id = drm.user_id AND u.status = 'active'
+             JOIN users u ON u.id = drm.user_id AND u.status <> 'deleted'
              LEFT JOIN profiles p ON p.user_id = u.id
              WHERE dr.department_id IS NOT NULL
              ORDER BY dr.department_id, dr.role, p.full_name NULLS LAST, u.email`
