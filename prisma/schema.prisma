@@ -48,6 +48,46 @@ enum WorkflowStepType {
   acknowledge
 }
 
+enum TemplateType {
+  KPI_APPRAISAL
+  CLASSROOM_OBSERVATION
+  GENERIC
+}
+
+enum WorkflowActionType {
+  FILL_FORM
+  ACKNOWLEDGE
+  REVIEW
+  APPROVE
+}
+
+enum IndicatorQuestionType {
+  SCALE
+  CHOICE
+  TEXT
+}
+
+enum ObservationStatus {
+  draft
+  pending
+  submitted
+  reviewed
+  acknowledged
+}
+
+enum StrategicPlanStatus {
+  draft
+  published
+}
+
+enum ProgramStatus {
+  not_started
+  on_track
+  at_risk
+  off_track
+  completed
+}
+
 // Models
 model Department {
   id          String   @id @default(uuid())
@@ -58,9 +98,11 @@ model Department {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @map("updated_at")
 
-  profiles            Profile[]
-  rubricTemplates     RubricTemplate[]
-  departmentRoles     DepartmentRole[]
+  profiles             Profile[]
+  rubricTemplates      RubricTemplate[]
+  departmentRoles      DepartmentRole[]
+  strategicPlan        StrategicPlan?
+  programCollaborators ProgramCollaborator[]
 
   @@index([parentId])
   @@map("departments")
@@ -84,8 +126,14 @@ model User {
   returnedAssessments Assessment[]   @relation("ReturnedAssessments")
   askedQuestions     AssessmentQuestion[] @relation("AskedQuestions")
   answeredQuestions  AssessmentQuestion[] @relation("AnsweredQuestions")
+  observations       Observation[] @relation("StaffObservations")
+  managedObservations Observation[] @relation("ManagerObservations")
+  observationUpdates ObservationUpdate[] @relation("ObservationUpdateAuthor")
   notificationPreferences NotificationPreference?
   notifications Notification[]
+  departmentRoleMemberships DepartmentRoleMembership[]
+  ownedStrategicPlans StrategicPlan[] @relation("PlanOwner")
+  progressUpdates ProgramProgressUpdate[] @relation("ProgressUpdateAuthor")
 
   @@index([status])
   @@map("users")
@@ -129,16 +177,20 @@ model RubricTemplate {
   description  String?   @db.Text
   departmentId String?   @map("department_id")
   isGlobal     Boolean   @default(false) @map("is_global")
-  createdById  String?   @map("created_by")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @default(now()) @map("updated_at")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdById  String?      @map("created_by")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @default(now()) @map("updated_at")
+  templateType TemplateType @default(KPI_APPRAISAL) @map("template_type")
 
-  department       Department?       @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  createdBy        User?             @relation("TemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  sections         RubricSection[]
-  domains          KpiDomain[]
-  departmentRoles  DepartmentRole[]
-  assessments      Assessment[]
+  department          Department?              @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdBy           User?                    @relation("TemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  sections            RubricSection[]
+  domains             KpiDomain[]
+  departmentRoles     DepartmentRole[]
+  assessments         Assessment[]
+  workflowAssignments RoleWorkflowAssignment[]
+  observations        Observation[]
 
   @@map("rubric_templates")
 }
@@ -165,10 +217,16 @@ model RubricIndicator {
   sortOrder        Int      @default(0) @map("sort_order")
   evidenceGuidance String?  @map("evidence_guidance") @db.Text
   scoreOptions     Json?    @map("score_options")
+  questionType     IndicatorQuestionType @default(SCALE) @map("question_type")
+  scoreMin         Int?     @map("score_min")
+  scoreMax         Int?     @map("score_max")
+  scoreStep        Int?     @map("score_step")
+  placeholderText  String?  @map("placeholder_text") @db.Text
   createdAt        DateTime @default(now()) @map("created_at")
 
   section RubricSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   questions AssessmentQuestion[]
+  answers ObservationAnswer[]
 
   @@map("rubric_indicators")
 }
@@ -179,11 +237,14 @@ model KpiDomain {
   name       String   @db.Text
   weight     Decimal  @default(0) @db.Decimal(5, 2)
   sortOrder  Int      @default(0) @map("sort_order")
+  code       String   @default("") @db.Text
+  legacyCode String?  @map("legacy_code") @db.Text
   createdAt  DateTime @default(now()) @map("created_at")
 
   template  RubricTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
   standards KpiStandard[]
 
+  @@unique([templateId, code])
   @@index([templateId])
   @@map("kpi_domains")
 }
@@ -191,25 +252,33 @@ model KpiDomain {
 model KpiStandard {
   id         String   @id @default(uuid())
   domainId   String   @map("domain_id")
+  templateId String   @map("template_id")
   name       String   @db.Text
   sortOrder  Int      @default(0) @map("sort_order")
+  code       String   @default("") @db.Text
+  legacyCode String?  @map("legacy_code") @db.Text
   createdAt  DateTime @default(now()) @map("created_at")
 
   domain KpiDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
   kpis   Kpi[]
 
+  @@unique([templateId, code])
   @@index([domainId])
+  @@index([templateId])
   @@map("kpi_standards")
 }
 
 model Kpi {
   id                String   @id @default(uuid())
   standardId        String   @map("standard_id")
+  templateId        String   @map("template_id")
   name              String   @db.Text
   description       String?  @db.Text
   evidenceGuidance  String?  @map("evidence_guidance") @db.Text
   trainings         String?  @db.Text
   sortOrder         Int      @default(0) @map("sort_order")
+  code              String   @default("") @db.Text
+  legacyCode        String?  @map("legacy_code") @db.Text
   rubric4           String   @map("rubric_4") @db.Text
   rubric3           String   @map("rubric_3") @db.Text
   rubric2           String   @map("rubric_2") @db.Text
@@ -217,8 +286,11 @@ model Kpi {
   createdAt         DateTime @default(now()) @map("created_at")
 
   standard KpiStandard @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  programLinks ProgramKpiLink[]
 
+  @@unique([templateId, code])
   @@index([standardId])
+  @@index([templateId])
   @@map("kpis")
 }
 
@@ -295,14 +367,32 @@ model DepartmentRole {
   createdAt         DateTime       @default(now()) @map("created_at")
   updatedAt         DateTime       @default(now()) @map("updated_at")
 
-  department       Department?  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  defaultTemplate  RubricTemplate? @relation(fields: [defaultTemplateId], references: [id], onDelete: SetNull)
-  approvalWorkflows ApprovalWorkflow[]
+  department          Department?              @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  defaultTemplate     RubricTemplate?          @relation(fields: [defaultTemplateId], references: [id], onDelete: SetNull)
+  approvalWorkflows   ApprovalWorkflow[]
+  workflowAssignments RoleWorkflowAssignment[]
+  memberships         DepartmentRoleMembership[]
 
   @@unique([departmentId, role])
   @@index([departmentId])
   @@index([role])
   @@map("department_roles")
+}
+
+model DepartmentRoleMembership {
+  id               String   @id @default(uuid()) @db.Text
+  departmentRoleId String   @map("department_role_id")
+  userId           String   @map("user_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @map("updated_at")
+
+  departmentRole DepartmentRole @relation(fields: [departmentRoleId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([departmentRoleId, userId])
+  @@index([departmentRoleId])
+  @@index([userId])
+  @@map("department_role_memberships")
 }
 
 model ApprovalWorkflow {
@@ -317,6 +407,116 @@ model ApprovalWorkflow {
 
   @@index([departmentRoleId])
   @@map("approval_workflows")
+}
+
+model WorkflowDefinition {
+  id          String                   @id @default(uuid())
+  name        String                   @db.Text
+  type        TemplateType
+  description String?                  @db.Text
+  createdAt   DateTime                 @default(now()) @map("created_at")
+
+  steps       WorkflowStep[]
+  assignments RoleWorkflowAssignment[]
+
+  @@map("workflow_definitions")
+}
+
+model WorkflowStep {
+  id          String             @id @default(uuid())
+  workflowId  String             @map("workflow_id")
+  stepOrder   Int                @map("step_order")
+  actorRole   AppRole            @map("actor_role")
+  actionType  WorkflowActionType @map("action_type")
+  description String?            @db.Text
+
+  workflow WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@map("workflow_steps")
+}
+
+model RoleWorkflowAssignment {
+  id               String   @id @default(uuid())
+  departmentRoleId String   @map("department_role_id")
+  workflowId       String   @map("workflow_id")
+  rubricId         String?  @map("rubric_id")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  departmentRole DepartmentRole     @relation(fields: [departmentRoleId], references: [id], onDelete: Cascade)
+  workflow       WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Restrict)
+  rubric         RubricTemplate?    @relation(fields: [rubricId], references: [id], onDelete: SetNull)
+
+  @@index([departmentRoleId])
+  @@index([workflowId])
+  @@index([rubricId])
+  @@map("role_workflow_assignments")
+}
+
+model Observation {
+  id             String            @id @default(uuid())
+  staffId        String            @map("staffId")
+  managerId      String?           @map("managerId")
+  rubricId       String            @map("rubricId")
+  status         ObservationStatus @default(draft)
+  type           String            @default("MANAGER") @db.Text
+  title          String?           @db.Text
+  description    String?           @db.Text
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  submittedAt    DateTime?         @map("submitted_at")
+  acknowledgedAt DateTime?         @map("acknowledged_at")
+
+  staff   User           @relation("StaffObservations", fields: [staffId], references: [id], onDelete: Cascade)
+  manager User?          @relation("ManagerObservations", fields: [managerId], references: [id], onDelete: SetNull)
+  rubric  RubricTemplate @relation(fields: [rubricId], references: [id], onDelete: Restrict)
+  answers ObservationAnswer[]
+  updates ObservationUpdate[]
+
+  @@index([staffId])
+  @@index([managerId])
+  @@index([rubricId])
+  @@index([status])
+  @@map("observations")
+}
+
+model ObservationAnswer {
+  id              String   @id @default(uuid())
+  observationId   String   @map("observation_id")
+  indicatorId     String   @map("indicator_id")
+  score           Int      @default(0)
+  note            String?  @db.Text
+  evidence        String?  @db.Text
+  textValue       String?  @map("text_value") @db.Text
+  selectedOption  String?  @map("selected_option") @db.Text
+  selectedOptions Json?    @map("selected_options")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  observation Observation     @relation(fields: [observationId], references: [id], onDelete: Cascade)
+  indicator   RubricIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+
+  @@unique([observationId, indicatorId])
+  @@index([indicatorId])
+  @@map("observation_answers")
+}
+
+model ObservationUpdate {
+  id            String   @id @default(uuid())
+  observationId String   @map("observation_id")
+  updatedById   String?  @map("updated_by_id")
+  statusFrom    String?  @map("status_from") @db.Text
+  statusTo      String   @map("status_to") @db.Text
+  notes         String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  observation Observation @relation(fields: [observationId], references: [id], onDelete: Cascade)
+  updatedBy   User?       @relation("ObservationUpdateAuthor", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([observationId])
+  @@index([updatedById])
+  @@map("observation_updates")
 }
 
 model Notification {
@@ -370,4 +570,197 @@ enum NotificationType {
   admin_released
   assessment_returned
   assessment_acknowledged
+}
+
+model StrategicPlan {
+  id           String   @id @default(uuid())
+  departmentId String   @unique @map("department_id")
+  name         String   @db.Text
+  description  String?  @db.Text
+  vision       String?  @db.Text
+  mission      String?  @db.Text
+  startYear    Int      @map("start_year")
+  endYear      Int      @map("end_year")
+  status       StrategicPlanStatus @default(draft)
+  ownerUserId  String?  @map("owner_user_id")
+  publishedAt  DateTime? @map("published_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  department  Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  ownerUser   User?      @relation("PlanOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  periods     StrategicPeriod[]
+  goals       StrategicGoal[]
+
+  @@index([status])
+  @@map("strategic_plans")
+}
+
+model StrategicPeriod {
+  id        String @id @default(uuid())
+  planId    String @map("plan_id")
+  label     String @db.Text
+  year      Int
+  sortOrder Int    @map("sort_order")
+
+  plan          StrategicPlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  periodTargets ProgramPeriodTarget[]
+  budgetLines   ProgramBudgetLine[]
+
+  @@unique([planId, year])
+  @@unique([planId, sortOrder])
+  @@index([planId])
+  @@map("strategic_periods")
+}
+
+model StrategicGoal {
+  id          String  @id @default(uuid())
+  planId      String  @map("plan_id")
+  number      Int
+  title       String  @db.Text
+  description String? @db.Text
+  sortOrder   Int     @map("sort_order")
+
+  plan       StrategicPlan        @relation(fields: [planId], references: [id], onDelete: Cascade)
+  objectives StrategicObjective[]
+
+  @@unique([planId, number])
+  @@unique([planId, sortOrder])
+  @@index([planId])
+  @@map("strategic_goals")
+}
+
+model StrategicObjective {
+  id        String @id @default(uuid())
+  goalId    String @map("goal_id")
+  number    Int
+  title     String @db.Text
+  sortOrder Int    @map("sort_order")
+
+  goal     StrategicGoal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  programs StrategicProgram[]
+
+  @@unique([goalId, number])
+  @@unique([goalId, sortOrder])
+  @@index([goalId])
+  @@map("strategic_objectives")
+}
+
+model StrategicProgram {
+  id           String  @id @default(uuid())
+  objectiveId  String  @map("objective_id")
+  code         String  @db.Text
+  title        String  @db.Text
+  description  String? @db.Text
+  status       ProgramStatus @default(not_started)
+  sortOrder    Int     @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  objective     StrategicObjective    @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  checklist     ProgramChecklistItem[]
+  kpiLinks      ProgramKpiLink[]
+  targets       ProgramPeriodTarget[]
+  collaborators ProgramCollaborator[]
+  budgetLines   ProgramBudgetLine[]
+  updates       ProgramProgressUpdate[]
+
+  @@unique([objectiveId, code])
+  @@unique([objectiveId, sortOrder])
+  @@index([objectiveId])
+  @@map("strategic_programs")
+}
+
+model ProgramChecklistItem {
+  id        String  @id @default(uuid())
+  programId String  @map("program_id")
+  text      String  @db.Text
+  done      Boolean @default(false)
+  sortOrder Int     @map("sort_order")
+
+  program StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, sortOrder])
+  @@index([programId])
+  @@map("program_checklist_items")
+}
+
+model ProgramKpiLink {
+  id            String  @id @default(uuid())
+  programId     String  @map("program_id")
+  kpiId         String  @map("kpi_id")
+  coverageLabel String? @map("coverage_label") @db.Text
+
+  program StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  kpi     Kpi              @relation(fields: [kpiId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, kpiId])
+  @@index([programId])
+  @@index([kpiId])
+  @@map("program_kpi_links")
+}
+
+model ProgramPeriodTarget {
+  id          String        @id @default(uuid())
+  programId   String        @map("program_id")
+  periodId    String        @map("period_id")
+  targetText  String        @default("") @map("target_text") @db.Text
+  actualText  String?       @map("actual_text") @db.Text
+  status      ProgramStatus @default(not_started)
+  evidenceKey String?       @map("evidence_key") @db.Text
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  program StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  period  StrategicPeriod  @relation(fields: [periodId],  references: [id], onDelete: Cascade)
+
+  @@unique([programId, periodId])
+  @@index([programId])
+  @@index([periodId])
+  @@map("program_period_targets")
+}
+
+model ProgramCollaborator {
+  id           String @id @default(uuid())
+  programId    String @map("program_id")
+  departmentId String @map("department_id")
+
+  program    StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  department Department       @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, departmentId])
+  @@index([programId])
+  @@index([departmentId])
+  @@map("program_collaborators")
+}
+
+model ProgramBudgetLine {
+  id          String   @id @default(uuid())
+  programId   String   @map("program_id")
+  periodId    String   @map("period_id")
+  label       String   @db.Text
+  description String?  @db.Text
+  amountIdr   Decimal  @default(0) @map("amount_idr") @db.Decimal(15, 2)
+
+  program StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  period  StrategicPeriod  @relation(fields: [periodId],  references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([periodId])
+  @@map("program_budget_lines")
+}
+
+model ProgramProgressUpdate {
+  id        String        @id @default(uuid())
+  programId String        @map("program_id")
+  authorId  String        @map("author_id")
+  note      String        @db.Text
+  status    ProgramStatus
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  program StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  author  User             @relation("ProgressUpdateAuthor", fields: [authorId], references: [id])
+
+  @@index([programId])
+  @@index([authorId])
+  @@map("program_progress_updates")
 }

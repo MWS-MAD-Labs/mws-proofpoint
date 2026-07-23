@@ -17,9 +17,10 @@ import {
   Moon,
   Sun,
   Settings,
+  Eye,
+  Menu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Logo } from "@/components/ui/logo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +30,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState } from "react";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 interface HeaderProps {
   className?: string;
@@ -40,7 +50,6 @@ export function Header({ className }: HeaderProps) {
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
-    // Check initial theme from localStorage or document
     const savedTheme = localStorage.getItem("theme");
     const isDarkMode = savedTheme
       ? savedTheme === "dark"
@@ -48,7 +57,6 @@ export function Header({ className }: HeaderProps) {
 
     setIsDark(isDarkMode);
 
-    // Ensure class is applied if it was missing
     if (isDarkMode) {
       document.documentElement.classList.add("dark");
     } else {
@@ -69,13 +77,20 @@ export function Header({ className }: HeaderProps) {
     }
   };
 
-  const isActive = (path: string) => pathname === path;
+  const isActive = (path: string) =>
+    pathname === path || (path !== "/" && pathname.startsWith(`${path}/`));
 
   const navItems = [
     {
       path: "/assessment",
       label: "Self-Assessment",
       icon: ClipboardList,
+      show: true,
+    },
+    {
+      path: "/observations",
+      label: "Observations",
+      icon: Eye,
       show: true,
     },
     {
@@ -86,7 +101,7 @@ export function Header({ className }: HeaderProps) {
     },
     {
       path: "/director",
-      label: "Organization",
+      label: "Organisation",
       icon: Building2,
       show: isDirector || isAdmin,
     },
@@ -113,8 +128,21 @@ export function Header({ className }: HeaderProps) {
     >
       <div className="container h-full flex items-center justify-between">
         {/* Logo */}
-        <Link href="/dashboard" className="shrink-0">
-          <Logo />
+        <Link href="/dashboard" className="flex items-center gap-3 group">
+          <div className="relative">
+            <div className="absolute inset-0 bg-primary rounded-xl blur-lg opacity-40 group-hover:opacity-60 transition-opacity" />
+            <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-primary glow-primary group-hover:scale-105 transition-transform">
+              <Activity className="h-5 w-5 text-primary-foreground" />
+            </div>
+          </div>
+          <div>
+            <h1 className="text-lg font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+              ProofPoint
+            </h1>
+            <p className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground font-medium">
+              Command Center
+            </p>
+          </div>
         </Link>
 
         {/* Nav */}
@@ -149,7 +177,51 @@ export function Header({ className }: HeaderProps) {
         )}
 
         {/* Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {user && (
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 rounded-xl border border-border/30 bg-muted/30 md:hidden"
+                  aria-label="Open navigation menu"
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[88%] max-w-sm">
+                <SheetHeader className="text-left">
+                  <SheetTitle>ProofPoint navigation</SheetTitle>
+                  <SheetDescription>
+                    Navigate to your workspace and account areas.
+                  </SheetDescription>
+                </SheetHeader>
+                <nav className="mt-6 grid gap-2" aria-label="Mobile navigation">
+                  {navItems.map((item) => {
+                    const active = isActive(item.path);
+                    return (
+                      <SheetClose asChild key={item.path}>
+                        <Link
+                          href={item.path}
+                          className={cn(
+                            "flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            active
+                              ? "border-primary/30 bg-primary/10 text-primary"
+                              : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground",
+                          )}
+                        >
+                          <item.icon className="h-5 w-5" />
+                          {item.label}
+                        </Link>
+                      </SheetClose>
+                    );
+                  })}
+                </nav>
+              </SheetContent>
+            </Sheet>
+          )}
+
           {/* Dark Mode Toggle */}
           <Button
             variant="ghost"
@@ -234,7 +306,10 @@ export function Header({ className }: HeaderProps) {
                 </DropdownMenuItem>
 
                 <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
-                  <Link href="/settings/notifications" className="flex items-center gap-2 p-2">
+                  <Link
+                    href="/settings/notifications"
+                    className="flex items-center gap-2 p-2"
+                  >
                     <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center">
                       <Settings className="h-4 w-4 text-foreground" />
                     </div>

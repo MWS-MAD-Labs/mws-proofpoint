@@ -50,4 +50,13 @@ backend/node_modules/
 backend/.env
 .env
 
+# Local database exports and sensitive migration data
+/backups/
+*.dump
+*.backup
+*.sql.gz
+*.pgdump
+*.csv
+*.tsv
+
 /src/generated/prisma

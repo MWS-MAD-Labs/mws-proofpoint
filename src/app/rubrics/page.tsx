@@ -1,15 +1,10 @@
 "use client";
 
 import { useState, Suspense, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Header } from "@/components/layout/Header";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useRubricTemplates } from "@/hooks/useAssessment";
@@ -32,12 +27,12 @@ import {
   X,
   BookOpen,
   Award,
-  ChevronUp,
   Import,
   Scale,
   Percent,
   Search,
   Check,
+  ClipboardCheck,
   ChevronsUpDown,
   ExpandIcon,
   ShrinkIcon,
@@ -61,13 +56,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+
 import {
   Tooltip,
   TooltipContent,
@@ -76,6 +65,9 @@ import {
 } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ObservationFormEditor } from "@/components/admin/ObservationFormEditor";
+import { useAuth } from "@/hooks/useAuth";
 
 // Type definitions
 interface KPI {
@@ -247,7 +239,7 @@ function ImportDomainDialog({
   onOpenChange: (open: boolean) => void;
   templates: Template[];
   currentTemplateId: string;
-  onImport: (domains: Template[]) => void;
+  onImport: (domains: Domain[]) => void;
 }) {
   const [selectedSourceTemplate, setSelectedSourceTemplate] =
     useState<any>(null);
@@ -401,12 +393,12 @@ function DomainWeightEditor({
   onUpdateWeight,
   onAutoBalance,
 }: {
-  domains: Template[];
+  domains: Domain[];
   onUpdateWeight: (domainId: string, weight: number) => void;
   onAutoBalance: () => void;
 }) {
   const totalWeight = domains.reduce(
-    (acc, d) => acc + (parseFloat(d.weight) || 0),
+    (acc, d) => acc + (Number(d.weight) || 0),
     0,
   );
   const isBalanced = Math.abs(totalWeight - 100) < 0.1;
@@ -760,7 +752,7 @@ function RubricsContent() {
     }));
   };
 
-  const handleImportDomains = async (domainsToImport: Template[]) => {
+  const handleImportDomains = async (domainsToImport: Domain[]) => {
     // For each domain, create it with its standards and KPIs
     for (const domain of domainsToImport) {
       // Create domain
@@ -811,8 +803,8 @@ function RubricsContent() {
     // Refresh the template data
     const { data } = await api.getRubric(selectedTemplate.id);
     if (data) {
-      setEditData(data);
-      setSelectedTemplate(data);
+      setEditData(data as Template);
+      setSelectedTemplate(data as Template);
     }
 
     toast({
@@ -838,7 +830,7 @@ function RubricsContent() {
       toast({ title: "Success", description: "Template created successfully" });
       if (refreshTemplates) refreshTemplates();
       // Select the newly created template
-      await handleSelectTemplate(data);
+      await handleSelectTemplate(data as Template);
     }
   };
 
@@ -1016,7 +1008,7 @@ function RubricsContent() {
   const currentData = isEditMode ? editData : selectedTemplate;
 
   // Count KPIs across all domains and standards
-  const countKPIs = (domains: Template[]) => {
+  const countKPIs = (domains: Domain[]) => {
     if (!domains) return 0;
     return domains.reduce(
       (acc, d) =>
@@ -1029,7 +1021,7 @@ function RubricsContent() {
     );
   };
 
-  const countStandards = (domains: Template[]) => {
+  const countStandards = (domains: Domain[]) => {
     if (!domains) return 0;
     return domains.reduce((acc, d) => acc + (d.standards?.length || 0), 0);
   };
@@ -1748,6 +1740,52 @@ function RubricsContent() {
   );
 }
 
+function RubricsTabs() {
+  const { isAdmin, loading } = useAuth();
+  const searchParams = useSearchParams();
+  const defaultTab =
+    isAdmin && searchParams.get("tab") === "observation-form"
+      ? "observation-form"
+      : "kpi-framework";
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <Tabs defaultValue={defaultTab} className="space-y-6">
+      <TabsList className="glass-panel p-1">
+        <TabsTrigger value="kpi-framework" className="flex items-center gap-2">
+          <Target className="h-4 w-4" />
+          KPI Framework
+        </TabsTrigger>
+        {isAdmin && (
+          <TabsTrigger
+            value="observation-form"
+            className="flex items-center gap-2"
+          >
+            <ClipboardCheck className="h-4 w-4" />
+            Observation Form
+          </TabsTrigger>
+        )}
+      </TabsList>
+
+      <TabsContent value="kpi-framework" className="mt-0">
+        <RubricsContent />
+      </TabsContent>
+      {isAdmin && (
+        <TabsContent value="observation-form" className="mt-0">
+          <ObservationFormEditor />
+        </TabsContent>
+      )}
+    </Tabs>
+  );
+}
+
 export default function RubricsPage() {
   return (
     <ProtectedRoute requiredRoles={["manager", "director", "admin"]}>
@@ -1760,7 +1798,7 @@ export default function RubricsPage() {
               <Loader2 className="h-12 w-12 animate-spin fixed top-1/2 left-1/2" />
             }
           >
-            <RubricsContent />
+            <RubricsTabs />
           </Suspense>
         </main>
       </div>

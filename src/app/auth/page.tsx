@@ -17,15 +17,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
-import {
-  Activity,
-  Loader2,
-  Mail,
-  Lock,
-  User,
-  ArrowLeft,
-  Sparkles,
-} from "lucide-react";
+import { Loader2, Mail, Lock, User, ArrowLeft, Sparkles } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 
 const loginSchema = z.object({

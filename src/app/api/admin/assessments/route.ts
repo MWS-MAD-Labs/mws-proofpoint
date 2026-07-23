@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
@@ -6,19 +5,19 @@ import { triggerNotification } from "@/lib/notifications";
 
 // GET /api/admin/assessments - List all assessments for admin review
 export async function GET(request: Request) {
-    try {
-        const session = await auth();
-        // Check for admin role
-        const roles = (session?.user as any)?.roles || [];
-        if (!roles.includes("admin")) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+  try {
+    const session = await auth();
+    // Check for admin role
+    const roles = (session?.user as any)?.roles || [];
+    if (!roles.includes("admin")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        const { searchParams } = new URL(request.url);
-        const status = searchParams.get("status");
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get("status");
 
-        let sql = `
-            SELECT a.*, 
+    let sql = `
+            SELECT a.*,
                    sp.full_name as staff_name,
                    sp.niy as staff_niy,
                    d.name as staff_department,
@@ -32,96 +31,108 @@ export async function GET(request: Request) {
             WHERE 1=1
         `;
 
-        const params: any[] = [];
+    const params: any[] = [];
 
-        // If status filter is provided, use it. Otherwise default to "director_approved" (pending admin review)
-        if (status) {
-            sql += ` AND a.status = $1`;
-            params.push(status);
-        } else {
-            // Default: show everything that is at least approved, so admin can review history too
-            // But meant 'pending' usually. Let's just return all non-draft for now?
-            // Or specific statuses.
-            // Let's return everything for the list, frontend can filter.
-        }
-
-        sql += ` ORDER BY a.created_at DESC`;
-
-        const assessments = await query(sql, params);
-        return NextResponse.json({ data: assessments });
-    } catch (error) {
-        console.error("Admin assessments error:", error);
-        return NextResponse.json({ error: "Failed to fetch assessments" }, { status: 500 });
+    // If status filter is provided, use it. Otherwise default to "director_approved" (pending admin review)
+    if (status) {
+      sql += ` AND a.status = $1`;
+      params.push(status);
+    } else {
+      // Default: show everything that is at least approved, so admin can review history too
+      // But meant 'pending' usually. Let's just return all non-draft for now?
+      // Or specific statuses.
+      // Let's return everything for the list, frontend can filter.
     }
+
+    sql += ` ORDER BY a.created_at DESC`;
+
+    const assessments = await query(sql, params);
+    return NextResponse.json({ data: assessments });
+  } catch (error) {
+    console.error("Admin assessments error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch assessments" },
+      { status: 500 },
+    );
+  }
 }
 
 // PUT /api/admin/assessments - Update status (Release)
 export async function PUT(request: Request) {
-    try {
-        const session = await auth();
-        const roles = (session?.user as any)?.roles || [];
-        if (!roles.includes("admin")) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+  try {
+    const session = await auth();
+    const roles = (session?.user as any)?.roles || [];
+    if (!roles.includes("admin")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        const body = await request.json();
-        const { id, action } = body;
+    const body = await request.json();
+    const { id, action } = body;
 
-        if (!id || !action) {
-            return NextResponse.json({ error: "ID and action required" }, { status: 400 });
-        }
+    if (!id || !action) {
+      return NextResponse.json(
+        { error: "ID and action required" },
+        { status: 400 },
+      );
+    }
 
-        if (action === 'release') {
-            const updated = await queryOne(
-                `UPDATE assessments
+    if (action === "release") {
+      const updated = await queryOne(
+        `UPDATE assessments
                  SET status = 'admin_reviewed',
                      updated_at = now()
                  WHERE id = $1
                  RETURNING *`,
-                [id]
-            );
+        [id],
+      );
 
-            // Trigger notification to staff member
-            if (updated) {
-                triggerNotification({
-                    assessmentId: id,
-                    type: "admin_released",
-                }).catch((error) => {
-                    console.error("[API] Admin release notification failed:", error);
-                });
-            }
+      // Trigger notification to staff member
+      if (updated) {
+        triggerNotification({
+          assessmentId: id,
+          type: "admin_released",
+        }).catch((error) => {
+          console.error("[API] Admin release notification failed:", error);
+        });
+      }
 
-            return NextResponse.json({ data: updated });
-        }
+      return NextResponse.json({ data: updated });
+    }
 
-        if (action === 'release_all') {
-            // Release all assessments with 'director_approved' status
-            const updated = await query(
-                `UPDATE assessments
+    if (action === "release_all") {
+      // Release all assessments with 'director_approved' status
+      const updated = await query<{ id: string }>(
+        `UPDATE assessments
                  SET status = 'admin_reviewed',
                      updated_at = now()
                  WHERE status = 'director_approved'
-                 RETURNING id`
+                 RETURNING id`,
+      );
+
+      // Trigger notifications for all released assessments
+      if (updated && updated.length > 0) {
+        for (const assessment of updated) {
+          triggerNotification({
+            assessmentId: assessment.id,
+            type: "admin_released",
+          }).catch((error) => {
+            console.error(
+              `[API] Failed to trigger notification for assessment ${assessment.id}:`,
+              error,
             );
-
-            // Trigger notifications for all released assessments
-            if (updated && updated.length > 0) {
-                for (const assessment of updated) {
-                    triggerNotification({
-                        assessmentId: assessment.id,
-                        type: "admin_released",
-                    }).catch((error) => {
-                        console.error(`[API] Failed to trigger notification for assessment ${assessment.id}:`, error);
-                    });
-                }
-            }
-
-            return NextResponse.json({ data: updated, count: updated?.length || 0 });
+          });
         }
+      }
 
-        return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-    } catch (error) {
-        console.error("Admin update error:", error);
-        return NextResponse.json({ error: "Failed to update assessment" }, { status: 500 });
+      return NextResponse.json({ data: updated, count: updated?.length || 0 });
     }
+
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  } catch (error) {
+    console.error("Admin update error:", error);
+    return NextResponse.json(
+      { error: "Failed to update assessment" },
+      { status: 500 },
+    );
+  }
 }

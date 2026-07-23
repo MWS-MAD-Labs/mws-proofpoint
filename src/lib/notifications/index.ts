@@ -173,7 +173,7 @@ async function getRecipientsForNotificationType(
         { userId: data.staffId, email: data.staffEmail, name: data.staffName },
       ];
 
-    case "assessment_acknowledged":
+    case "assessment_acknowledged": {
       const recipients: Array<{ userId: string; email: string; name: string }> =
         [];
       if (data.managerId && data.managerEmail) {
@@ -191,6 +191,7 @@ async function getRecipientsForNotificationType(
         });
       }
       return recipients;
+    }
 
     default:
       return [];

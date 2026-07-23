@@ -156,11 +156,11 @@ export async function POST(request: Request) {
     // Auto-assign director if not provided
     let finalDirectorId = director_id;
     if (!finalDirectorId) {
-      const director = await queryOne(
+      const director = await queryOne<{ user_id: string }>(
         `SELECT ur.user_id FROM user_roles ur
          JOIN profiles p ON ur.user_id = p.user_id
          WHERE ur.role = 'director'
-         LIMIT 1`
+         LIMIT 1`,
       );
       finalDirectorId = director?.user_id || null;
     }

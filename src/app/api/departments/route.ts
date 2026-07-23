@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { query, queryOne } from "@/lib/db";
+import { pool, query, queryOne } from "@/lib/db";
 
 // Helper to check if user is admin
 function isAdmin(session: { user: { roles?: string[] } }) {
@@ -30,13 +30,15 @@ export async function GET() {
              ORDER BY d.name`
         );
 
-        // Get role holders for each department
+        // Get explicit role holders for each department.
         const roleHolders = await query(
-            `SELECT p.department_id, p.user_id, p.full_name, p.email, ur.role
-             FROM profiles p
-             JOIN user_roles ur ON p.user_id = ur.user_id
-             WHERE p.department_id IS NOT NULL
-             ORDER BY p.department_id, ur.role`
+            `SELECT dr.department_id, u.id AS user_id, p.full_name, u.email, dr.role
+             FROM department_role_memberships drm
+             JOIN department_roles dr ON dr.id = drm.department_role_id
+             JOIN users u ON u.id = drm.user_id AND u.status <> 'deleted'
+             LEFT JOIN profiles p ON p.user_id = u.id
+             WHERE dr.department_id IS NOT NULL
+             ORDER BY dr.department_id, dr.role, p.full_name NULLS LAST, u.email`
         );
 
         // Build a map of department_id -> role holders
@@ -81,12 +83,30 @@ export async function POST(request: Request) {
         const body = await request.json();
         const { name, parent_id } = body;
 
-        const newDept = await queryOne(
-            `INSERT INTO departments (name, parent_id) VALUES ($1, $2) RETURNING *`,
-            [name, parent_id ?? null]
-        );
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+            const departmentResult = await client.query(
+                `INSERT INTO departments (name, parent_id) VALUES ($1, $2) RETURNING *`,
+                [name, parent_id ?? null]
+            );
+            const newDept = departmentResult.rows[0];
 
-        return NextResponse.json({ data: newDept }, { status: 201 });
+            await client.query(
+                `INSERT INTO department_roles (department_id, role, name, created_at, updated_at)
+                 VALUES ($1, 'manager', $2, NOW(), NOW()),
+                        ($1, 'staff', $3, NOW(), NOW())`,
+                [newDept.id, `${name} manager`, `${name} staff`]
+            );
+
+            await client.query("COMMIT");
+            return NextResponse.json({ data: newDept }, { status: 201 });
+        } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+        } finally {
+            client.release();
+        }
     } catch (error) {
         console.error("Create department error:", error);
         return NextResponse.json({ error: "Failed to create department" }, { status: 500 });
@@ -157,15 +177,43 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: "Department ID required" }, { status: 400 });
         }
 
-        // Check if department has users
-        const userCount = await queryOne<{ count: string }>(
-            `SELECT COUNT(*) as count FROM profiles WHERE department_id = $1`,
+        // A user's profile department is separate from department role assignments.
+        const assignedUsers = await query<{ fullName: string | null; email: string }>(
+            `SELECT p.full_name AS "fullName", u.email
+               FROM profiles p
+               JOIN users u ON u.id = p.user_id
+              WHERE p.department_id = $1
+              ORDER BY p.full_name NULLS LAST, u.email`,
             [id]
         );
 
-        if (userCount && parseInt(userCount.count) > 0) {
+        if (assignedUsers.length > 0) {
+            const preview = assignedUsers
+                .slice(0, 3)
+                .map((user) => user.fullName || user.email)
+                .join(", ");
+            const remaining = assignedUsers.length - 3;
             return NextResponse.json({
-                error: "Cannot delete department with assigned users. Reassign users first."
+                error: `Cannot delete department because ${assignedUsers.length} user profile(s) still use it: ${preview}${remaining > 0 ? ` and ${remaining} more` : ""}. Edit those users and change their Department first.`
+            }, { status: 400 });
+        }
+
+        const configurationCount = await queryOne<{ count: string }>(
+            `SELECT (
+                (SELECT COUNT(*)
+                   FROM role_workflow_assignments rwa
+                   JOIN department_roles dr ON dr.id = rwa.department_role_id
+                  WHERE dr.department_id = $1) +
+                (SELECT COUNT(*) FROM rubric_templates WHERE department_id = $1) +
+                (SELECT COUNT(*) FROM strategic_plans WHERE department_id = $1) +
+                (SELECT COUNT(*) FROM program_collaborators WHERE department_id = $1)
+             )::text AS count`,
+            [id]
+        );
+
+        if (configurationCount && parseInt(configurationCount.count) > 0) {
+            return NextResponse.json({
+                error: "Cannot delete department because workflows, rubrics, strategic plans, or program collaborations still reference it. Reassign that configuration first."
             }, { status: 400 });
         }
 
@@ -185,6 +233,12 @@ export async function DELETE(request: Request) {
         return NextResponse.json({ message: "Department deleted" });
     } catch (error) {
         console.error("Delete department error:", error);
+        const code = (error as { code?: string }).code;
+        if (code === "23503") {
+            return NextResponse.json({
+                error: "Cannot delete department because other records still reference it. Reassign or remove its workflows, rubrics, plans, and related configuration first."
+            }, { status: 400 });
+        }
         return NextResponse.json({ error: "Failed to delete department" }, { status: 500 });
     }
 }
