@@ -75,20 +75,20 @@ export async function notifyObservationSubmitted(
 ) {
   return sendEmail({
     to:      staffEmail,
-    subject: `Hasil Observasi Siap: ${rubricName}`,
+    subject: `Observation Results Ready: ${rubricName}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:600px;">
-      <h2>Hasil Observasi Siap untuk Ditinjau</h2>
-      <p>Halo <strong>${esc(staffName)}</strong>,</p>
-      <p>Manager Anda telah menyelesaikan pengisian observasi. Silakan tinjau hasilnya dan berikan acknowledgement.</p>
+      <h2>Observation Results Ready for Review</h2>
+      <p>Hello <strong>${esc(staffName)}</strong>,</p>
+      <p>Your manager has completed the observation. Please review the results and acknowledge them.</p>
       <table style="border-collapse:collapse;width:100%;margin:12px 0;">
         <tr><td style="padding:6px 0;color:#555;width:120px;">Rubric</td>
             <td style="font-weight:bold;">${esc(rubricName)}</td></tr>
       </table>
       <a href="${BASE_URL}/observations/${encodeURIComponent(observationId)}"
          style="display:inline-block;background:#2563eb;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold;">
-        Lihat dan Acknowledge
+        Review and Acknowledge
       </a>
-      <p style="color:#999;font-size:12px;margin-top:24px;">Notifikasi otomatis - jangan balas email ini.</p>
+      <p style="color:#999;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
   });
 }
@@ -103,11 +103,11 @@ export async function notifyManagerObservationAcknowledged(
 ) {
   return sendEmail({
     to:      managerEmail,
-    subject: `✅ Staff Acknowledge Observasi: ${rubricName}`,
+    subject: `✅ Staff Acknowledged Observation: ${rubricName}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:600px;">
-      <h2>Observasi Telah Diakui oleh Staff</h2>
-      <p>Halo <strong>${esc(managerName)}</strong>,</p>
-      <p>Staff Anda telah melakukan acknowledgement atas hasil observasi yang Anda isi.</p>
+      <h2>Observation Acknowledged by Staff Member</h2>
+      <p>Hello <strong>${esc(managerName)}</strong>,</p>
+      <p>Your staff member has acknowledged the observation results you submitted.</p>
       <table style="border-collapse:collapse;width:100%;margin:12px 0;">
         <tr><td style="padding:6px 0;color:#555;width:120px;">Staff</td>
             <td style="font-weight:bold;">${esc(staffName)}</td></tr>
@@ -118,9 +118,9 @@ export async function notifyManagerObservationAcknowledged(
       </table>
       <a href="${BASE_URL}/observations/${encodeURIComponent(observationId)}"
          style="display:inline-block;background:#7c3aed;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold;">
-        Lihat Detail
+        View Details
       </a>
-      <p style="color:#999;font-size:12px;margin-top:24px;">Notifikasi otomatis - jangan balas email ini.</p>
+      <p style="color:#999;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
   });
 }
@@ -135,10 +135,10 @@ export async function notifyObservationAcknowledged(
 ) {
   return sendEmail({
     to:      adminEmail,
-    subject: `Staff Acknowledge Observasi: ${rubricName}`,
+    subject: `Staff Acknowledged Observation: ${rubricName}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:600px;">
-      <h2>Observasi Selesai Diakui</h2>
-      <p>Staff telah melakukan acknowledgement atas hasil observasi.</p>
+      <h2>Observation Acknowledgement Completed</h2>
+      <p>The staff member has acknowledged the observation results.</p>
       <table style="border-collapse:collapse;width:100%;margin:12px 0;">
         <tr><td style="padding:6px 0;color:#555;width:120px;">Staff</td>
             <td style="font-weight:bold;">${esc(staffName)}</td></tr>
@@ -149,9 +149,9 @@ export async function notifyObservationAcknowledged(
       </table>
       <a href="${BASE_URL}/observations/${encodeURIComponent(observationId)}"
          style="display:inline-block;background:#7c3aed;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold;">
-        Lihat Detail
+        View Details
       </a>
-      <p style="color:#999;font-size:12px;margin-top:24px;">Notifikasi otomatis - jangan balas email ini.</p>
+      <p style="color:#999;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
   });
 }
