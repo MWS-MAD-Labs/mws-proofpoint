@@ -192,14 +192,32 @@ export async function POST(request: Request) {
 
     let workflow: { assignmentId: string; workflowId: string; name: string; steps: unknown } | null = null;
     if (isManagerLed) {
-      const managerDepartment = await queryOne<{ department_id: string | null }>("SELECT department_id FROM profiles WHERE user_id = $1", [session.user.id]);
-      const subject = await queryOne<{ department_id: string | null; active: boolean }>(
-        `SELECT p.department_id, u.status = 'active' AS active FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = $1`,
+      const subject = await queryOne<{ active: boolean }>(
+        `SELECT u.status = 'active' AS active FROM users u WHERE u.id = $1`,
         [subjectId],
       );
       if (!subject?.active) return NextResponse.json({ error: "Selected staff member is not active" }, { status: 400 });
-      if (!roles.includes("admin") && (!managerDepartment?.department_id || managerDepartment.department_id !== subject.department_id)) {
-        return NextResponse.json({ error: "Managers can only appraise staff in their department" }, { status: 403 });
+      if (!roles.includes("admin")) {
+        const sharesDepartment = await queryOne<{ allowed: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1
+               FROM department_role_memberships manager_membership
+               JOIN department_roles manager_role
+                 ON manager_role.id = manager_membership.department_role_id
+                AND manager_role.role = 'manager'
+               JOIN department_role_memberships staff_membership
+                 ON staff_membership.user_id = $2
+               JOIN department_roles staff_role
+                 ON staff_role.id = staff_membership.department_role_id
+                AND staff_role.role = 'staff'
+                AND staff_role.department_id = manager_role.department_id
+              WHERE manager_membership.user_id = $1
+           ) AS allowed`,
+          [session.user.id, subjectId],
+        );
+        if (!sharesDepartment?.allowed) {
+          return NextResponse.json({ error: "Managers can only appraise staff assigned to one of their department roles" }, { status: 403 });
+        }
       }
       workflow = await queryOne(
         `SELECT rwa.id AS "assignmentId", wd.id AS "workflowId", wd.name,
@@ -209,8 +227,9 @@ export async function POST(request: Request) {
          JOIN workflow_steps ws ON ws.workflow_id = wd.id
          JOIN rubric_templates rt ON rt.id = rwa.rubric_id AND rt.template_type = 'STAFF_APPRAISAL'
          JOIN department_roles dr ON dr.id = rwa.department_role_id AND dr.role = 'staff'
-         JOIN profiles p ON p.user_id = $1 AND (dr.department_id = p.department_id OR dr.department_id IS NULL)
-         JOIN user_roles ur ON ur.user_id = $1 AND ur.role = dr.role
+         JOIN department_role_memberships drm
+           ON drm.department_role_id = dr.id
+          AND drm.user_id = $1
          WHERE rwa.rubric_id = $2 AND rwa.is_active = true
          GROUP BY rwa.id, wd.id, wd.name
          HAVING COUNT(*) = 3

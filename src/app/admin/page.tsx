@@ -349,8 +349,7 @@ function AdminContent() {
                                 </div>
                             </div>
 
-                            {/* Role Holders Grid - Only show if expanded or root */}
-                            {(isExpanded || level === 0) && (
+
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3 animate-in fade-in slide-in-from-top-1 duration-200">
                                     {availableRoles.map(role => {
                                         const holders = roleHoldersByRole[role] || [];
@@ -397,7 +396,6 @@ function AdminContent() {
                                         );
                                     })}
                                 </div>
-                            )}
                         </div>
 
                         <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 shrink-0 pt-0.5">

@@ -27,7 +27,13 @@ function NewStaffAppraisal() {
   useEffect(() => {
     fetch("/api/assessments/staff")
       .then((response) => response.json())
-      .then((result) => setStaff(result.data ?? []))
+      .then((result) => {
+        const people = (result.data ?? []) as Staff[];
+        const uniqueStaff = Array.from(
+          new Map<string, Staff>(people.map((person) => [person.id, person])).values(),
+        );
+        setStaff(uniqueStaff);
+      })
       .catch(() => toast({ title: "Error", description: "Could not load staff", variant: "destructive" }));
     api.getRubrics("STAFF_APPRAISAL").then(({ data }) => setRubrics((data as Rubric[]) ?? []));
   }, []);
