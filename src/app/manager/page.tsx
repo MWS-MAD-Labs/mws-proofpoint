@@ -220,10 +220,11 @@ function ManagerContent() {
   const isApproved =
     assessment?.status === "director_approved" ||
     assessment?.status === "acknowledged";
+  const isManagerLedDraft = Boolean(assessment?.permissions?.isManagerLed) && assessment?.status === "draft";
 
   const content = assessmentId ? (
     // Detailed Assessment View - matches director page layout
-    <div className="max-w-7xl mx-auto py-8">
+    <div className="max-w-7xl mx-auto py-8 pb-32">
       {/* Status Alert Bar */}
       {isApproved && (
         <Alert className="mb-8 border-2 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500 bg-emerald-50 border-emerald-500/30">
@@ -272,7 +273,7 @@ function ManagerContent() {
           </div>
         </div>
 
-        {!isReadOnly && (
+        {!isReadOnly && !isManagerLedDraft && (
           <div className="flex items-center gap-4">
             <Button
               variant="outline"
@@ -403,6 +404,33 @@ function ManagerContent() {
           </Button>
         )}
       </div>
+
+      {isManagerLedDraft && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-background/95 px-4 py-3 shadow-2xl backdrop-blur supports-[backdrop-filter]:bg-background/85">
+          <div className="container mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+            <p className="mr-auto text-sm text-muted-foreground">
+              Save your progress at any time, then submit when all ratings and feedback are complete.
+            </p>
+            <Button
+              variant="outline"
+              onClick={saveDraft}
+              disabled={saving}
+              className="h-12 min-w-40 rounded-xl border-primary/20 hover:bg-primary/5"
+            >
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Save Draft
+            </Button>
+            <Button
+              className="h-12 min-w-44 rounded-xl font-bold glow-primary"
+              onClick={submitReview}
+              disabled={saving || !managerFeedback.trim()}
+            >
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Submit Review
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Cycle Progress Panel - matches director page */}
       <div className="mb-10">

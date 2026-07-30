@@ -4,6 +4,7 @@ import { query, queryOne } from "@/lib/db";
 import { triggerNotification } from "@/lib/notifications";
 import type { NotificationType } from "@/lib/notifications/types";
 import { getAssessmentPermissions } from "@/features/assessments/server/permissions";
+import { getAutomaticPeriod } from "@/lib/utils";
 
 // GET /api/assessments - List assessments based on user role
 export async function GET(request: Request) {
@@ -151,8 +152,8 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const { template_id, period, manager_id, director_id, staff_id } = body;
-    if (!template_id || typeof period !== "string" || !period.trim()) {
-      return NextResponse.json({ error: "Template and review period are required" }, { status: 400 });
+    if (typeof period !== "string" || !period.trim()) {
+      return NextResponse.json({ error: "Review period is required" }, { status: 400 });
     }
     const roles = ((session.user as { roles?: string[] }).roles ?? []) as string[];
     const isManagerLed = typeof staff_id === "string" && staff_id !== session.user.id;
@@ -160,9 +161,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Only managers can initiate staff appraisals" }, { status: 403 });
     }
     const subjectId = isManagerLed ? staff_id : session.user.id;
+    const resolvedPeriod = isManagerLed ? getAutomaticPeriod() : period.trim();
+    let resolvedTemplateId = typeof template_id === "string" ? template_id : null;
+
+    if (isManagerLed) {
+      const assignment = await queryOne<{ templateId: string }>(
+        `SELECT rt.id AS "templateId"
+           FROM department_role_memberships drm
+           JOIN department_roles dr ON dr.id = drm.department_role_id AND dr.role = 'staff'
+           JOIN role_workflow_assignments rwa ON rwa.department_role_id = dr.id AND rwa.is_active = true
+           JOIN rubric_templates rt ON rt.id = rwa.rubric_id AND rt.template_type = 'STAFF_APPRAISAL' AND rt.is_active = true
+          WHERE drm.user_id = $1
+            AND ($2::text IS NULL OR rt.id::text = $2)
+          ORDER BY rt.name
+          LIMIT 1`,
+        [subjectId, resolvedTemplateId],
+      );
+      if (!assignment) {
+        return NextResponse.json({ error: "No active staff-appraisal rubric is assigned to this staff member’s department role" }, { status: 403 });
+      }
+      resolvedTemplateId = assignment.templateId;
+    }
+
+    if (!resolvedTemplateId) {
+      return NextResponse.json({ error: "Rubric template is required" }, { status: 400 });
+    }
     const selectedTemplate = await queryOne<{ template_type: string }>(
       "SELECT template_type FROM rubric_templates WHERE id = $1 AND is_active = true",
-      [template_id],
+      [resolvedTemplateId],
     );
     if (!selectedTemplate) return NextResponse.json({ error: "Rubric template not found" }, { status: 404 });
     if (isManagerLed && selectedTemplate.template_type !== "STAFF_APPRAISAL") {
@@ -177,7 +203,7 @@ export async function POST(request: Request) {
       `SELECT id FROM assessments
              WHERE staff_id = $1 AND template_id = $2 AND period = $3
              AND status != 'acknowledged'`,
-      [subjectId, template_id, period],
+      [subjectId, resolvedTemplateId, resolvedPeriod],
     );
 
     if (existing) {
@@ -237,7 +263,7 @@ export async function POST(request: Request) {
             AND bool_and((ws.step_order <> 2) OR (ws.actor_role = 'director' AND ws.action_type IN ('REVIEW', 'APPROVE')))
             AND bool_and((ws.step_order <> 3) OR (ws.actor_role = 'staff' AND ws.action_type = 'ACKNOWLEDGE'))
          LIMIT 1`,
-        [subjectId, template_id],
+        [subjectId, resolvedTemplateId],
       );
       if (!workflow) return NextResponse.json({ error: "No manager-led appraisal workflow is assigned to this staff member and rubric" }, { status: 403 });
     }
@@ -264,8 +290,8 @@ export async function POST(request: Request) {
        RETURNING *`,
       [
         subjectId,
-        template_id,
-        period.trim(),
+        resolvedTemplateId,
+        resolvedPeriod,
         isManagerLed ? session.user.id : manager_id ?? null,
         finalDirectorId,
         workflow?.workflowId ?? null,

@@ -218,11 +218,89 @@ function AssessmentContent() {
     );
   }
 
-  // Selection View (No ID)
+  // Staff appraisal history (staff cannot start their own manager-led appraisal).
   if (!assessmentId && !roles.includes("manager") && !isAdmin) {
+    const statusLabel = (status: string) => {
+      switch (status) {
+        case "draft": return "Manager draft";
+        case "pending_director_review": return "Pending director review";
+        case "director_reviewed": return "Ready for acknowledgement";
+        case "acknowledged": return "Completed";
+        case "director_approved":
+        case "admin_reviewed": return "Ready for acknowledgement";
+        default: return status.replaceAll("_", " ");
+      }
+    };
+
+    const statusClass = (status: string) => {
+      if (status === "acknowledged") return "bg-emerald-100 text-emerald-700 border-emerald-200";
+      if (["director_reviewed", "director_approved", "admin_reviewed"].includes(status)) return "bg-blue-100 text-blue-700 border-blue-200";
+      return "bg-amber-100 text-amber-700 border-amber-200";
+    };
+
     return (
-      <div className="max-w-3xl mx-auto py-12">
-        <Card className="glass-panel border-border/30"><CardHeader><CardTitle>My Performance Appraisals</CardTitle><CardDescription>Your manager starts appraisals, the director reviews them, and you acknowledge the final result.</CardDescription></CardHeader><CardContent><p className="text-sm text-muted-foreground">Open an appraisal from your dashboard when it is ready for acknowledgement.</p></CardContent></Card>
+      <div className="max-w-4xl mx-auto py-12">
+        <Card className="glass-panel border-border/30 shadow-lg overflow-hidden">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-2xl">
+              <ClipboardList className="h-6 w-6 text-primary" />
+              My Performance Appraisals
+            </CardTitle>
+            <CardDescription>
+              View all your appraisal records. Your manager completes the review, the director reviews it, and you acknowledge the final result.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {assessments.length === 0 ? (
+              <div className="rounded-xl border border-dashed p-10 text-center">
+                <Clock className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+                <p className="font-medium">No appraisals yet</p>
+                <p className="mt-1 text-sm text-muted-foreground">Your manager will start an appraisal when one is due.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {[...assessments]
+                  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                  .map((appraisal) => (
+                    <button
+                      type="button"
+                      key={appraisal.id}
+                      onClick={() => router.push(`/assessment?id=${appraisal.id}`)}
+                      className="group flex w-full items-center justify-between gap-4 rounded-xl border border-border/30 bg-background/50 p-4 text-left transition-all hover:border-primary/50 hover:bg-primary/[0.02]"
+                    >
+                      <div className="flex min-w-0 items-center gap-4">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <ClipboardList className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-bold text-foreground group-hover:text-primary">{appraisal.period}</p>
+                          <p className="mt-1 truncate text-xs text-muted-foreground">
+                            {new Date(appraisal.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        {appraisal.final_score !== null && appraisal.final_score !== undefined ? (
+                          <div className="hidden text-right sm:block">
+                            <p className="font-mono text-lg font-black text-primary">
+                              {Number(appraisal.final_score).toFixed(2)}
+                            </p>
+                            <p className="max-w-40 truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              {appraisal.final_grade ?? "Final score"}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="hidden text-xs text-muted-foreground sm:block">Score in progress</p>
+                        )}
+                        <Badge className={statusClass(appraisal.status)}>{statusLabel(appraisal.status)}</Badge>
+                        <ArrowLeft className="h-4 w-4 rotate-180 text-muted-foreground transition-colors group-hover:text-primary" />
+                      </div>
+                    </button>
+                  ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     );
   }
