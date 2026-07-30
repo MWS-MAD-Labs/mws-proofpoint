@@ -8,7 +8,6 @@ import {
   User,
   LogOut,
   ClipboardList,
-  Users,
   Building2,
   FileText,
   Shield,
@@ -77,13 +76,17 @@ export function Header({ className }: HeaderProps) {
     }
   };
 
-  const isActive = (path: string) =>
-    pathname === path || (path !== "/" && pathname.startsWith(`${path}/`));
+  const isActive = (path: string) => {
+    if (path === "/appraisals") {
+      return pathname === path || pathname.startsWith("/assessment") || pathname.startsWith("/manager");
+    }
+    return pathname === path || (path !== "/" && pathname.startsWith(`${path}/`));
+  };
 
   const navItems = [
     {
-      path: "/assessment",
-      label: "Self-Assessment",
+      path: "/appraisals",
+      label: "Performance Appraisals",
       icon: ClipboardList,
       show: true,
     },
@@ -93,12 +96,7 @@ export function Header({ className }: HeaderProps) {
       icon: Eye,
       show: true,
     },
-    {
-      path: "/manager",
-      label: "Team",
-      icon: Users,
-      show: isManager || isAdmin,
-    },
+
     {
       path: "/director",
       label: "Organisation",

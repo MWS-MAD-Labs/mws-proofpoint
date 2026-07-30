@@ -219,6 +219,14 @@ function AssessmentContent() {
   }
 
   // Selection View (No ID)
+  if (!assessmentId && !roles.includes("manager") && !isAdmin) {
+    return (
+      <div className="max-w-3xl mx-auto py-12">
+        <Card className="glass-panel border-border/30"><CardHeader><CardTitle>My Performance Appraisals</CardTitle><CardDescription>Your manager starts appraisals, the director reviews them, and you acknowledge the final result.</CardDescription></CardHeader><CardContent><p className="text-sm text-muted-foreground">Open an appraisal from your dashboard when it is ready for acknowledgement.</p></CardContent></Card>
+      </div>
+    );
+  }
+
   if (!assessmentId) {
     return (
       <div className="max-w-2xl mx-auto py-8">
@@ -227,8 +235,7 @@ function AssessmentContent() {
             Self-Assessment
           </h1>
           <p className="text-muted-foreground text-lg">
-            Choose a period and template to start your performance evaluation
-            within the Framework.
+            Choose a period and template to start your own performance evaluation.
           </p>
         </div>
 
@@ -278,6 +285,7 @@ function AssessmentContent() {
                       </div>
                     ) : (
                       templates
+                        .filter((t) => t.template_type !== "STAFF_APPRAISAL")
                         .filter(
                           (t) => !selectedTemplate || t.id === selectedTemplate,
                         )
@@ -438,6 +446,7 @@ function AssessmentContent() {
 
   // Active Assessment Form View
   const isDirectorApprovedOnly = assessment?.status === "director_approved";
+  const isDirectorReviewed = assessment?.status === "director_reviewed";
   const isAdminReviewed = assessment?.status === "admin_reviewed";
   const isAcknowledged = assessment?.status === "acknowledged";
   const isReturned = assessment?.status === "returned";
@@ -448,7 +457,7 @@ function AssessmentContent() {
     !isDirectorApprovedOnly;
 
   // Only show comparison and allow acknowledgment if Admin has reviewed/released it (or it's already acknowledged)
-  const showComparison = isAdminReviewed || isAcknowledged;
+  const showComparison = isDirectorReviewed || isAdminReviewed || isAcknowledged;
 
   return (
     <div className="max-w-7xl mx-auto py-8">
@@ -551,7 +560,7 @@ function AssessmentContent() {
               )}
             </div>
             <p className="text-muted-foreground text-lg italic">
-              KPI-Based Self-Assessment & Performance Framework
+              KPI-Based Self-Assessment & Performance Appraisal
             </p>
           </div>
         </div>
@@ -653,6 +662,7 @@ function AssessmentContent() {
                   <ReviewComparisonSection
                     key={domain.id}
                     readonly={true}
+                    managerOnly={Boolean(assessment?.permissions?.isManagerLed)}
                     reviewerLabel="Director"
                     section={{
                       ...domain,

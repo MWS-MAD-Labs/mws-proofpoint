@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api-client";
 import { useAuth } from "./useAuth";
 import { toast } from "./use-toast";
+import { calculateWeightedPercentageScore } from "@/features/assessments/scoring";
 
 // Import and re-export EvidenceItem from canonical source to avoid type mismatch
 import type { EvidenceItem } from "@/components/assessment/EvidenceInput";
@@ -21,6 +22,7 @@ export interface KPIData {
   evidence:         string | EvidenceItem[];
   managerScore?:    number | 'X' | null;
   managerEvidence?: string | EvidenceItem[];
+  performanceWeight?: number;
 }
 
 export interface StandardData {
@@ -77,13 +79,15 @@ export interface Assessment {
   staff_department_id?:string;
   staff_job_title?:    string;
   staff_roles?:        string[];
+  workflow_snapshot?:   { name?: string; steps?: Array<{ actorRole?: string; actionType?: string }> } | null;
+  permissions?: { isManagerLed?: boolean; canSaveDraft?: boolean; canSubmit?: boolean; canDirectorReview?: boolean; canAcknowledge?: boolean };
 }
 
 interface RubricTemplate {
   id:          string;
   name:        string;
   description: string | null;
-  template_type: 'KPI_APPRAISAL' | 'CLASSROOM_OBSERVATION' | 'GENERIC' | null;
+  template_type: 'KPI_APPRAISAL' | 'STAFF_APPRAISAL' | 'CLASSROOM_OBSERVATION' | 'GENERIC' | null;
   domains: {
     id:         string;
     name:       string;
@@ -104,6 +108,7 @@ interface RubricTemplate {
         rubric_2:         string;
         rubric_1:         string;
         sort_order:       number;
+        performance_weight?: number;
       }[];
     }[];
   }[];
@@ -201,6 +206,7 @@ export function useAssessment(assessmentId?: string) {
                   evidence:         staffEvidence[k.id] || '',
                   managerScore:     managerScores[k.id] ?? null,
                   managerEvidence:  managerEvidence[k.id] || '',
+                  performanceWeight: Number(k.performance_weight ?? 100),
                 }))
               }))
             }));
@@ -228,6 +234,7 @@ export function useAssessment(assessmentId?: string) {
                   evidence:         staffEvidence[ind.id] || '',
                   managerScore:     managerScores[ind.id] ?? null,
                   managerEvidence:  managerEvidence[ind.id] || '',
+                  performanceWeight: 100,
                 }))
               }]
             }));
@@ -250,7 +257,7 @@ export function useAssessment(assessmentId?: string) {
     setSaving(true);
     const updates: Record<string, unknown> = {};
 
-    const isManagerView = assessment.status === 'self_submitted' || assessment.status === 'manager_reviewed';
+    const isManagerView = assessment.permissions?.isManagerLed || assessment.status === 'self_submitted' || assessment.status === 'manager_reviewed';
 
     if (isManagerView) {
       const managerScores:   Record<string, number | 'X'>         = {};
@@ -293,7 +300,9 @@ export function useAssessment(assessmentId?: string) {
       updates.staff_evidence = staffEvidence;
     }
 
-    const { error } = await api.updateAssessment(assessment.id, updates);
+    const { error } = assessment.permissions?.isManagerLed
+      ? await api.performAssessmentAction(assessment.id, { action: "save_draft", managerScores: updates.manager_scores, managerEvidence: updates.manager_evidence, managerNotes: updates.manager_notes })
+      : await api.updateAssessment(assessment.id, updates);
     setSaving(false);
 
     if (error) {
@@ -356,7 +365,9 @@ export function useAssessment(assessmentId?: string) {
       });
     });
 
-    const finalScore = calculateWeightedScore(domains, 'manager');
+    const finalScore = assessment.permissions?.isManagerLed
+      ? calculateStaffAppraisalScore(domains, "manager")
+      : calculateWeightedScore(domains, "manager");
     const finalGrade = finalScore !== null ? getGradeFromScore(finalScore) : null;
 
     if (!managerFeedback?.trim()) {
@@ -369,15 +380,19 @@ export function useAssessment(assessmentId?: string) {
       return;
     }
 
-    const { error } = await api.updateAssessment(assessment.id, {
-      manager_scores:     managerScores,
-      manager_evidence:   managerEvidence,
-      manager_notes:      managerFeedback,
-      status:             'manager_reviewed',
-      manager_reviewed_at:new Date().toISOString(),
-      final_score:        finalScore,
-      final_grade:        finalGrade,
-    });
+    const { error } = assessment.permissions?.isManagerLed
+      ? await api.performAssessmentAction(assessment.id, {
+          action: "submit",
+          managerScores,
+          managerEvidence,
+          managerNotes: managerFeedback,
+          finalScore,
+          finalGrade,
+        })
+      : await api.updateAssessment(assessment.id, {
+          manager_scores: managerScores, manager_evidence: managerEvidence, manager_notes: managerFeedback,
+          status: 'manager_reviewed', manager_reviewed_at: new Date().toISOString(), final_score: finalScore, final_grade: finalGrade,
+        });
 
     setSaving(false);
 
@@ -385,7 +400,7 @@ export function useAssessment(assessmentId?: string) {
       toast({ title: "Error", description: "Failed to submit review", variant: "destructive" });
     } else {
       toast({ title: "Submitted", description: "Review submitted successfully" });
-      setAssessment(prev => prev ? { ...prev, status: 'manager_reviewed' } : null);
+      setAssessment(prev => prev ? { ...prev, status: assessment.permissions?.isManagerLed ? 'pending_director_review' : 'manager_reviewed' } : null);
     }
   };
 
@@ -418,18 +433,17 @@ export function useAssessment(assessmentId?: string) {
       });
     });
 
-    const finalScore = calculateWeightedScore(domains, 'manager');
+    const finalScore = assessment.permissions?.isManagerLed
+      ? calculateStaffAppraisalScore(domains, "manager")
+      : calculateWeightedScore(domains, "manager");
     const finalGrade = finalScore !== null ? getGradeFromScore(finalScore) : null;
 
-    const { error } = await api.updateAssessment(assessment.id, {
-      status:               'director_approved',
-      director_comments:    directorFeedback,
-      director_approved_at: new Date().toISOString(),
-      final_score:          finalScore,
-      final_grade:          finalGrade,
-      manager_scores:       managerScores,
-      manager_evidence:     managerEvidence
-    });
+    const { error } = assessment.permissions?.isManagerLed
+      ? await api.performAssessmentAction(assessment.id, { action: "director_review", directorComments: directorFeedback })
+      : await api.updateAssessment(assessment.id, {
+          status: 'director_approved', director_comments: directorFeedback, director_approved_at: new Date().toISOString(),
+          final_score: finalScore, final_grade: finalGrade, manager_scores: managerScores, manager_evidence: managerEvidence,
+        });
 
     setSaving(false);
 
@@ -437,7 +451,7 @@ export function useAssessment(assessmentId?: string) {
       toast({ title: "Error", description: "Failed to approve assessment", variant: "destructive" });
     } else {
       toast({ title: "Approved", description: "Assessment approved successfully" });
-      setAssessment(prev => prev ? { ...prev, status: 'director_approved' } : null);
+      setAssessment(prev => prev ? { ...prev, status: assessment.permissions?.isManagerLed ? 'director_reviewed' : 'director_approved' } : null);
     }
   };
 
@@ -454,15 +468,16 @@ export function useAssessment(assessmentId?: string) {
     }
 
     setSaving(true);
-    const finalScore = calculateWeightedScore(domains, 'manager');
+    const finalScore = assessment.permissions?.isManagerLed
+      ? calculateStaffAppraisalScore(domains, "manager")
+      : calculateWeightedScore(domains, "manager");
     const finalGrade = finalScore !== null ? getGradeFromScore(finalScore) : null;
 
-    const { error } = await api.updateAssessment(assessment.id, {
-      status:      'acknowledged',
-      staff_notes: staffAcknowledgement,
-      final_score: finalScore,
-      final_grade: finalGrade,
-    });
+    const { error } = assessment.permissions?.isManagerLed
+      ? await api.performAssessmentAction(assessment.id, { action: "acknowledge", staffNotes: staffAcknowledgement })
+      : await api.updateAssessment(assessment.id, {
+          status: 'acknowledged', staff_notes: staffAcknowledgement, final_score: finalScore, final_grade: finalGrade,
+        });
 
     setSaving(false);
 
@@ -518,12 +533,12 @@ export function useAssessment(assessmentId?: string) {
     }
 
     setSaving(true);
-    const { error } = await api.updateAssessment(assessment.id, {
-      status:          'returned',
-      return_feedback: returnFeedback,
-      returned_at:     new Date().toISOString(),
-      returned_by:     returnedBy,
-    });
+    const { error } = assessment.permissions?.isManagerLed
+      ? await api.performAssessmentAction(assessment.id, { action: "return", returnFeedback })
+      : await api.updateAssessment(assessment.id, {
+          status: 'returned', return_feedback: returnFeedback,
+          returned_at: new Date().toISOString(), returned_by: returnedBy,
+        });
 
     setSaving(false);
 
@@ -532,7 +547,7 @@ export function useAssessment(assessmentId?: string) {
       return false;
     }
     toast({ title: "Returned", description: "Assessment returned to staff for revision" });
-    setAssessment(prev => prev ? { ...prev, status: 'returned', return_feedback: returnFeedback } : null);
+    setAssessment(prev => prev ? { ...prev, status: assessment.permissions?.isManagerLed ? 'draft' : 'returned', return_feedback: returnFeedback } : null);
     return true;
   };
 
@@ -644,6 +659,20 @@ export function useTeamAssessments() {
   return { assessments, loading };
 }
 
+export function calculateStaffAppraisalScore(
+  domains: DomainData[] | undefined | null,
+  type: "staff" | "manager" = "manager",
+): number | null {
+  if (!domains || !Array.isArray(domains)) return null;
+
+  return calculateWeightedPercentageScore(
+    domains.flatMap((domain) =>
+      domain.standards.flatMap((standard) => standard.kpis),
+    ),
+    type,
+  );
+}
+
 export function calculateWeightedScore(
   domains: DomainData[] | undefined | null,
   type: 'staff' | 'manager' = 'staff'
@@ -666,10 +695,11 @@ export function calculateWeightedScore(
 
     if (scoredKPIs.length === 0) continue;
 
+    const itemWeightTotal = scoredKPIs.reduce((sum, kpi) => sum + Number(kpi.performanceWeight ?? 100), 0);
     const domainAvg = scoredKPIs.reduce((sum, kpi) => {
       const score = type === 'staff' ? kpi.score : kpi.managerScore;
-      return sum + (Number(score) || 0);
-    }, 0) / scoredKPIs.length;
+      return sum + (Number(score) || 0) * Number(kpi.performanceWeight ?? 100);
+    }, 0) / (itemWeightTotal || scoredKPIs.length);
 
     weightedSum  += domainAvg * domain.weight;
     totalWeight  += domain.weight;
@@ -677,20 +707,21 @@ export function calculateWeightedScore(
 
   if (totalWeight === 0) {
     // ✅ FIX: prefer-const — pakai const karena array tidak di-reassign
-    const allScoredKPIs: number[] = [];
+    const allScoredKPIs: Array<{ score: number; weight: number }> = [];
     domains.forEach(d => {
       d.standards.forEach(s => {
         s.kpis.forEach(kpi => {
           const score = type === 'staff' ? kpi.score : kpi.managerScore;
           if (score !== null && score !== undefined && score !== 'X') {
-            allScoredKPIs.push(Number(score));
+            allScoredKPIs.push({ score: Number(score), weight: Number(kpi.performanceWeight ?? 100) });
           }
         });
       });
     });
 
     if (allScoredKPIs.length === 0) return null;
-    return allScoredKPIs.reduce((a, b) => a + b, 0) / allScoredKPIs.length;
+    const weightTotal = allScoredKPIs.reduce((sum, item) => sum + item.weight, 0);
+    return allScoredKPIs.reduce((sum, item) => sum + item.score * item.weight, 0) / (weightTotal || allScoredKPIs.length);
   }
 
   return weightedSum / totalWeight;

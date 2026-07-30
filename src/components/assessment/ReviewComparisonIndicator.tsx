@@ -21,6 +21,7 @@ export interface ReviewIndicatorData {
   // Manager data
   managerScore: number | 'X' | null;
   managerEvidence: string | EvidenceItem[];
+  performanceWeight?: number;
 }
 
 interface ReviewComparisonIndicatorProps {
@@ -30,6 +31,7 @@ interface ReviewComparisonIndicatorProps {
   onEvidenceChange?: (evidence: string) => void;
   readonly?: boolean;
   reviewerLabel?: string;
+  managerOnly?: boolean;
 }
 
 function getScoreLabel(score: number | 'X' | null): string {
@@ -95,7 +97,8 @@ export function ReviewComparisonIndicator({
   onScoreChange,
   onEvidenceChange,
   readonly,
-  reviewerLabel = "Manager Review"
+  reviewerLabel = "Manager Review",
+  managerOnly = false,
 }: ReviewComparisonIndicatorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -115,6 +118,11 @@ export function ReviewComparisonIndicator({
   const isExcluded = isManagerExcluded || (isStaffExcluded && indicator.managerScore === null);
 
   const isComplete = indicator.managerScore !== null; // Simplified completeness for review
+  const itemPercentage = Number(indicator.performanceWeight ?? 100);
+  const weightedPoints =
+    managerOnly && typeof indicator.managerScore === "number"
+      ? indicator.managerScore * itemPercentage
+      : null;
 
   const statusColor = isExcluded
     ? "border-slate-200 bg-slate-50/50" // Changed from bg-slate-50 to match AssessmentIndicator
@@ -157,11 +165,16 @@ export function ReviewComparisonIndicator({
             </h4>
             {!isExpanded && (
               <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <User className="h-3 w-3" />
-                  Self: {indicator.staffScore ?? '-'}
-                </span>
-                <span className="opacity-20">|</span>
+                {managerOnly && <span className="font-semibold text-primary">Item percentage: {itemPercentage}%{weightedPoints !== null ? ` · weighted points: ${weightedPoints.toFixed(2)}` : ""}</span>}
+                {!managerOnly && (
+                  <>
+                    <span className="flex items-center gap-1">
+                      <User className="h-3 w-3" />
+                      Self: {indicator.staffScore ?? '-'}
+                    </span>
+                    <span className="opacity-20">|</span>
+                  </>
+                )}
                 <span className="flex items-center gap-1 font-medium text-foreground">
                   <UserCheck className="h-3 w-3 text-primary" />
                   {reviewerLabel}: {indicator.managerScore ?? '-'}
@@ -221,6 +234,7 @@ export function ReviewComparisonIndicator({
           {/* Measurement Info */}
           <div className="mb-6">
             <div className="p-4 rounded-xl bg-background border border-border/50 shadow-sm">
+              {managerOnly && <div className="mb-3 inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">Item percentage: {itemPercentage}% · weighted average uses rating × percentage{weightedPoints !== null ? ` = ${weightedPoints.toFixed(2)}` : ""}</div>}
               <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                 <BookOpen className="h-3.5 w-3.5" />
                 Measurement Criteria
@@ -229,9 +243,9 @@ export function ReviewComparisonIndicator({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative">
+          <div className={cn("grid grid-cols-1 gap-6 relative", !managerOnly && "md:grid-cols-2")}>
             {/* Staff Assessment */}
-            <div className="space-y-4">
+            {!managerOnly && <div className="space-y-4">
               <div className="flex items-center gap-2 pb-2 border-b border-border/50">
                 <div className="bg-muted p-1 rounded-md">
                   <User className="h-3.5 w-3.5 text-muted-foreground" />
@@ -265,7 +279,7 @@ export function ReviewComparisonIndicator({
                   </div>
                 </div>
               </div>
-            </div>
+            </div>}
 
             {/* Manager Assessment */}
             <div className="space-y-4 relative">

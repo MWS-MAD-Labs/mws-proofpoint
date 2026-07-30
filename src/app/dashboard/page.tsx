@@ -17,7 +17,6 @@ import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api-client";
 import {
   ClipboardList,
-  Users,
   Building2,
   FileText,
   Settings,
@@ -134,26 +133,17 @@ function DashboardContent() {
 
   const actionCards = [
     {
-      title: "Self Assessment",
-      description: "Complete your performance evaluation",
+      title: "Performance Appraisals",
+      description: isManager || isAdmin
+        ? "Open self-assessment and staff appraisal workflows"
+        : "Review and acknowledge your performance appraisals",
       icon: ClipboardList,
-      link: "/assessment",
-      buttonText: "Start Assessment",
+      link: "/appraisals",
+      buttonText: "Open Performance Appraisals",
       buttonVariant: "default" as const,
       show: true,
-      gradient: "from-blue-500/10 to-cyan-500/10",
+      gradient: "from-blue-500/10 to-violet-500/10",
       iconColor: "text-blue-500",
-    },
-    {
-      title: "Team Dashboard",
-      description: "Review your team's assessments",
-      icon: Users,
-      link: "/manager",
-      buttonText: "View Team",
-      buttonVariant: "outline" as const,
-      show: isManager || isAdmin,
-      gradient: "from-violet-500/10 to-purple-500/10",
-      iconColor: "text-violet-500",
     },
     {
       title: "Director Overview",

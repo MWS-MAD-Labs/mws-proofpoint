@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
 import { triggerNotification } from "@/lib/notifications";
 import type { NotificationType } from "@/lib/notifications/types";
+import { getAssessmentPermissions } from "@/features/assessments/server/permissions";
 
 // GET /api/assessments - List assessments based on user role
 export async function GET(request: Request) {
@@ -20,7 +21,10 @@ export async function GET(request: Request) {
 
     // Get single assessment
     if (assessmentId) {
-      const assessment = await queryOne(
+      const assessment = await queryOne<{
+        staff_id: string; manager_id: string | null; director_id: string | null; status: string; workflow_snapshot: unknown;
+        [key: string]: unknown;
+      }>(
         `SELECT a.*,
                 rt.name as template_name,
                 sp.full_name as staff_name,
@@ -40,7 +44,20 @@ export async function GET(request: Request) {
          WHERE a.id = $1`,
         [assessmentId],
       );
-      return NextResponse.json({ data: assessment });
+      if (!assessment) return NextResponse.json({ error: "Assessment not found" }, { status: 404 });
+      const roles = ((session.user as { roles?: string[] }).roles ?? []) as string[];
+      const permissions = getAssessmentPermissions(
+        { id: session.user.id, roles },
+        {
+          staffId: assessment.staff_id,
+          managerId: assessment.manager_id,
+          directorId: assessment.director_id,
+          status: assessment.status,
+          workflowSnapshot: assessment.workflow_snapshot,
+        },
+      );
+      if (!permissions.canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ data: { ...assessment, permissions } });
     }
 
     // Build query based on filters
@@ -133,14 +150,34 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { template_id, period, manager_id, director_id } = body;
+    const { template_id, period, manager_id, director_id, staff_id } = body;
+    if (!template_id || typeof period !== "string" || !period.trim()) {
+      return NextResponse.json({ error: "Template and review period are required" }, { status: 400 });
+    }
+    const roles = ((session.user as { roles?: string[] }).roles ?? []) as string[];
+    const isManagerLed = typeof staff_id === "string" && staff_id !== session.user.id;
+    if (isManagerLed && !roles.some((role) => role === "manager" || role === "admin")) {
+      return NextResponse.json({ error: "Only managers can initiate staff appraisals" }, { status: 403 });
+    }
+    const subjectId = isManagerLed ? staff_id : session.user.id;
+    const selectedTemplate = await queryOne<{ template_type: string }>(
+      "SELECT template_type FROM rubric_templates WHERE id = $1 AND is_active = true",
+      [template_id],
+    );
+    if (!selectedTemplate) return NextResponse.json({ error: "Rubric template not found" }, { status: 404 });
+    if (isManagerLed && selectedTemplate.template_type !== "STAFF_APPRAISAL") {
+      return NextResponse.json({ error: "Staff appraisals require a STAFF_APPRAISAL rubric" }, { status: 400 });
+    }
+    if (!isManagerLed && selectedTemplate.template_type === "STAFF_APPRAISAL") {
+      return NextResponse.json({ error: "Staff appraisal rubrics cannot be used for self-assessment" }, { status: 400 });
+    }
 
     // Check for existing non-finalized assessment for this period/template
     const existing = await queryOne(
       `SELECT id FROM assessments
              WHERE staff_id = $1 AND template_id = $2 AND period = $3
              AND status != 'acknowledged'`,
-      [session.user.id, template_id, period],
+      [subjectId, template_id, period],
     );
 
     if (existing) {
@@ -151,6 +188,39 @@ export async function POST(request: Request) {
         },
         { status: 400 },
       );
+    }
+
+    let workflow: { assignmentId: string; workflowId: string; name: string; steps: unknown } | null = null;
+    if (isManagerLed) {
+      const managerDepartment = await queryOne<{ department_id: string | null }>("SELECT department_id FROM profiles WHERE user_id = $1", [session.user.id]);
+      const subject = await queryOne<{ department_id: string | null; active: boolean }>(
+        `SELECT p.department_id, u.status = 'active' AS active FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = $1`,
+        [subjectId],
+      );
+      if (!subject?.active) return NextResponse.json({ error: "Selected staff member is not active" }, { status: 400 });
+      if (!roles.includes("admin") && (!managerDepartment?.department_id || managerDepartment.department_id !== subject.department_id)) {
+        return NextResponse.json({ error: "Managers can only appraise staff in their department" }, { status: 403 });
+      }
+      workflow = await queryOne(
+        `SELECT rwa.id AS "assignmentId", wd.id AS "workflowId", wd.name,
+                json_agg(json_build_object('stepOrder', ws.step_order, 'actorRole', ws.actor_role, 'actionType', ws.action_type, 'description', ws.description) ORDER BY ws.step_order) AS steps
+         FROM role_workflow_assignments rwa
+         JOIN workflow_definitions wd ON wd.id = rwa.workflow_id AND wd.type = 'KPI_APPRAISAL'
+         JOIN workflow_steps ws ON ws.workflow_id = wd.id
+         JOIN rubric_templates rt ON rt.id = rwa.rubric_id AND rt.template_type = 'STAFF_APPRAISAL'
+         JOIN department_roles dr ON dr.id = rwa.department_role_id AND dr.role = 'staff'
+         JOIN profiles p ON p.user_id = $1 AND (dr.department_id = p.department_id OR dr.department_id IS NULL)
+         JOIN user_roles ur ON ur.user_id = $1 AND ur.role = dr.role
+         WHERE rwa.rubric_id = $2 AND rwa.is_active = true
+         GROUP BY rwa.id, wd.id, wd.name
+         HAVING COUNT(*) = 3
+            AND bool_and((ws.step_order <> 1) OR (ws.actor_role = 'manager' AND ws.action_type = 'FILL_FORM'))
+            AND bool_and((ws.step_order <> 2) OR (ws.actor_role = 'director' AND ws.action_type IN ('REVIEW', 'APPROVE')))
+            AND bool_and((ws.step_order <> 3) OR (ws.actor_role = 'staff' AND ws.action_type = 'ACKNOWLEDGE'))
+         LIMIT 1`,
+        [subjectId, template_id],
+      );
+      if (!workflow) return NextResponse.json({ error: "No manager-led appraisal workflow is assigned to this staff member and rubric" }, { status: 403 });
     }
 
     // Auto-assign director if not provided
@@ -165,16 +235,25 @@ export async function POST(request: Request) {
       finalDirectorId = director?.user_id || null;
     }
 
+    if (isManagerLed && !finalDirectorId) {
+      return NextResponse.json({ error: "A director is required for a manager-led staff appraisal" }, { status: 400 });
+    }
+
     const newAssessment = await queryOne(
-      `INSERT INTO assessments (staff_id, template_id, period, manager_id, director_id, status)
-       VALUES ($1, $2, $3, $4, $5, 'draft')
+      `INSERT INTO assessments (staff_id, template_id, period, manager_id, director_id, status, workflow_id, workflow_assignment_id, workflow_snapshot, current_step_order, initiated_by_id)
+       VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, $8, $9, $10)
        RETURNING *`,
       [
-        session.user.id,
+        subjectId,
         template_id,
-        period,
-        manager_id ?? null,
+        period.trim(),
+        isManagerLed ? session.user.id : manager_id ?? null,
         finalDirectorId,
+        workflow?.workflowId ?? null,
+        workflow?.assignmentId ?? null,
+        workflow ? JSON.stringify({ name: workflow.name, steps: workflow.steps }) : null,
+        workflow ? 1 : null,
+        session.user.id,
       ],
     );
 
@@ -209,13 +288,23 @@ export async function PUT(request: Request) {
     const existingAssessment = await queryOne<{
       id: string;
       staff_id: string;
+      manager_id: string | null;
+      director_id: string | null;
       status: string;
-    }>("SELECT id, staff_id, status FROM assessments WHERE id = $1", [id]);
+      workflow_snapshot: unknown;
+    }>("SELECT id, staff_id, manager_id, director_id, status, workflow_snapshot FROM assessments WHERE id = $1", [id]);
 
     if (!existingAssessment) {
       return NextResponse.json(
         { error: "Assessment not found" },
         { status: 404 },
+      );
+    }
+
+    if (existingAssessment.workflow_snapshot) {
+      return NextResponse.json(
+        { error: "Workflow-aware appraisals must use their lifecycle action endpoint." },
+        { status: 409 },
       );
     }
 
@@ -371,8 +460,8 @@ export async function DELETE(request: Request) {
     }
 
     // Fetch assessment to check ownership and status
-    const assessment = await queryOne<{ staff_id: string; status: string }>(
-      "SELECT staff_id, status FROM assessments WHERE id = $1",
+    const assessment = await queryOne<{ staff_id: string; manager_id: string | null; status: string }>(
+      "SELECT staff_id, manager_id, status FROM assessments WHERE id = $1",
       [id],
     );
 
@@ -387,6 +476,7 @@ export async function DELETE(request: Request) {
       (session.user as { roles?: string[] }).roles ?? []
     ).includes("admin");
     const isOwner = assessment.staff_id === session.user.id;
+    const isAssignedManager = assessment.manager_id === session.user.id;
     const isDraft =
       assessment.status === "draft" ||
       assessment.status === "rejected" ||
@@ -395,11 +485,11 @@ export async function DELETE(request: Request) {
     // Permissions:
     // 1. Admin can delete anything
     // 2. Owner can delete if it's still a draft/rejected
-    if (!isAdmin && !(isOwner && isDraft)) {
+    if (!isAdmin && !((isOwner || isAssignedManager) && isDraft)) {
       return NextResponse.json(
         {
           error:
-            "You don't have permission to delete this assessment. Only drafts can be deleted by staff.",
+            "You don't have permission to delete this assessment. Only the subject or assigned manager can delete a draft."
         },
         { status: 403 },
       );

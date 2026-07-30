@@ -26,6 +26,7 @@ import {
   useAssessment,
   useTeamAssessments,
   calculateWeightedScore,
+  calculateStaffAppraisalScore,
   DomainData,
   StandardData,
   KPIData,
@@ -138,6 +139,18 @@ function ManagerContent() {
             Pending Review
           </Badge>
         );
+      case "pending_director_review":
+        return (
+          <Badge className="bg-amber-100 text-amber-700 border-amber-200">
+            Pending Director Review
+          </Badge>
+        );
+      case "director_reviewed":
+        return (
+          <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+            Awaiting Staff Acknowledgement
+          </Badge>
+        );
       case "manager_reviewed":
         return (
           <Badge className="bg-blue-100 text-blue-700 border-blue-200">
@@ -191,10 +204,17 @@ function ManagerContent() {
     window.open(url, "_blank");
   };
 
-  const staffWeightedScore = calculateWeightedScore(domains, "staff");
-  const managerWeightedScore = calculateWeightedScore(domains, "manager");
+  const usesDirectItemPercentages = assessment?.permissions?.isManagerLed ?? false;
+  const staffWeightedScore = usesDirectItemPercentages
+    ? calculateStaffAppraisalScore(domains, "staff")
+    : calculateWeightedScore(domains, "staff");
+  const managerWeightedScore = usesDirectItemPercentages
+    ? calculateStaffAppraisalScore(domains, "manager")
+    : calculateWeightedScore(domains, "manager");
   const isReadOnly =
     assessment?.status === "manager_reviewed" ||
+    assessment?.status === "pending_director_review" ||
+    assessment?.status === "director_reviewed" ||
     assessment?.status === "director_approved" ||
     assessment?.status === "acknowledged";
   const isApproved =
@@ -412,6 +432,7 @@ function ManagerContent() {
                 index={index}
                 onIndicatorChange={updateIndicator}
                 readonly={isReadOnly}
+                managerOnly={Boolean(assessment?.permissions?.isManagerLed)}
                 section={{
                   ...domain,
                   standards: domain.standards.map((s: StandardData) => ({
@@ -589,14 +610,16 @@ function ManagerContent() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold tracking-tight mb-2">
-            Team Assessments
+            Staff Appraisal
           </h1>
           <p className="text-muted-foreground">
-            Manage and review performance evaluations for your team.
+            Start and manage staff appraisals through director review and staff acknowledgement.
           </p>
         </div>
 
-        <div className="relative w-full md:w-72">
+        <div className="flex w-full md:w-auto gap-3 items-center">
+          <Button onClick={() => router.push("/manager/new")}>Start Staff Appraisal</Button>
+          <div className="relative w-full md:w-72">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search staff or period..."
@@ -604,6 +627,7 @@ function ManagerContent() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          </div>
         </div>
       </div>
 
@@ -613,10 +637,10 @@ function ManagerContent() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5 text-violet-500" />
-            Active Reviews
+            Active Staff Appraisals
           </CardTitle>
           <CardDescription>
-            Assessments waiting for your review or currently in progress
+            Draft appraisals and records awaiting director review or staff acknowledgement
           </CardDescription>
         </CardHeader>
         <CardContent>

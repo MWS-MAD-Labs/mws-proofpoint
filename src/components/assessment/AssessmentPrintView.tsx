@@ -89,7 +89,9 @@ function getPerformanceTier(score: number) {
 
 export function AssessmentPrintView({ assessment, domains, staffName }: AssessmentPrintViewProps) {
     const calculatedScore = calculateWeightedScore(domains, 'manager');
-    const managerScore = calculatedScore !== null ? calculatedScore : (Number(assessment.final_score) || 0);
+    const managerScore = assessment.final_score !== null && assessment.final_score !== undefined
+        ? Number(assessment.final_score)
+        : (calculatedScore ?? 0);
     const tier = getPerformanceTier(managerScore);
 
     // Calculate domain averages

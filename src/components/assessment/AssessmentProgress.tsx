@@ -7,6 +7,7 @@ interface AssessmentProgressProps {
 }
 
 export function AssessmentProgress({ status, className }: AssessmentProgressProps) {
+  const isManagerLed = ['pending_director_review', 'director_reviewed'].includes(status);
   const isReturned = status === 'returned';
 
   // Determine step number based on status
@@ -15,7 +16,9 @@ export function AssessmentProgress({ status, className }: AssessmentProgressProp
       case 'draft': return 1;
       case 'returned': return 1; // Goes back to step 1
       case 'self_submitted': return 2;
+      case 'pending_director_review': return 2;
       case 'manager_reviewed': return 3;
+      case 'director_reviewed': return 3;
       case 'director_approved': return 4;
       case 'admin_reviewed': return 4;
       case 'pending_release': return 4;
@@ -25,13 +28,20 @@ export function AssessmentProgress({ status, className }: AssessmentProgressProp
   };
 
   const currentStep = getStep(status);
-  const steps = [
-    { id: 1, name: isReturned ? 'Returned' : 'Drafting' },
-    { id: 2, name: 'Submission' },
-    { id: 3, name: 'Review' },
-    { id: 4, name: 'Approval' },
-    { id: 5, name: 'Finalized' }
-  ];
+  const steps = isManagerLed
+    ? [
+        { id: 1, name: isReturned ? 'Returned' : 'Manager Draft' },
+        { id: 2, name: 'Director Review' },
+        { id: 3, name: 'Staff Acknowledgement' },
+        { id: 4, name: 'Complete' },
+      ]
+    : [
+        { id: 1, name: isReturned ? 'Returned' : 'Drafting' },
+        { id: 2, name: 'Submission' },
+        { id: 3, name: 'Review' },
+        { id: 4, name: 'Approval' },
+        { id: 5, name: 'Finalized' },
+      ];
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -39,7 +49,7 @@ export function AssessmentProgress({ status, className }: AssessmentProgressProp
         {steps.map((step) => (
           <div key={step.id} className="flex flex-col items-center gap-2 flex-1 relative">
             {/* Connecting line */}
-            {step.id < 5 && (
+            {step.id < steps.length && (
               <div className={cn(
                 "absolute left-1/2 top-4 w-full h-0.5 -z-10",
                 currentStep > step.id ? "bg-primary" : "bg-muted"

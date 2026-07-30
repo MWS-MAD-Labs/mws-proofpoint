@@ -41,9 +41,10 @@ interface ReviewComparisonSectionProps {
   readonly?: boolean;
   reviewerLabel?: string;
   index?: number;
+  managerOnly?: boolean;
 }
 
-export function ReviewComparisonSection({ section, onIndicatorChange, readonly, reviewerLabel = "Manager", index }: ReviewComparisonSectionProps) {
+export function ReviewComparisonSection({ section, onIndicatorChange, readonly, reviewerLabel = "Manager", index, managerOnly = false }: ReviewComparisonSectionProps) {
   const staffScore = calculateDomainReviewScore(section, 'staff');
   const managerScore = calculateDomainReviewScore(section, 'manager');
 
@@ -81,7 +82,7 @@ export function ReviewComparisonSection({ section, onIndicatorChange, readonly, 
 
         <div className="flex items-center gap-6 mr-4">
           {/* Staff Score */}
-          {staffScore !== null && (
+          {!managerOnly && staffScore !== null && (
             <div className="text-right hidden sm:block">
               <div className={cn(
                 "text-xl font-mono font-bold",
@@ -131,6 +132,7 @@ export function ReviewComparisonSection({ section, onIndicatorChange, readonly, 
                     onEvidenceChange={(evidence) => onIndicatorChange?.(indicator.id, { managerEvidence: evidence })}
                     readonly={readonly}
                     reviewerLabel={`${reviewerLabel} Review`}
+                    managerOnly={managerOnly}
                   />
                 ))}
               </div>

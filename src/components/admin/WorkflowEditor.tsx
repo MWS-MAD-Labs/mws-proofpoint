@@ -537,7 +537,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                                         return r.templateType === 'CLASSROOM_OBSERVATION' || r.templateType === 'GENERIC';
                                       }
                                       if (a.workflow.type === 'KPI_APPRAISAL') {
-                                        return r.templateType === 'KPI_APPRAISAL' || r.templateType === 'GENERIC';
+                                        return r.templateType === 'KPI_APPRAISAL' || r.templateType === 'STAFF_APPRAISAL' || r.templateType === 'GENERIC';
                                       }
                                       return r.templateType === 'CLASSROOM_OBSERVATION' || r.templateType === 'GENERIC';
                                     })

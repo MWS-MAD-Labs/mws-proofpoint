@@ -16,12 +16,8 @@ enum AppRole {
   manager
   director
   supervisor
-}
 
-enum UserStatus {
-  active
-  suspended
-  deleted
+  @@map("app_role")
 }
 
 enum AssessmentStatus {
@@ -33,6 +29,8 @@ enum AssessmentStatus {
   acknowledged
   rejected
   returned
+  pending_director_review
+  director_reviewed
 }
 
 enum QuestionStatus {
@@ -50,6 +48,7 @@ enum WorkflowStepType {
 
 enum TemplateType {
   KPI_APPRAISAL
+  STAFF_APPRAISAL
   CLASSROOM_OBSERVATION
   GENERIC
 }
@@ -113,7 +112,7 @@ model User {
   email        String     @unique @db.Text
   passwordHash String     @map("password_hash") @db.Text
   emailVerified Boolean  @default(false) @map("email_verified")
-  status       UserStatus @default(active)
+  status       String     @default("active") @db.Text
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @default(now()) @map("updated_at")
 
@@ -124,6 +123,8 @@ model User {
   managerAssessments Assessment[]    @relation("ManagerAssessments")
   directorAssessments Assessment[]   @relation("DirectorAssessments")
   returnedAssessments Assessment[]   @relation("ReturnedAssessments")
+  initiatedAssessments Assessment[] @relation("InitiatedAssessments")
+  assessmentUpdates AssessmentUpdate[] @relation("AssessmentUpdateAuthor")
   askedQuestions     AssessmentQuestion[] @relation("AskedQuestions")
   answeredQuestions  AssessmentQuestion[] @relation("AnsweredQuestions")
   observations       Observation[] @relation("StaffObservations")
@@ -283,6 +284,7 @@ model Kpi {
   rubric3           String   @map("rubric_3") @db.Text
   rubric2           String   @map("rubric_2") @db.Text
   rubric1           String   @map("rubric_1") @db.Text
+  performanceWeight Decimal  @default(100) @map("performance_weight") @db.Decimal(5, 2)
   createdAt         DateTime @default(now()) @map("created_at")
 
   standard KpiStandard @relation(fields: [standardId], references: [id], onDelete: Cascade)
@@ -316,6 +318,15 @@ model Assessment {
   staffSubmittedAt    DateTime?         @map("staff_submitted_at")
   managerReviewedAt   DateTime?         @map("manager_reviewed_at")
   directorApprovedAt  DateTime?         @map("director_approved_at")
+  managerSubmittedAt  DateTime?         @map("manager_submitted_at")
+  directorReviewedAt  DateTime?         @map("director_reviewed_at")
+  acknowledgedAt      DateTime?         @map("acknowledged_at")
+  completedAt         DateTime?         @map("completed_at")
+  workflowId          String?           @map("workflow_id")
+  workflowAssignmentId String?          @map("workflow_assignment_id")
+  workflowSnapshot    Json?             @map("workflow_snapshot")
+  currentStepOrder    Int?              @map("current_step_order")
+  initiatedById       String?           @map("initiated_by_id")
   staffNotes          String?           @map("staff_notes") @db.Text
   createdAt           DateTime          @default(now()) @map("created_at")
   updatedAt           DateTime          @default(now()) @map("updated_at")
@@ -325,6 +336,10 @@ model Assessment {
   director     User? @relation("DirectorAssessments", fields: [directorId], references: [id], onDelete: SetNull)
   template     RubricTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   returnedBy   User? @relation("ReturnedAssessments", fields: [returnedById], references: [id], onDelete: SetNull)
+  workflow     WorkflowDefinition? @relation(fields: [workflowId], references: [id], onDelete: SetNull)
+  workflowAssignment RoleWorkflowAssignment? @relation("AssessmentWorkflowAssignment", fields: [workflowAssignmentId], references: [id], onDelete: SetNull)
+  initiatedBy  User? @relation("InitiatedAssessments", fields: [initiatedById], references: [id], onDelete: SetNull)
+  updates      AssessmentUpdate[]
   questions    AssessmentQuestion[]
   notifications Notification[]
 
@@ -334,6 +349,25 @@ model Assessment {
   @@index([status])
   @@index([returnedById])
   @@map("assessments")
+}
+
+model AssessmentUpdate {
+  id            String   @id @default(uuid())
+  assessmentId  String   @map("assessment_id")
+  updatedById   String?  @map("updated_by_id")
+  stepOrder     Int?     @map("step_order")
+  statusFrom    String?  @map("status_from") @db.Text
+  statusTo      String   @map("status_to") @db.Text
+  eventType     String   @map("event_type") @db.Text
+  notes         String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  updatedBy User? @relation("AssessmentUpdateAuthor", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([assessmentId])
+  @@index([updatedById])
+  @@map("assessment_updates")
 }
 
 model AssessmentQuestion {
@@ -418,6 +452,7 @@ model WorkflowDefinition {
 
   steps       WorkflowStep[]
   assignments RoleWorkflowAssignment[]
+  assessments Assessment[]
 
   @@map("workflow_definitions")
 }
@@ -447,6 +482,7 @@ model RoleWorkflowAssignment {
   departmentRole DepartmentRole     @relation(fields: [departmentRoleId], references: [id], onDelete: Cascade)
   workflow       WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Restrict)
   rubric         RubricTemplate?    @relation(fields: [rubricId], references: [id], onDelete: SetNull)
+  assessments    Assessment[] @relation("AssessmentWorkflowAssignment")
 
   @@index([departmentRoleId])
   @@index([workflowId])

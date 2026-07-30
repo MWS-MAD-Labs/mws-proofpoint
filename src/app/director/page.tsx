@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   useAssessment,
   calculateWeightedScore,
+  calculateStaffAppraisalScore,
   DomainData,
   StandardData,
   KPIData,
@@ -184,7 +185,9 @@ function DirectorContent() {
   // Moved to top level to comply with Rules of Hooks
   const managerScoreForEffect =
     domains && domains.length > 0
-      ? calculateWeightedScore(domains, "manager")
+      ? assessment?.permissions?.isManagerLed
+        ? calculateStaffAppraisalScore(domains, "manager")
+        : calculateWeightedScore(domains, "manager")
       : null;
 
   useEffect(() => {
@@ -458,8 +461,13 @@ function DirectorContent() {
       );
     }
 
-    const staffScore = calculateWeightedScore(domains, "staff");
-    const managerScore = calculateWeightedScore(domains, "manager");
+    const usesDirectItemPercentages = assessment?.permissions?.isManagerLed ?? false;
+    const staffScore = usesDirectItemPercentages
+      ? calculateStaffAppraisalScore(domains, "staff")
+      : calculateWeightedScore(domains, "staff");
+    const managerScore = usesDirectItemPercentages
+      ? calculateStaffAppraisalScore(domains, "manager")
+      : calculateWeightedScore(domains, "manager");
     const isApproved =
       assessment?.status === "director_approved" ||
       assessment?.status === "acknowledged";
@@ -467,10 +475,10 @@ function DirectorContent() {
     // Director can edit in two scenarios:
     // 1. status is 'manager_reviewed' (manager already reviewed, director just approves) - approval only
     // 2. status is 'self_submitted' AND workflow is 'review_and_approval' (director does both review and approval)
-    const isPendingDirectorReview = assessment?.status === "manager_reviewed";
+    const isPendingDirectorReview = assessment?.status === "manager_reviewed" || assessment?.status === "pending_director_review";
     const isDirectorReviewMode =
       assessment?.status === "self_submitted" && isDirectorReviewAndApproval;
-    const canEdit = isPendingDirectorReview || isDirectorReviewMode;
+    const canEdit = isPendingDirectorReview || isDirectorReviewMode || Boolean(assessment?.permissions?.canDirectorReview);
     const isReadOnly = !canEdit;
 
     return (
@@ -691,6 +699,7 @@ function DirectorContent() {
                   index={index}
                   onIndicatorChange={isReadOnly ? undefined : updateKPI}
                   readonly={isReadOnly}
+                  managerOnly={Boolean(assessment?.permissions?.isManagerLed)}
                   reviewerLabel={
                     isDirectorReviewAndApproval ? "Director" : "Manager"
                   }

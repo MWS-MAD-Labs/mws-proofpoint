@@ -133,6 +133,10 @@ class ApiClient {
     });
   }
 
+  async performAssessmentAction(id: string, data: Record<string, unknown>): Promise<ApiResponse<unknown>> {
+    return this.request(`/assessments/${id}/action`, { method: "PATCH", body: JSON.stringify(data) });
+  }
+
   async deleteAssessment(id: string): Promise<ApiResponse<unknown>> {
     return this.request(`/assessments?id=${id}`, {
       method: "DELETE",
@@ -140,7 +144,7 @@ class ApiClient {
   }
 
   // Rubrics
-  async getRubrics(templateType?: "all" | "CLASSROOM_OBSERVATION" | "KPI_APPRAISAL" | "GENERIC" | "OBSERVATION_AND_GENERIC"): Promise<ApiResponse<unknown[]>> {
+  async getRubrics(templateType?: "all" | "CLASSROOM_OBSERVATION" | "KPI_APPRAISAL" | "STAFF_APPRAISAL" | "GENERIC" | "OBSERVATION_AND_GENERIC"): Promise<ApiResponse<unknown[]>> {
     let qs = "";
     if (templateType === "OBSERVATION_AND_GENERIC") {
       qs = "?templateType=CLASSROOM_OBSERVATION,GENERIC";
@@ -159,7 +163,7 @@ class ApiClient {
     description?: string;
     department_id?: string;
     is_global?: boolean;
-    template_type?: 'KPI_APPRAISAL' | 'CLASSROOM_OBSERVATION' | 'GENERIC';
+    template_type?: 'KPI_APPRAISAL' | 'STAFF_APPRAISAL' | 'CLASSROOM_OBSERVATION' | 'GENERIC';
   }): Promise<ApiResponse<unknown>> {
     return this.request("/rubrics", {
       method: "POST",

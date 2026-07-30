@@ -165,12 +165,13 @@ export async function POST(req: Request) {
       if (
         workflow.type === "KPI_APPRAISAL" &&
         rubric.template_type !== "KPI_APPRAISAL" &&
+        rubric.template_type !== "STAFF_APPRAISAL" &&
         rubric.template_type !== "GENERIC"
       ) {
         return NextResponse.json(
           {
             error:
-              "KPI Appraisal workflow only allows KPI_APPRAISAL or GENERIC rubric templates.",
+              "KPI Appraisal workflow only allows KPI_APPRAISAL, STAFF_APPRAISAL, or GENERIC rubric templates.",
           },
           { status: 400 },
         );
@@ -284,12 +285,13 @@ export async function PUT(req: Request) {
       if (
         existing.wf_type === "KPI_APPRAISAL" &&
         rubric.template_type !== "KPI_APPRAISAL" &&
+        rubric.template_type !== "STAFF_APPRAISAL" &&
         rubric.template_type !== "GENERIC"
       ) {
         return NextResponse.json(
           {
             error:
-              "KPI Appraisal workflow only allows KPI_APPRAISAL or GENERIC rubric templates.",
+              "KPI Appraisal workflow only allows KPI_APPRAISAL, STAFF_APPRAISAL, or GENERIC rubric templates.",
           },
           { status: 400 },
         );

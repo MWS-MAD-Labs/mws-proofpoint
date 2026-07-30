@@ -101,9 +101,9 @@ export async function GET(request: Request) {
     } else if (templateType === "CLASSROOM_OBSERVATION") {
       whereClause = `WHERE rt.template_type = $1::"TemplateType" AND rt.is_active = true`;
       queryParams = ["CLASSROOM_OBSERVATION"];
-    } else if (templateType === "KPI_APPRAISAL") {
+    } else if (templateType === "KPI_APPRAISAL" || templateType === "STAFF_APPRAISAL") {
       whereClause = `WHERE rt.template_type = $1::"TemplateType" AND rt.is_active = true`;
-      queryParams = ["KPI_APPRAISAL"];
+      queryParams = [templateType];
     } else if (templateType === "GENERIC") {
       whereClause = `WHERE rt.template_type = $1::"TemplateType" AND rt.is_active = true`;
       queryParams = ["GENERIC"];
@@ -145,6 +145,7 @@ export async function POST(request: Request) {
     const { name, description, department_id, is_global, template_type } = body;
     const validTemplateTypes = [
       "KPI_APPRAISAL",
+      "STAFF_APPRAISAL",
       "CLASSROOM_OBSERVATION",
       "GENERIC",
     ];
@@ -189,6 +190,7 @@ export async function PATCH(request: Request) {
       body;
     const validTemplateTypes = [
       "KPI_APPRAISAL",
+      "STAFF_APPRAISAL",
       "CLASSROOM_OBSERVATION",
       "GENERIC",
     ];
