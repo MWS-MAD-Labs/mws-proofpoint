@@ -7,17 +7,17 @@ export const OBSERVATION_STATUS: Record<
   draft: {
     label: "Draft",
     description: "Manager is completing the observation",
-    className: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+    className: "border-warning/30 bg-warning/10 text-warning-foreground dark:text-warning-foreground",
   },
   submitted: {
     label: "Awaiting acknowledgement",
     description: "Staff review is required",
-    className: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+    className: "border-primary/30 bg-primary/10 text-primary dark:text-primary",
   },
   acknowledged: {
     label: "Completed",
     description: "Staff has acknowledged the observation",
-    className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    className: "border-success/30 bg-success/10 text-success dark:text-success",
   },
 };
 

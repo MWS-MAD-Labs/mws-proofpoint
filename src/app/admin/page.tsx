@@ -131,13 +131,13 @@ function AdminContent() {
 
     const getDeptColor = (name: string) => {
         const colors = [
-            'border-slate-200 bg-slate-50/50 text-slate-700 hover:border-slate-300',
-            'border-stone-200 bg-stone-50/50 text-stone-700 hover:border-stone-300',
-            'border-zinc-200 bg-zinc-50/50 text-zinc-700 hover:border-zinc-300',
-            'border-sky-200 bg-sky-50/50 text-sky-700 hover:border-sky-300',
-            'border-indigo-200 bg-indigo-50/50 text-indigo-700 hover:border-indigo-300',
-            'border-amber-200 bg-amber-50/50 text-amber-700 hover:border-amber-300',
-            'border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:border-emerald-300',
+            'border-border bg-muted/50 text-foreground hover:border-border',
+            'border-border bg-muted/50 text-foreground hover:border-border',
+            'border-border bg-muted/50 text-foreground hover:border-border',
+            'border-info/40 bg-info/50 text-info-foreground hover:border-info/40',
+            'border-primary/40 bg-primary/50 text-primary hover:border-primary/40',
+            'border-warning/40 bg-warning/50 text-warning-foreground hover:border-warning/40',
+            'border-success/40 bg-success/50 text-success hover:border-success/40',
         ];
         // Simple hash to pick a consistent color
         let hash = 0;
@@ -242,10 +242,10 @@ function AdminContent() {
                         key={role}
                         variant={role === 'admin' ? 'default' : 'secondary'}
                         className={
-                            role === 'admin' ? 'bg-rose-100 text-rose-700 border-rose-200 hover:bg-rose-100' :
-                                role === 'director' ? 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100' :
-                                    role === 'manager' ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100' :
-                                        'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-50'
+                            role === 'admin' ? 'bg-destructive-soft text-destructive border-destructive/40 hover:bg-destructive-soft' :
+                                role === 'director' ? 'bg-success-soft text-success border-success/40 hover:bg-success-soft' :
+                                    role === 'manager' ? 'bg-warning-soft text-warning-foreground border-warning/40 hover:bg-warning-soft' :
+                                        'bg-primary-soft text-primary border-primary/40 hover:bg-primary-soft'
                         }
                     >
                         {role.charAt(0).toUpperCase() + role.slice(1)}
@@ -279,10 +279,10 @@ function AdminContent() {
 
     const getRoleBadgeStyle = (role: string) => {
         switch (role) {
-            case 'director': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-            case 'manager': return 'bg-amber-100 text-amber-700 border-amber-200';
-            case 'supervisor': return 'bg-purple-100 text-purple-700 border-purple-200';
-            case 'staff': return 'bg-blue-50 text-blue-600 border-blue-100';
+            case 'director': return 'bg-success-soft text-success border-success/40';
+            case 'manager': return 'bg-warning-soft text-warning-foreground border-warning/40';
+            case 'supervisor': return 'bg-primary-soft text-primary border-primary/40';
+            case 'staff': return 'bg-primary-soft text-primary border-primary/40';
             default: return 'bg-muted text-muted-foreground';
         }
     };
@@ -343,9 +343,9 @@ function AdminContent() {
                                 </Badge>
 
                                 <div className="flex gap-1 ml-2">
-                                    {mgrCount > 0 && <Badge variant="outline" className="text-[9px] bg-amber-100/50 text-amber-700 border-amber-200">M: {mgrCount}</Badge>}
-                                    {supCount > 0 && <Badge variant="outline" className="text-[9px] bg-purple-100/50 text-purple-700 border-purple-200">S: {supCount}</Badge>}
-                                    {staffCount > 0 && <Badge variant="outline" className="text-[9px] bg-blue-100/50 text-blue-700 border-blue-200">E: {staffCount}</Badge>}
+                                    {mgrCount > 0 && <Badge variant="outline" className="text-[9px] bg-warning/50 text-warning-foreground border-warning/40">M: {mgrCount}</Badge>}
+                                    {supCount > 0 && <Badge variant="outline" className="text-[9px] bg-primary/50 text-primary border-primary/40">S: {supCount}</Badge>}
+                                    {staffCount > 0 && <Badge variant="outline" className="text-[9px] bg-primary/50 text-primary border-primary/40">E: {staffCount}</Badge>}
                                 </div>
                             </div>
 
@@ -435,7 +435,7 @@ function AdminContent() {
         <div className="max-w-7xl mx-auto py-8">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
                 <div className="space-y-1">
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/10 text-rose-500 w-fit text-xs font-bold uppercase tracking-wider mb-2">
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-destructive/10 text-destructive w-fit text-xs font-bold uppercase tracking-wider mb-2">
                         <Shield className="h-3 w-3" />
                         Control Center
                     </div>
@@ -513,12 +513,12 @@ function AdminContent() {
                 {/* Users Tab */}
                 <TabsContent value="users">
                     <Card className="glass-panel border-border/30 overflow-hidden">
-                        <div className="h-1 bg-gradient-to-r from-rose-500/30 via-rose-500 to-rose-500/30" />
+                        <div className="h-1 bg-gradient-to-r from-destructive/30 via-destructive to-destructive/30" />
                         <CardHeader>
                             <div className="flex items-center justify-between">
                                 <div>
                                     <CardTitle className="flex items-center gap-2">
-                                        <Settings2 className="h-5 w-5 text-rose-500" />
+                                        <Settings2 className="h-5 w-5 text-destructive" />
                                         User Management
                                     </CardTitle>
                                     <CardDescription>Manage user accounts, roles, and department assignments</CardDescription>
@@ -651,12 +651,12 @@ function AdminContent() {
                 {/* Departments Tab */}
                 <TabsContent value="departments">
                     <Card className="glass-panel border-border/30 overflow-hidden">
-                        <div className="h-1 bg-gradient-to-r from-emerald-500/30 via-emerald-500 to-emerald-500/30" />
+                        <div className="h-1 bg-gradient-to-r from-success/30 via-success to-success/30" />
                         <CardHeader>
                             <div className="flex items-center justify-between">
                                 <div>
                                     <CardTitle className="flex items-center gap-2">
-                                        <FolderTree className="h-5 w-5 text-emerald-500" />
+                                        <FolderTree className="h-5 w-5 text-success" />
                                         Department Structure
                                     </CardTitle>
                                     <CardDescription>Manage organizational hierarchy</CardDescription>
@@ -688,11 +688,11 @@ function AdminContent() {
                             ) : (
                                 <div className="space-y-6">
                                     {/* Global Level - Director */}
-                                    <div className="p-4 rounded-xl border-2 border-emerald-500/30 bg-emerald-500/5">
+                                    <div className="p-4 rounded-xl border-2 border-success/30 bg-success/5">
                                         <div className="flex items-center gap-2 mb-3">
-                                            <ShieldAlert className="h-5 w-5 text-emerald-500" />
+                                            <ShieldAlert className="h-5 w-5 text-success" />
                                             <span className="font-bold text-lg">Global Level</span>
-                                            <Badge variant="outline" className="text-[10px] uppercase bg-emerald-100 text-emerald-700 border-emerald-200">
+                                            <Badge variant="outline" className="text-[10px] uppercase bg-success-soft text-success border-success/40">
                                                 Organization Wide
                                             </Badge>
                                         </div>
@@ -703,7 +703,7 @@ function AdminContent() {
                                             {/* Director */}
                                             <div className="p-3 rounded-lg bg-background border">
                                                 <div className="mb-2 flex items-center justify-between gap-2">
-                                                    <Badge variant="outline" className="text-[10px] uppercase bg-emerald-100 text-emerald-700 border-emerald-200">
+                                                    <Badge variant="outline" className="text-[10px] uppercase bg-success-soft text-success border-success/40">
                                                         Director
                                                     </Badge>
                                                     <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => manageRoleAssignment(null, 'director')}>
@@ -723,7 +723,7 @@ function AdminContent() {
                                                             }}
                                                             className="flex items-center gap-2 text-xs w-full hover:bg-black/5 p-1 rounded transition-colors text-left"
                                                         >
-                                                            <div className="w-5 h-5 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600 text-[10px] font-bold shrink-0">
+                                                            <div className="w-5 h-5 rounded-full bg-success/10 flex items-center justify-center text-success text-[10px] font-bold shrink-0">
                                                                 {assignee.full_name?.charAt(0) || '?'}
                                                             </div>
                                                             <span className="truncate flex-1 font-medium">{assignee.full_name || assignee.email}</span>
@@ -737,7 +737,7 @@ function AdminContent() {
                                             {/* Admin */}
                                             <div className="p-3 rounded-lg bg-background border">
                                                 <div className="mb-2 flex items-center justify-between gap-2">
-                                                    <Badge variant="outline" className="text-[10px] uppercase bg-rose-100 text-rose-700 border-rose-200">
+                                                    <Badge variant="outline" className="text-[10px] uppercase bg-destructive-soft text-destructive border-destructive/40">
                                                         Admin
                                                     </Badge>
                                                     <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => manageRoleAssignment(null, 'admin')}>
@@ -757,7 +757,7 @@ function AdminContent() {
                                                             }}
                                                             className="flex items-center gap-2 text-xs w-full hover:bg-black/5 p-1 rounded transition-colors text-left"
                                                         >
-                                                            <div className="w-5 h-5 rounded-full bg-rose-500/10 flex items-center justify-center text-rose-600 text-[10px] font-bold shrink-0">
+                                                            <div className="w-5 h-5 rounded-full bg-destructive/10 flex items-center justify-center text-destructive text-[10px] font-bold shrink-0">
                                                                 {assignee.full_name?.charAt(0) || '?'}
                                                             </div>
                                                             <span className="truncate flex-1 font-medium">{assignee.full_name || assignee.email}</span>

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  Activity,
   User,
   LogOut,
   ClipboardList,
@@ -20,6 +19,7 @@ import {
   Menu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ProofPointMark } from "@/components/ProofPointMark";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -120,21 +120,16 @@ export function Header({ className }: HeaderProps) {
   return (
     <header
       className={cn(
-        "h-16 border-b border-border/50 glass-panel-strong sticky top-0 z-50",
+        "sticky top-0 z-50 h-16 border-b border-border bg-card/95 shadow-xs supports-[backdrop-filter]:bg-card/90 supports-[backdrop-filter]:backdrop-blur-md",
         className,
       )}
     >
       <div className="container h-full flex items-center justify-between">
         {/* Logo */}
         <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="relative">
-            <div className="absolute inset-0 bg-primary rounded-xl blur-lg opacity-40 group-hover:opacity-60 transition-opacity" />
-            <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-primary glow-primary group-hover:scale-105 transition-transform">
-              <Activity className="h-5 w-5 text-primary-foreground" />
-            </div>
-          </div>
+          <ProofPointMark className="h-10 w-10 transition-transform duration-200 group-hover:-translate-y-0.5" />
           <div>
-            <h1 className="text-lg font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+            <h1 className="font-heading text-lg font-extrabold tracking-tight text-foreground transition-colors group-hover:text-primary">
               ProofPoint
             </h1>
             <p className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground font-medium">
@@ -228,7 +223,7 @@ export function Header({ className }: HeaderProps) {
             className="w-10 h-10 rounded-xl bg-muted/30 border border-border/30 hover:bg-muted/50 hover:border-primary/30 transition-all duration-300"
           >
             {isDark ? (
-              <Sun className="h-5 w-5 text-amber-500 transition-transform hover:rotate-12" />
+              <Sun className="h-5 w-5 text-warning transition-transform hover:rotate-12" />
             ) : (
               <Moon className="h-5 w-5 text-primary transition-transform hover:-rotate-12" />
             )}

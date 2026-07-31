@@ -181,7 +181,7 @@ export function DepartmentRoleAssignmentDialog({
                         {user.full_name || user.email}
                       </p>
                       {user.status !== "active" && (
-                        <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium uppercase text-amber-700">
+                        <span className="shrink-0 rounded-full border border-warning/40 bg-warning-soft px-2 py-0.5 text-[10px] font-medium uppercase text-warning-foreground">
                           {user.status}
                         </span>
                       )}

@@ -135,31 +135,31 @@ function ManagerContent() {
         );
       case "self_submitted":
         return (
-          <Badge className="bg-amber-100 text-amber-700 border-amber-200">
+          <Badge className="bg-warning-soft text-warning-foreground border-warning/40">
             Pending Review
           </Badge>
         );
       case "pending_director_review":
         return (
-          <Badge className="bg-amber-100 text-amber-700 border-amber-200">
+          <Badge className="bg-warning-soft text-warning-foreground border-warning/40">
             Pending Director Review
           </Badge>
         );
       case "director_reviewed":
         return (
-          <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+          <Badge className="bg-primary-soft text-primary border-primary/40">
             Awaiting Staff Acknowledgement
           </Badge>
         );
       case "manager_reviewed":
         return (
-          <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+          <Badge className="bg-primary-soft text-primary border-primary/40">
             Reviewed
           </Badge>
         );
       case "director_approved":
         return (
-          <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
+          <Badge className="bg-success-soft text-success border-success/40">
             Approved
           </Badge>
         );
@@ -225,8 +225,8 @@ function ManagerContent() {
     <div className="max-w-7xl mx-auto py-8 pb-32">
       {/* Status Alert Bar */}
       {isApproved && (
-        <Alert className="mb-8 border-2 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500 bg-emerald-50 border-emerald-500/30">
-          <ShieldCheck className="h-5 w-5 text-emerald-600" />
+        <Alert className="mb-8 border-2 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500 bg-success-soft border-success/30">
+          <ShieldCheck className="h-5 w-5 text-success" />
           <AlertTitle className="font-bold text-lg mb-1">
             {assessment?.status === "acknowledged"
               ? "Cycle Complete"
@@ -295,7 +295,7 @@ function ManagerContent() {
               <AlertDialogTrigger asChild>
                 <Button
                   variant="outline"
-                  className="h-12 px-6 rounded-xl border-amber-500/30 text-amber-600 hover:bg-amber-500/10 hover:border-amber-500/50 transition-all"
+                  className="h-12 px-6 rounded-xl border-warning/30 text-warning-foreground hover:bg-warning/10 hover:border-warning/50 transition-all"
                   disabled={saving}
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
@@ -304,7 +304,7 @@ function ManagerContent() {
               </AlertDialogTrigger>
               <AlertDialogContent className="max-w-lg">
                 <AlertDialogHeader>
-                  <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
+                  <AlertDialogTitle className="flex items-center gap-2 text-warning-foreground">
                     <RotateCcw className="h-5 w-5" />
                     Return Assessment for Revision
                   </AlertDialogTitle>
@@ -342,7 +342,7 @@ function ManagerContent() {
                     Cancel
                   </AlertDialogCancel>
                   <AlertDialogAction
-                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                    className="bg-warning hover:bg-warning text-white"
                     disabled={!returnFeedbackInput.trim() || saving}
                     onClick={async (e) => {
                       e.preventDefault();
@@ -506,7 +506,7 @@ function ManagerContent() {
                   {assessment?.status === "acknowledged" &&
                     staffAcknowledgement && (
                       <div className="relative">
-                        <div className="absolute top-0 left-0 w-1 h-full bg-blue-500/20 rounded-full" />
+                        <div className="absolute top-0 left-0 w-1 h-full bg-primary/20 rounded-full" />
                         <div className="pl-6 py-2">
                           <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-2">
                             Staff Acknowledgment & Feedback
@@ -538,7 +538,7 @@ function ManagerContent() {
                     (assessment?.status === "director_approved" ||
                       assessment?.status === "acknowledged") && (
                       <div className="relative">
-                        <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500/20 rounded-full" />
+                        <div className="absolute top-0 left-0 w-1 h-full bg-success/20 rounded-full" />
                         <div className="pl-6 py-2">
                           <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-2">
                             Director Feedback
@@ -662,10 +662,10 @@ function ManagerContent() {
 
       {/* Active Reviews Section */}
       <Card className="glass-panel border-border/30 overflow-hidden">
-        <div className="h-1 bg-gradient-to-r from-violet-500/30 via-violet-500 to-violet-500/30" />
+        <div className="h-1 bg-gradient-to-r from-primary/30 via-primary to-primary/30" />
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-violet-500" />
+            <Users className="h-5 w-5 text-primary" />
             Active Staff Appraisals
           </CardTitle>
           <CardDescription>
@@ -694,14 +694,14 @@ function ManagerContent() {
                 <div
                   key={a.id}
                   onClick={() => router.push(`/manager?id=${a.id}`)}
-                  className="group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl bg-background/50 border border-border/30 hover:border-violet-500/50 hover:bg-violet-500/[0.02] transition-all cursor-pointer"
+                  className="group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl bg-background/50 border border-border/30 hover:border-primary/50 hover:bg-primary/[0.02] transition-all cursor-pointer"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <FileText className="h-6 w-6 text-violet-600" />
+                    <div className="w-12 h-12 rounded-xl bg-primary-soft flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <FileText className="h-6 w-6 text-primary" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-foreground group-hover:text-violet-600 transition-colors">
+                      <h4 className="font-bold text-foreground group-hover:text-primary transition-colors">
                         {a.staff_name}
                       </h4>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -721,7 +721,7 @@ function ManagerContent() {
                       </p>
                       <div className="mt-1">{getStatusBadge(a.status)}</div>
                     </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-violet-500 group-hover:translate-x-1 transition-all" />
+                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
                   </div>
                 </div>
               ))}
@@ -734,7 +734,7 @@ function ManagerContent() {
       <Card className="glass-panel border-border/30 overflow-hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+            <CheckCircle2 className="h-5 w-5 text-success" />
             Completed History
           </CardTitle>
           <CardDescription>
@@ -762,14 +762,14 @@ function ManagerContent() {
                 <div
                   key={a.id}
                   onClick={() => router.push(`/manager?id=${a.id}`)}
-                  className="group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl bg-background/50 border border-border/30 hover:border-emerald-500/50 hover:bg-emerald-500/[0.02] transition-all cursor-pointer"
+                  className="group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl bg-background/50 border border-border/30 hover:border-success/50 hover:bg-success/[0.02] transition-all cursor-pointer"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                    <div className="w-12 h-12 rounded-xl bg-success-soft flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <CheckCircle2 className="h-6 w-6 text-success" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-foreground group-hover:text-emerald-600 transition-colors">
+                      <h4 className="font-bold text-foreground group-hover:text-success transition-colors">
                         {a.staff_name}
                       </h4>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -777,7 +777,7 @@ function ManagerContent() {
                         <span>•</span>
                         <Badge
                           variant="outline"
-                          className="bg-emerald-50 text-emerald-700 border-emerald-200"
+                          className="bg-success-soft text-success border-success/40"
                         >
                           Finalized
                         </Badge>
@@ -795,7 +795,7 @@ function ManagerContent() {
                       <FileText className="h-4 w-4" />
                       Download Report
                     </Button>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-emerald-500 group-hover:translate-x-1 transition-all" />
+                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-success group-hover:translate-x-1 transition-all" />
                   </div>
                 </div>
               ))}

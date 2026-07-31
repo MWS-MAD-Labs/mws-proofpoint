@@ -96,7 +96,7 @@ export function AssessmentSection({
                 {section.name}
               </h3>
               {isComplete && (
-                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider border border-emerald-200">
+                <span className="px-2 py-0.5 rounded-full bg-success-soft text-success text-[10px] font-bold uppercase tracking-wider border border-success/40">
                   Complete
                 </span>
               )}
@@ -109,7 +109,7 @@ export function AssessmentSection({
                   <div
                     className={cn(
                       "h-full transition-all duration-500 rounded-full",
-                      isComplete ? "bg-emerald-500" : "bg-primary",
+                      isComplete ? "bg-success" : "bg-primary",
                     )}
                     style={{ width: `${progressPercentage}%` }}
                   />
@@ -140,8 +140,8 @@ export function AssessmentSection({
                 className={cn(
                   "text-2xl font-mono font-black",
                   domainScore < 2 && "text-destructive",
-                  domainScore >= 2 && domainScore < 3 && "text-amber-500",
-                  domainScore >= 3 && "text-emerald-600",
+                  domainScore >= 2 && domainScore < 3 && "text-warning-foreground",
+                  domainScore >= 3 && "text-success",
                 )}
               >
                 {domainScore.toFixed(2)}

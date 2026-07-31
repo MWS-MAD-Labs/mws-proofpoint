@@ -199,7 +199,7 @@ export function ScoreComparisonWidget({
   const getScoreColor = (score: number | null) => {
     if (score === null) return "text-muted-foreground/30";
     if (score < 2) return "text-evidence-alert";
-    if (score < 3) return "text-amber-500";
+    if (score < 3) return "text-warning-foreground";
     return "text-evidence-success";
   };
 
@@ -323,7 +323,7 @@ export function ScoreComparisonWidget({
               completionPercent < 50 && "bg-evidence-alert",
               completionPercent >= 50 &&
                 completionPercent < 100 &&
-                "bg-amber-400",
+                "bg-warning",
               completionPercent === 100 && "bg-evidence-success",
             )}
             style={{ width: `${completionPercent}%` }}
@@ -394,7 +394,7 @@ export function ScoreComparisonWidget({
 
       {/* Final Bonus Payout */}
       {finalGrade && (
-        <div className="p-4 border-t bg-gradient-to-r from-emerald-500/5 to-emerald-500/10">
+        <div className="p-4 border-t bg-gradient-to-r from-success/5 to-success/10">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
               Final Bonus Payout
@@ -405,7 +405,7 @@ export function ScoreComparisonWidget({
                 finalGrade.bonusPayout >= 80 && "text-evidence-success",
                 finalGrade.bonusPayout >= 50 &&
                   finalGrade.bonusPayout < 80 &&
-                  "text-amber-500",
+                  "text-warning-foreground",
                 finalGrade.bonusPayout < 50 && "text-evidence-alert",
               )}
             >

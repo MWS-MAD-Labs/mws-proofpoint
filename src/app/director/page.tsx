@@ -371,31 +371,31 @@ function DirectorContent() {
         // If director does review_and_approval, show as pending director review
         if (isDirectorReviewAndApproval) {
           return (
-            <Badge className="bg-purple-100 text-purple-700 border-purple-200">
+            <Badge className="bg-primary-soft text-primary border-primary/40">
               Pending Director Review
             </Badge>
           );
         }
         return (
-          <Badge className="bg-amber-100 text-amber-700 border-amber-200">
+          <Badge className="bg-warning-soft text-warning-foreground border-warning/40">
             Submitted
           </Badge>
         );
       case "manager_reviewed":
         return (
-          <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+          <Badge className="bg-primary-soft text-primary border-primary/40">
             Pending Director Approval
           </Badge>
         );
       case "director_approved":
         return (
-          <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
+          <Badge className="bg-success-soft text-success border-success/40">
             Approved
           </Badge>
         );
       case "acknowledged":
         return (
-          <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
+          <Badge className="bg-success-soft text-success border-success/40">
             Finalized
           </Badge>
         );
@@ -512,8 +512,8 @@ function DirectorContent() {
       <div className="max-w-7xl mx-auto py-8">
         {/* Status Alert Bar */}
         {isApproved && (
-          <Alert className="mb-8 border-2 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500 bg-emerald-50 border-emerald-500/30">
-            <ShieldCheck className="h-5 w-5 text-emerald-600" />
+          <Alert className="mb-8 border-2 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500 bg-success-soft border-success/30">
+            <ShieldCheck className="h-5 w-5 text-success" />
             <AlertTitle className="font-bold text-lg mb-1">
               {assessment?.status === "acknowledged"
                 ? "Cycle Complete"
@@ -568,7 +568,7 @@ function DirectorContent() {
                 <AlertDialogTrigger asChild>
                   <Button
                     variant="outline"
-                    className="h-12 px-6 rounded-xl border-amber-500/30 text-amber-600 hover:bg-amber-500/10 hover:border-amber-500/50 transition-all"
+                    className="h-12 px-6 rounded-xl border-warning/30 text-warning-foreground hover:bg-warning/10 hover:border-warning/50 transition-all"
                     disabled={saving}
                   >
                     <RotateCcw className="h-4 w-4 mr-2" />
@@ -577,7 +577,7 @@ function DirectorContent() {
                 </AlertDialogTrigger>
                 <AlertDialogContent className="max-w-lg">
                   <AlertDialogHeader>
-                    <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
+                    <AlertDialogTitle className="flex items-center gap-2 text-warning-foreground">
                       <RotateCcw className="h-5 w-5" />
                       Return Assessment for Revision
                     </AlertDialogTitle>
@@ -614,7 +614,7 @@ function DirectorContent() {
                       Cancel
                     </AlertDialogCancel>
                     <AlertDialogAction
-                      className="bg-amber-600 hover:bg-amber-700 text-white"
+                      className="bg-warning hover:bg-warning text-white"
                       disabled={!returnFeedbackInput.trim() || saving || (directorChanges.length > 0 && !directorChangesHaveFeedback)}
                       onClick={async (e) => {
                         e.preventDefault();
@@ -640,7 +640,7 @@ function DirectorContent() {
               </AlertDialog>
 
               <Button
-                className="h-12 px-8 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 glow-primary transition-all duration-300"
+                className="h-12 px-8 rounded-xl font-bold bg-success hover:bg-success glow-primary transition-all duration-300"
                 onClick={approveAssessment}
                 disabled={saving || directorChanges.length > 0}
                 title={directorChanges.length > 0 ? "Return the appraisal for manager revision after proposing score changes." : undefined}
@@ -733,9 +733,9 @@ function DirectorContent() {
 
             {/* Final Director Feedback Section - at bottom of form column */}
             <Card className="glass-panel border-border/30 overflow-hidden shadow-2xl">
-              <CardHeader className="bg-emerald-500/5 border-b border-border/10 pb-6 pt-8 px-8">
+              <CardHeader className="bg-success/5 border-b border-border/10 pb-6 pt-8 px-8">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600">
+                  <div className="p-2 rounded-lg bg-success/10 text-success">
                     <FileText className="h-6 w-6" />
                   </div>
                   <CardTitle className="text-2xl font-black">
@@ -757,7 +757,7 @@ function DirectorContent() {
                     {assessment?.status === "acknowledged" &&
                       staffAcknowledgement && (
                         <div className="relative">
-                          <div className="absolute top-0 left-0 w-1 h-full bg-blue-500/20 rounded-full" />
+                          <div className="absolute top-0 left-0 w-1 h-full bg-primary/20 rounded-full" />
                           <div className="pl-6 py-2">
                             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-2">
                               Staff Acknowledgment & Feedback
@@ -772,7 +772,7 @@ function DirectorContent() {
                     {/* Manager Feedback - always show in readonly if available */}
                     {managerFeedback && (
                       <div className="relative">
-                        <div className="absolute top-0 left-0 w-1 h-full bg-amber-500/20 rounded-full" />
+                        <div className="absolute top-0 left-0 w-1 h-full bg-warning/20 rounded-full" />
                         <div className="pl-6 py-2">
                           <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-2">
                             Manager Feedback
@@ -786,7 +786,7 @@ function DirectorContent() {
 
                     {/* Director Feedback */}
                     <div className="relative">
-                      <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500/20 rounded-full" />
+                      <div className="absolute top-0 left-0 w-1 h-full bg-success/20 rounded-full" />
                       <div className="pl-6 py-2">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-2">
                           Director's Final Comments
@@ -802,7 +802,7 @@ function DirectorContent() {
                     </div>
 
                     {isApproved && (
-                      <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-500/20 text-emerald-700">
+                      <div className="flex items-center gap-3 p-4 rounded-xl bg-success-soft border border-success/20 text-success">
                         <ShieldCheck className="h-6 w-6" />
                         <div className="text-sm font-bold">
                           {assessment?.status === "acknowledged"
@@ -837,12 +837,12 @@ function DirectorContent() {
                       <Textarea
                         id="director-feedback"
                         placeholder="Provide final oversight comments, organizational context, and any additional recommendations..."
-                        className="min-h-[200px] bg-background border-emerald-500/20 focus-visible:ring-emerald-500/40 text-base leading-relaxed p-4 shadow-inner"
+                        className="min-h-[200px] bg-background border-success/20 focus-visible:ring-success/40 text-base leading-relaxed p-4 shadow-inner"
                         value={directorFeedback}
                         onChange={(e) => setDirectorFeedback(e.target.value)}
                       />
                       {directorChanges.length > 0 && (
-                        <div className="flex items-center gap-2 text-xs text-amber-700 font-medium">
+                        <div className="flex items-center gap-2 text-xs text-warning-foreground font-medium">
                           <AlertCircle className="h-3 w-3" />
                           Score changes must be returned to the manager for revision.
                         </div>
@@ -881,8 +881,8 @@ function DirectorContent() {
                 </CardContent>
               </Card>
 
-              <Alert className="bg-emerald-500/5 border-emerald-500/10">
-                <ShieldCheck className="h-4 w-4 text-emerald-600" />
+              <Alert className="bg-success/5 border-success/10">
+                <ShieldCheck className="h-4 w-4 text-success" />
                 <AlertTitle className="text-sm font-semibold">
                   {isDirectorReviewAndApproval
                     ? "Director Review & Approval"
@@ -915,13 +915,13 @@ function DirectorContent() {
                   variant="outline"
                   onClick={() => setReturnDialogOpen(true)}
                   disabled={saving}
-                  className="flex-1 md:flex-none h-12 px-6 rounded-xl border-amber-500/30 text-amber-600 hover:bg-amber-500/10 hover:border-amber-500/50 transition-all"
+                  className="flex-1 md:flex-none h-12 px-6 rounded-xl border-warning/30 text-warning-foreground hover:bg-warning/10 hover:border-warning/50 transition-all"
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Return
                 </Button>
                 <Button
-                  className="flex-[2] md:flex-none h-12 px-8 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 glow-primary transition-all duration-300"
+                  className="flex-[2] md:flex-none h-12 px-8 rounded-xl font-bold bg-success hover:bg-success glow-primary transition-all duration-300"
                   onClick={approveAssessment}
                   disabled={saving || !directorFeedback.trim()}
                 >
@@ -1030,10 +1030,10 @@ function DirectorContent() {
 
         <TabsContent value={activeTab} className="mt-0">
           <Card className="glass-panel border-border/30 overflow-hidden min-h-[500px]">
-            <div className="h-1 bg-gradient-to-r from-emerald-500/30 via-emerald-500 to-emerald-500/30" />
+            <div className="h-1 bg-gradient-to-r from-success/30 via-success to-success/30" />
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-emerald-500" />
+                <Building2 className="h-5 w-5 text-success" />
                 {activeTab === "ongoing"
                   ? "Ongoing Assessments"
                   : "Completed Assessments"}
@@ -1068,22 +1068,22 @@ function DirectorContent() {
                     <div
                       key={a.id}
                       onClick={() => router.push(`/director?id=${a.id}`)}
-                      className="group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl bg-background/50 border border-border/30 hover:border-emerald-500/50 hover:bg-emerald-500/[0.02] transition-all cursor-pointer"
+                      className="group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl bg-background/50 border border-border/30 hover:border-success/50 hover:bg-success/[0.02] transition-all cursor-pointer"
                     >
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center group-hover:scale-110 transition-transform text-lg font-bold text-emerald-700">
+                        <div className="w-12 h-12 rounded-xl bg-success-soft flex items-center justify-center group-hover:scale-110 transition-transform text-lg font-bold text-success">
                           {a.staff_name
                             ?.split(" ")
                             .map((n: string) => n[0])
                             .join("")
                             .substring(0, 2)
                             .toUpperCase() || (
-                            <ShieldCheck className="h-6 w-6 text-emerald-600" />
+                            <ShieldCheck className="h-6 w-6 text-success" />
                           )}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <h4 className="font-bold text-foreground group-hover:text-emerald-600 transition-colors">
+                            <h4 className="font-bold text-foreground group-hover:text-success transition-colors">
                               {a.staff_name}
                             </h4>
                             {a.staff_department && (
@@ -1114,7 +1114,7 @@ function DirectorContent() {
                               Final Score
                             </p>
                             <div className="flex flex-col items-end">
-                              <p className="font-mono font-bold text-emerald-600">
+                              <p className="font-mono font-bold text-success">
                                 {a.final_score !== null &&
                                 a.final_score !== undefined
                                   ? Number(a.final_score).toFixed(2)
@@ -1128,7 +1128,7 @@ function DirectorContent() {
                                 a.final_score !== undefined && (
                                   <p className="text-[10px] text-muted-foreground mt-0.5">
                                     Bonus:{" "}
-                                    <span className="font-bold text-amber-600">
+                                    <span className="font-bold text-warning-foreground">
                                       {
                                         getPerformanceDetails(
                                           Number(a.final_score),
@@ -1157,7 +1157,7 @@ function DirectorContent() {
                           </div>
                         </div>
 
-                        <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-emerald-500 transition-all opacity-0 group-hover:opacity-100" />
+                        <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-success transition-all opacity-0 group-hover:opacity-100" />
                       </div>
                     </div>
                   ))}

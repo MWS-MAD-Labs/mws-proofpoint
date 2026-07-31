@@ -19,22 +19,22 @@ export function ObservationSummaryCards({ counts, role }: { counts: ObservationS
   const cards: SummaryCard[] =
     role === "staff"
       ? [
-          { label: "Needs acknowledgement", value: counts.actionRequired, href: "/observations/all?actionRequired=true", icon: Clock3, tone: "text-blue-600" },
-          { label: "In progress", value: counts.draft, href: "/observations/all?status=draft", icon: ClipboardList, tone: "text-amber-600" },
-          { label: "Completed", value: counts.completed, href: "/observations/all?status=acknowledged", icon: CheckCircle2, tone: "text-emerald-600" },
+          { label: "Needs acknowledgement", value: counts.actionRequired, href: "/observations/all?actionRequired=true", icon: Clock3, tone: "text-primary" },
+          { label: "In progress", value: counts.draft, href: "/observations/all?status=draft", icon: ClipboardList, tone: "text-warning-foreground" },
+          { label: "Completed", value: counts.completed, href: "/observations/all?status=acknowledged", icon: CheckCircle2, tone: "text-success" },
           { label: "Overdue or stale", value: warningCount, href: "/observations/all?overdue=true", icon: AlertTriangle, tone: "text-destructive" },
         ]
       : role === "manager"
         ? [
-            { label: "Drafts in progress", value: counts.draft, href: "/observations/all?managerId=me&status=draft", icon: ClipboardList, tone: "text-amber-600" },
-            { label: "Awaiting acknowledgement", value: counts.awaitingAcknowledgement, href: "/observations/all?managerId=me&status=submitted", icon: Clock3, tone: "text-blue-600" },
-            { label: "Completed this month", value: counts.completedThisMonth, href: "/observations/all?managerId=me&status=acknowledged", icon: CheckCircle2, tone: "text-emerald-600" },
+            { label: "Drafts in progress", value: counts.draft, href: "/observations/all?managerId=me&status=draft", icon: ClipboardList, tone: "text-warning-foreground" },
+            { label: "Awaiting acknowledgement", value: counts.awaitingAcknowledgement, href: "/observations/all?managerId=me&status=submitted", icon: Clock3, tone: "text-primary" },
+            { label: "Completed this month", value: counts.completedThisMonth, href: "/observations/all?managerId=me&status=acknowledged", icon: CheckCircle2, tone: "text-success" },
             { label: "Overdue or stale", value: warningCount, href: "/observations/all?managerId=me&overdue=true", icon: AlertTriangle, tone: "text-destructive" },
           ]
         : [
             { label: "Total active", value: active, href: "/observations/all", icon: ClipboardList, tone: "text-primary" },
-            { label: "Awaiting acknowledgement", value: counts.awaitingAcknowledgement, href: "/observations/all?status=submitted", icon: Clock3, tone: "text-blue-600" },
-            { label: "Completed this month", value: counts.completedThisMonth, href: "/observations/all?status=acknowledged", icon: CheckCircle2, tone: "text-emerald-600" },
+            { label: "Awaiting acknowledgement", value: counts.awaitingAcknowledgement, href: "/observations/all?status=submitted", icon: Clock3, tone: "text-primary" },
+            { label: "Completed this month", value: counts.completedThisMonth, href: "/observations/all?status=acknowledged", icon: CheckCircle2, tone: "text-success" },
             { label: "Overdue or stale", value: warningCount, href: "/observations/all?overdue=true", icon: AlertTriangle, tone: "text-destructive" },
           ];
 

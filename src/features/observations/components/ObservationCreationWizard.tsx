@@ -348,7 +348,7 @@ function StepProgress({ current }: { current: number }) {
   return (
     <ol className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {steps.map((label, index) => (
-        <li key={label} className={cn("rounded-xl border p-3 text-sm", index === current && "border-primary bg-primary/5", index < current && "border-emerald-500/40 bg-emerald-500/5")}>
+        <li key={label} className={cn("rounded-xl border p-3 text-sm", index === current && "border-primary bg-primary/5", index < current && "border-success/40 bg-success/5")}>
           <div className="flex items-center gap-2">
             <span className={cn("flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs", index <= current && "bg-primary text-primary-foreground")}>
               {index < current ? <Check className="h-3.5 w-3.5" /> : index + 1}

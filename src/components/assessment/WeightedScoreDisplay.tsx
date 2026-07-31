@@ -100,7 +100,7 @@ export function WeightedScoreDisplay({ domains, score, label, type = 'staff', sh
             "h-5 w-5",
             (!isComplete || weightedScore === null) && "text-muted-foreground",
             isComplete && weightedScore !== null && weightedScore < 2 && "text-evidence-alert",
-            isComplete && weightedScore !== null && weightedScore >= 2 && weightedScore < 3 && "text-amber-500",
+            isComplete && weightedScore !== null && weightedScore >= 2 && weightedScore < 3 && "text-warning-foreground",
             isComplete && weightedScore !== null && weightedScore >= 3 && "text-evidence-success"
           )} />
           <span className="text-xs uppercase font-bold tracking-widest text-muted-foreground">
@@ -112,7 +112,7 @@ export function WeightedScoreDisplay({ domains, score, label, type = 'staff', sh
           "text-5xl font-mono font-black tracking-tighter transition-all duration-500",
           (!isComplete || weightedScore === null) && "text-muted-foreground/30",
           isComplete && weightedScore !== null && weightedScore < 2 && "text-evidence-alert",
-          isComplete && weightedScore !== null && weightedScore >= 2 && weightedScore < 3 && "text-amber-500",
+          isComplete && weightedScore !== null && weightedScore >= 2 && weightedScore < 3 && "text-warning-foreground",
           isComplete && weightedScore !== null && weightedScore >= 3 && "text-evidence-success"
         )}>
           {isComplete && weightedScore !== null ? weightedScore.toFixed(2) : "—.——"}
@@ -130,7 +130,7 @@ export function WeightedScoreDisplay({ domains, score, label, type = 'staff', sh
               <span className={cn(
                 "text-2xl font-bold px-3 py-0.5 rounded-lg bg-background border shadow-sm",
                 weightedScore! < 2.6 && "text-evidence-alert border-evidence-alert/30",
-                weightedScore! >= 2.6 && weightedScore! < 3 && "text-amber-500 border-amber-500/30",
+                weightedScore! >= 2.6 && weightedScore! < 3 && "text-warning-foreground border-warning/30",
                 weightedScore! >= 3 && "text-evidence-success border-evidence-success/30"
               )}>
                 {gradeInfo.grade}
@@ -149,7 +149,7 @@ export function WeightedScoreDisplay({ domains, score, label, type = 'staff', sh
                 <span className={cn(
                   "text-lg font-mono font-black",
                   gradeInfo.bonusPayout >= 80 && "text-evidence-success",
-                  gradeInfo.bonusPayout >= 50 && gradeInfo.bonusPayout < 80 && "text-amber-500",
+                  gradeInfo.bonusPayout >= 50 && gradeInfo.bonusPayout < 80 && "text-warning-foreground",
                   gradeInfo.bonusPayout < 50 && "text-evidence-alert"
                 )}>
                   {gradeInfo.bonusPayout}%
@@ -173,7 +173,7 @@ export function WeightedScoreDisplay({ domains, score, label, type = 'staff', sh
             className={cn(
               "h-full transition-all duration-700 rounded-full",
               completionPercent < 50 && "bg-evidence-alert",
-              completionPercent >= 50 && completionPercent < 100 && "bg-amber-400",
+              completionPercent >= 50 && completionPercent < 100 && "bg-warning",
               completionPercent === 100 && "bg-evidence-success"
             )}
             style={{ width: `${completionPercent}%` }}
@@ -218,7 +218,7 @@ export function WeightedScoreDisplay({ domains, score, label, type = 'staff', sh
                   <span className={cn(
                     "font-mono font-bold text-base px-2 py-0.5 rounded bg-muted/30 min-w-[3rem] text-center",
                     avg < 2 && "text-evidence-alert",
-                    avg >= 2 && avg < 3 && "text-amber-500",
+                    avg >= 2 && avg < 3 && "text-warning-foreground",
                     avg >= 3 && "text-evidence-success"
                   )}>
                     {avg.toFixed(1)}

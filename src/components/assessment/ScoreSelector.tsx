@@ -30,12 +30,12 @@ interface ScoreSelectorProps {
 const getScoreConfig = (score: number | "X") => {
   if (score === "X") {
     return {
-      bg: "bg-slate-500",
-      border: "border-slate-500",
+      bg: "bg-foreground",
+      border: "border-border",
       text: "text-white",
       glow: "shadow-[0_0_20px_rgba(100,116,139,0.4)]",
       icon: Info,
-      gradient: "from-slate-500/20 to-slate-400/20",
+      gradient: "from-muted/20 to-muted/20",
     };
   }
 
@@ -47,7 +47,7 @@ const getScoreConfig = (score: number | "X") => {
         text: "text-white",
         glow: "shadow-[0_0_20px_hsl(var(--score-1)/0.4)]",
         icon: AlertTriangle,
-        gradient: "from-orange-500/20 to-amber-500/20",
+        gradient: "from-warning/20 to-warning/20",
       };
     case 2:
       return {
@@ -56,7 +56,7 @@ const getScoreConfig = (score: number | "X") => {
         text: "text-white",
         glow: "shadow-[0_0_20px_hsl(var(--score-2)/0.4)]",
         icon: CheckCircle,
-        gradient: "from-amber-500/20 to-yellow-500/20",
+        gradient: "from-warning/20 to-warning/20",
       };
     case 3:
       return {
@@ -65,7 +65,7 @@ const getScoreConfig = (score: number | "X") => {
         text: "text-white",
         glow: "shadow-[0_0_20px_hsl(var(--score-3)/0.4)]",
         icon: TrendingUp,
-        gradient: "from-emerald-500/20 to-green-500/20",
+        gradient: "from-success/20 to-success/20",
       };
     case 4:
       return {
@@ -74,7 +74,7 @@ const getScoreConfig = (score: number | "X") => {
         text: "text-white",
         glow: "shadow-[0_0_25px_hsl(var(--score-4)/0.5)]",
         icon: Award,
-        gradient: "from-blue-500/20 to-cyan-500/20",
+        gradient: "from-primary/20 to-info/20",
       };
     default:
       return {
@@ -123,9 +123,9 @@ export function ScoreSelector({
     selectedScore < 4 ? "accent-emerald-500" : "accent-blue-500";
   const selectedDotColor =
     selectedScore === null ? "bg-primary text-primary-foreground border-primary" :
-    selectedScore < 2 ? "bg-red-500 text-white border-red-600" :
-    selectedScore < 3 ? "bg-amber-500 text-white border-amber-600" :
-    selectedScore < 4 ? "bg-emerald-500 text-white border-emerald-600" : "bg-blue-500 text-white border-blue-600";
+    selectedScore < 2 ? "bg-destructive text-white border-destructive/40" :
+    selectedScore < 3 ? "bg-warning text-white border-warning/40" :
+    selectedScore < 4 ? "bg-success text-white border-success/40" : "bg-primary text-white border-primary/40";
 
   return (
     <div className="space-y-4">
@@ -150,7 +150,7 @@ export function ScoreSelector({
           />
           <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-1/2 z-20 flex -translate-y-1/2 justify-between px-0.5">
             {[1, 2, 3, 4].map((score) => (
-              <span key={score} className={cn("flex h-7 w-7 items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-md", Math.round(selectedScore ?? 0) === score ? selectedDotColor : "border-slate-300 bg-white text-slate-600 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300")}>
+              <span key={score} className={cn("flex h-7 w-7 items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-md", Math.round(selectedScore ?? 0) === score ? selectedDotColor : "border-border bg-white text-muted-foreground dark:border-border dark:bg-foreground dark:text-muted-foreground")}>
                 {score}
               </span>
             ))}
@@ -171,7 +171,7 @@ export function ScoreSelector({
             disabled={disabled}
             className={cn(
               "mt-4 rounded-md border px-3 py-1.5 text-sm transition-colors",
-              value === "X" ? "border-slate-500 bg-slate-500 text-white" : "border-slate-200 text-slate-600 hover:bg-slate-50",
+              value === "X" ? "border-border bg-foreground text-white" : "border-border text-muted-foreground hover:bg-card",
               disabled && "cursor-not-allowed opacity-50",
             )}
           >
@@ -185,7 +185,7 @@ export function ScoreSelector({
         <div
           className={cn(
             "relative overflow-hidden rounded-xl border p-4 transition-all duration-300",
-            selectedOption.score === "X" && "bg-slate-50 border-slate-200",
+            selectedOption.score === "X" && "bg-card border-border",
             selectedOption.score === 1 &&
               "bg-evidence-alert-bg border-evidence-alert-border",
             selectedOption.score === 2 && "bg-muted/50 border-border",
@@ -206,7 +206,7 @@ export function ScoreSelector({
             <div
               className={cn(
                 "w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm",
-                selectedOption.score === "X" && "bg-slate-500 text-white",
+                selectedOption.score === "X" && "bg-foreground text-white",
                 selectedOption.score === 1 &&
                   "bg-evidence-alert/10 text-evidence-alert",
                 selectedOption.score === 2 && "bg-muted text-muted-foreground",
@@ -225,7 +225,7 @@ export function ScoreSelector({
               <p
                 className={cn(
                   "font-bold text-base",
-                  selectedOption.score === "X" && "text-slate-700",
+                  selectedOption.score === "X" && "text-foreground",
                   selectedOption.score === 1 && "text-evidence-alert",
                   selectedOption.score === 2 && "text-foreground",
                   typeof selectedOption.score === "number" &&
@@ -247,7 +247,7 @@ export function ScoreSelector({
                 </div>
               )}
               {selectedOption.score === "X" && (
-                <div className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-500 border-t border-slate-200 pt-2">
+                <div className="mt-2 flex items-center gap-2 text-xs font-medium text-muted-foreground border-t border-border pt-2">
                   <Info className="h-3.5 w-3.5" />
                   Will be excluded from total score calculation
                 </div>

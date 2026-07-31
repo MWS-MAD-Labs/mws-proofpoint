@@ -460,9 +460,9 @@ function IndicatorEditor({
     scoreNumber < 4 ? "accent-emerald-500" : "accent-blue-500";
   const selectedDotColor =
     value.score === "" ? "bg-primary text-primary-foreground border-primary" :
-    scoreNumber < 2 ? "bg-red-500 text-white border-red-600" :
-    scoreNumber < 3 ? "bg-amber-500 text-white border-amber-600" :
-    scoreNumber < 4 ? "bg-emerald-500 text-white border-emerald-600" : "bg-blue-500 text-white border-blue-600";
+    scoreNumber < 2 ? "bg-destructive text-white border-destructive/40" :
+    scoreNumber < 3 ? "bg-warning text-white border-warning/40" :
+    scoreNumber < 4 ? "bg-success text-white border-success/40" : "bg-primary text-white border-primary/40";
 
   return (
     <Card
@@ -528,7 +528,7 @@ function IndicatorEditor({
                 />
                 <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-1/2 z-20 flex -translate-y-1/2 justify-between px-0.5">
                   {scoreDescriptions.map(([score]) => (
-                    <span key={score} className={cn("flex h-7 w-7 items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-md", Math.round(scoreNumber) === score ? selectedDotColor : "border-slate-300 bg-white text-slate-600 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300")}>{score}</span>
+                    <span key={score} className={cn("flex h-7 w-7 items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-md", Math.round(scoreNumber) === score ? selectedDotColor : "border-border bg-white text-muted-foreground dark:border-border dark:bg-foreground dark:text-muted-foreground")}>{score}</span>
                   ))}
                 </div>
               </div>
@@ -666,7 +666,7 @@ function SectionNavigator({
                 {failed ? (
                   <AlertCircle className="mt-0.5 h-4 w-4 text-destructive" />
                 ) : complete ? (
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />
                 ) : (
                   <Clock3 className="mt-0.5 h-4 w-4 text-muted-foreground" />
                 )}
@@ -787,7 +787,7 @@ function SaveSummary({
     );
   }
   return (
-    <div role="status" aria-live="polite" className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
+    <div role="status" aria-live="polite" className="flex items-center gap-2 text-sm text-success dark:text-success">
       <CheckCircle2 className="h-4 w-4" />
       <span>
         All changes saved
@@ -806,7 +806,7 @@ function ItemSaveStatus({
 }) {
   if (!state || state.status === "saved") {
     return (
-      <span role="status" aria-live="polite" className="flex shrink-0 items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400">
+      <span role="status" aria-live="polite" className="flex shrink-0 items-center gap-1 text-xs text-success dark:text-success">
         <Check className="h-3.5 w-3.5" />
         Saved
       </span>
@@ -822,7 +822,7 @@ function ItemSaveStatus({
   }
   if (state.status === "unsaved") {
     return (
-      <span role="status" aria-live="polite" className="flex shrink-0 items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
+      <span role="status" aria-live="polite" className="flex shrink-0 items-center gap-1 text-xs text-warning-foreground dark:text-warning-foreground">
         <Clock3 className="h-3.5 w-3.5" />
         Unsaved
       </span>
@@ -921,7 +921,7 @@ function ReviewDialog({
                       className="h-auto justify-start px-2 py-2 text-left"
                       onClick={() => onIndicator(item.indicatorId)}
                     >
-                      <AlertCircle className="h-4 w-4 text-amber-600" />
+                      <AlertCircle className="h-4 w-4 text-warning-foreground" />
                       <span className="whitespace-normal">{item.indicatorName}</span>
                     </Button>
                   ))}
@@ -931,7 +931,7 @@ function ReviewDialog({
           </div>
         ) : (
           <Alert>
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            <CheckCircle2 className="h-4 w-4 text-success" />
             <AlertTitle>Required responses are complete</AlertTitle>
             <AlertDescription>
               The observation is ready once all changes are safely saved.

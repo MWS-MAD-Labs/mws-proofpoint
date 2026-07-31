@@ -49,9 +49,9 @@ export function AssessmentIndicator({ indicator, onChange, index, readonly = fal
   };
 
   const statusColor = isExcluded
-    ? "border-slate-200 bg-slate-50/50"
+    ? "border-border bg-muted/50"
     : isComplete
-      ? "border-emerald-200 bg-emerald-50/30"
+      ? "border-success/40 bg-success/30"
       : "border-border hover:border-primary/30";
 
   return (
@@ -71,7 +71,7 @@ export function AssessmentIndicator({ indicator, onChange, index, readonly = fal
           <div className={cn(
             "flex items-center justify-center w-8 h-8 rounded-lg text-xs font-mono font-bold shrink-0 transition-colors",
             isComplete
-              ? (isExcluded ? "bg-slate-200 text-slate-600" : "bg-emerald-100 text-emerald-700")
+              ? (isExcluded ? "bg-muted text-muted-foreground" : "bg-success-soft text-success")
               : "bg-primary/10 text-primary"
           )}>
             {isComplete ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
@@ -98,10 +98,10 @@ export function AssessmentIndicator({ indicator, onChange, index, readonly = fal
           {indicator.score !== null && (
             <div className={cn(
               "px-3 py-1 rounded-md text-xs font-black font-mono shadow-sm border",
-              indicator.score === 'X' && "bg-slate-100 text-slate-500 border-slate-200",
+              indicator.score === 'X' && "bg-muted text-muted-foreground border-border",
               indicator.score === 1 && "bg-destructive/10 text-destructive border-destructive/20",
-              indicator.score === 2 && "bg-amber-50 text-amber-600 border-amber-200",
-              indicator.score === 3 && "bg-emerald-50 text-emerald-600 border-emerald-200",
+              indicator.score === 2 && "bg-warning-soft text-warning-foreground border-warning/40",
+              indicator.score === 3 && "bg-success-soft text-success border-success/40",
               indicator.score === 4 && "bg-primary text-primary-foreground border-primary"
             )}>
               {indicator.score === 'X' ? 'N/A' : indicator.score}
@@ -167,9 +167,9 @@ export function AssessmentIndicator({ indicator, onChange, index, readonly = fal
           {/* Controls */}
           <div className="space-y-6 relative">
             {isExcluded && (
-              <div className="absolute inset-0 z-10 bg-slate-50/50 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-xl border border-slate-200 border-dashed gap-4 transition-all animate-in fade-in duration-300">
+              <div className="absolute inset-0 z-10 bg-muted/50 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-xl border border-border border-dashed gap-4 transition-all animate-in fade-in duration-300">
                 <div className="bg-background/95 px-4 py-2.5 rounded-full shadow-sm border border-border/50 text-xs font-bold text-muted-foreground flex items-center gap-2.5">
-                  <AlertCircle className="h-4 w-4 text-slate-400" />
+                  <AlertCircle className="h-4 w-4 text-muted-foreground" />
                   Excluded from Assessment
                 </div>
                 {!readonly && (
@@ -177,7 +177,7 @@ export function AssessmentIndicator({ indicator, onChange, index, readonly = fal
                     variant="outline"
                     size="sm"
                     onClick={() => onChange({ score: null })}
-                    className="bg-white hover:bg-slate-50 text-slate-600 border-slate-200 shadow-sm h-8 text-xs font-bold gap-2"
+                    className="bg-white hover:bg-card text-muted-foreground border-border shadow-sm h-8 text-xs font-bold gap-2"
                   >
                     <Undo2 className="h-3.5 w-3.5" />
                     Include Back
@@ -199,12 +199,12 @@ export function AssessmentIndicator({ indicator, onChange, index, readonly = fal
           </div>
 
           {indicator.trainings && !isExcluded && (
-            <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
-              <div className="flex items-center gap-2 mb-1.5 text-xs font-bold text-emerald-700 uppercase tracking-wider">
+            <div className="p-3 rounded-lg bg-success-soft border border-success/40">
+              <div className="flex items-center gap-2 mb-1.5 text-xs font-bold text-success uppercase tracking-wider">
                 <ShieldCheck className="h-3.5 w-3.5" />
                 Recommended Trainings
               </div>
-              <p className="text-sm text-emerald-800">{indicator.trainings}</p>
+              <p className="text-sm text-success">{indicator.trainings}</p>
             </div>
           )}
         </div>

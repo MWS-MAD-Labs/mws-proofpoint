@@ -83,10 +83,10 @@ interface RubricTemplate {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ACTION_TYPES = [
-  { value: 'FILL_FORM',   label: 'Fill Form',   icon: FileText,    color: 'text-blue-500'   },
-  { value: 'REVIEW',      label: 'Review',      icon: Eye,         color: 'text-purple-500' },
-  { value: 'APPROVE',     label: 'Approve',     icon: CheckCircle2,color: 'text-green-500'  },
-  { value: 'ACKNOWLEDGE', label: 'Acknowledge', icon: CheckCircle2,color: 'text-amber-500'  },
+  { value: 'FILL_FORM',   label: 'Fill Form',   icon: FileText,    color: 'text-primary'   },
+  { value: 'REVIEW',      label: 'Review',      icon: Eye,         color: 'text-primary' },
+  { value: 'APPROVE',     label: 'Approve',     icon: CheckCircle2,color: 'text-success'  },
+  { value: 'ACKNOWLEDGE', label: 'Acknowledge', icon: CheckCircle2,color: 'text-warning-foreground'  },
 ] as const;
 
 const ACTOR_ROLES = [
@@ -603,7 +603,7 @@ export function ObservationWorkflowManager() {
         <div className={`px-4 py-3 rounded-lg text-sm border ${
           alert.type === 'error'
             ? 'bg-destructive/10 text-destructive border-destructive/20'
-            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            : 'bg-success-soft text-success border-success/40'
         }`}>
           {alert.message}
         </div>
@@ -615,7 +615,7 @@ export function ObservationWorkflowManager() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Eye className="h-5 w-5 text-blue-500" />
+                <Eye className="h-5 w-5 text-primary" />
                 Observation Workflow Manager
               </CardTitle>
               <CardDescription>

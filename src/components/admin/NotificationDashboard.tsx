@@ -70,11 +70,11 @@ export function NotificationDashboard() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "sent":
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <CheckCircle className="h-4 w-4 text-success" />;
       case "failed":
-        return <AlertCircle className="h-4 w-4 text-red-500" />;
+        return <AlertCircle className="h-4 w-4 text-destructive" />;
       default:
-        return <Clock className="h-4 w-4 text-yellow-500" />;
+        return <Clock className="h-4 w-4 text-warning-foreground" />;
     }
   };
 
@@ -96,7 +96,7 @@ export function NotificationDashboard() {
             <CardTitle className="text-sm font-medium">Total Sent</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{sentCount}</div>
+            <div className="text-2xl font-bold text-primary">{sentCount}</div>
           </CardContent>
         </Card>
 
@@ -105,7 +105,7 @@ export function NotificationDashboard() {
             <CardTitle className="text-sm font-medium">Failed</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{failedCount}</div>
+            <div className="text-2xl font-bold text-destructive">{failedCount}</div>
           </CardContent>
         </Card>
 
@@ -114,7 +114,7 @@ export function NotificationDashboard() {
             <CardTitle className="text-sm font-medium">Pending</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-600">
+            <div className="text-2xl font-bold text-muted-foreground">
               {pendingCount}
             </div>
           </CardContent>
@@ -200,7 +200,7 @@ export function NotificationDashboard() {
                         {notif.staff_name} • {notif.period}
                       </div>
                       {notif.error && (
-                        <div className="text-sm text-red-600">
+                        <div className="text-sm text-destructive">
                           {notif.error}
                         </div>
                       )}
@@ -217,10 +217,10 @@ export function NotificationDashboard() {
                       }
                       className={
                         notif.status === "sent"
-                          ? "bg-green-100 text-green-800 hover:bg-green-200"
+                          ? "bg-success-soft text-success hover:bg-success-soft"
                           : notif.status === "failed"
-                            ? "bg-red-100 text-red-800 hover:bg-red-200"
-                            : "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                            ? "bg-destructive-soft text-destructive hover:bg-destructive-soft"
+                            : "bg-warning-soft text-warning-foreground hover:bg-warning-soft"
                       }
                     >
                       {notif.status}

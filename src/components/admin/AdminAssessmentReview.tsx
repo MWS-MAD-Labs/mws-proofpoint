@@ -171,7 +171,7 @@ export function AdminAssessmentReview() {
         return (
           <Badge
             variant="secondary"
-            className="bg-emerald-100 text-emerald-800 border-emerald-200"
+            className="bg-success-soft text-success border-success/40"
           >
             Pending Release
           </Badge>
@@ -180,7 +180,7 @@ export function AdminAssessmentReview() {
         return (
           <Badge
             variant="secondary"
-            className="bg-blue-100 text-blue-800 border-blue-200"
+            className="bg-primary-soft text-primary border-primary/40"
           >
             Released
           </Badge>
@@ -189,7 +189,7 @@ export function AdminAssessmentReview() {
         return (
           <Badge
             variant="secondary"
-            className="bg-green-100 text-green-800 border-green-200"
+            className="bg-success-soft text-success border-success/40"
           >
             Acknowledged
           </Badge>
@@ -204,29 +204,29 @@ export function AdminAssessmentReview() {
       .map(
         (a, idx) => `
             <tr>
-                <td style="border: 1px solid #ddd; padding: 8px; text-align: center; color: #000;">${idx + 1}</td>
-                <td style="border: 1px solid #ddd; padding: 8px; color: #000;">${a.staff_niy || "-"}</td>
-                <td style="border: 1px solid #ddd; padding: 8px; color: #000;">${a.staff_name || "-"}</td>
-                <td style="border: 1px solid #ddd; padding: 8px; color: #000;">${a.staff_department || "-"}</td>
-                <td style="border: 1px solid #ddd; padding: 8px; text-align: center; color: #000;">${typeof a.final_score === "number" ? a.final_score.toFixed(2) : a.final_score || "-"}</td>
-                <td style="border: 1px solid #ddd; padding: 8px; text-align: center; color: #000;">${a.final_grade || "-"}</td>
-                <td style="border: 1px solid #ddd; padding: 8px; color: #000;">${getBonus(a.final_score)}</td>
+                <td style="border: 1px solid #D8C9C3; padding: 8px; text-align: center; color: #241718;">${idx + 1}</td>
+                <td style="border: 1px solid #D8C9C3; padding: 8px; color: #241718;">${a.staff_niy || "-"}</td>
+                <td style="border: 1px solid #D8C9C3; padding: 8px; color: #241718;">${a.staff_name || "-"}</td>
+                <td style="border: 1px solid #D8C9C3; padding: 8px; color: #241718;">${a.staff_department || "-"}</td>
+                <td style="border: 1px solid #D8C9C3; padding: 8px; text-align: center; color: #241718;">${typeof a.final_score === "number" ? a.final_score.toFixed(2) : a.final_score || "-"}</td>
+                <td style="border: 1px solid #D8C9C3; padding: 8px; text-align: center; color: #241718;">${a.final_grade || "-"}</td>
+                <td style="border: 1px solid #D8C9C3; padding: 8px; color: #241718;">${getBonus(a.final_score)}</td>
             </tr>
         `,
       )
       .join("");
 
     return `
-            <table style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 12px; background-color: #fff;">
+            <table style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 12px; background-color: #FFFFFF;">
                 <thead>
-                    <tr style="background-color: #f8f9fa;">
-                        <th style="border: 1px solid #ddd; padding: 8px; text-align: center; font-weight: bold; color: #000;">No</th>
-                        <th style="border: 1px solid #ddd; padding: 8px; font-weight: bold; color: #000;">NIY</th>
-                        <th style="border: 1px solid #ddd; padding: 8px; font-weight: bold; color: #000;">Name</th>
-                        <th style="border: 1px solid #ddd; padding: 8px; font-weight: bold; color: #000;">Department</th>
-                        <th style="border: 1px solid #ddd; padding: 8px; text-align: center; font-weight: bold; color: #000;">Score</th>
-                        <th style="border: 1px solid #ddd; padding: 8px; text-align: center; font-weight: bold; color: #000;">Grade</th>
-                        <th style="border: 1px solid #ddd; padding: 8px; font-weight: bold; color: #000;">Bonus</th>
+                    <tr style="background-color: #FBF2DF;">
+                        <th style="border: 1px solid #D8C9C3; padding: 8px; text-align: center; font-weight: bold; color: #241718;">No</th>
+                        <th style="border: 1px solid #D8C9C3; padding: 8px; font-weight: bold; color: #241718;">NIY</th>
+                        <th style="border: 1px solid #D8C9C3; padding: 8px; font-weight: bold; color: #241718;">Name</th>
+                        <th style="border: 1px solid #D8C9C3; padding: 8px; font-weight: bold; color: #241718;">Department</th>
+                        <th style="border: 1px solid #D8C9C3; padding: 8px; text-align: center; font-weight: bold; color: #241718;">Score</th>
+                        <th style="border: 1px solid #D8C9C3; padding: 8px; text-align: center; font-weight: bold; color: #241718;">Grade</th>
+                        <th style="border: 1px solid #D8C9C3; padding: 8px; font-weight: bold; color: #241718;">Bonus</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -276,12 +276,12 @@ export function AdminAssessmentReview() {
   return (
     <>
       <Card className="glass-panel border-border/30 overflow-hidden">
-        <div className="h-1 bg-gradient-to-r from-blue-500/30 via-blue-500 to-blue-500/30" />
+        <div className="h-1 bg-gradient-to-r from-primary/30 via-primary to-primary/30" />
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-blue-500" />
+                <FileText className="h-5 w-5 text-primary" />
                 Assessment Reviews
               </CardTitle>
               <CardDescription>
@@ -305,7 +305,7 @@ export function AdminAssessmentReview() {
                 disabled={
                   loading || assessments.length === 0 || processingReleaseAll
                 }
-                className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                className="text-success border-success/40 hover:bg-success-soft"
               >
                 {processingReleaseAll ? (
                   <Loader2 className="h-4 w-4 mr-1 animate-spin" />
@@ -426,7 +426,7 @@ export function AdminAssessmentReview() {
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <TableIcon className="h-5 w-5 text-blue-500" />
+              <TableIcon className="h-5 w-5 text-primary" />
               Assessment Summary Table
             </DialogTitle>
             <DialogDescription>
@@ -479,7 +479,7 @@ export function AdminAssessmentReview() {
             <AlertDialogAction
               onClick={handleReleaseAll}
               disabled={processingReleaseAll}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="bg-success hover:bg-success"
             >
               {processingReleaseAll ? (
                 <>

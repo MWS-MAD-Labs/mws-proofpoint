@@ -54,7 +54,7 @@ export function ReviewComparisonSection({ section, onIndicatorChange, readonly, 
           </div>
           <div className="mr-3 hidden items-center gap-4 sm:flex">
             {managerScore !== null && <div className="text-right"><p className="font-mono text-lg font-black text-primary">{managerScore.toFixed(2)}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Manager</p></div>}
-            {(directorMode || showDirectorComparison) && directorScore !== null && <div className="text-right"><p className={cn("font-mono text-lg font-black", directorScore !== managerScore && "text-amber-600")}>{directorScore.toFixed(2)}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Director</p></div>}
+            {(directorMode || showDirectorComparison) && directorScore !== null && <div className="text-right"><p className={cn("font-mono text-lg font-black", directorScore !== managerScore && "text-warning-foreground")}>{directorScore.toFixed(2)}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Director</p></div>}
           </div>
         </div>
       </AccordionTrigger>

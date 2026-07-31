@@ -96,16 +96,16 @@ interface WorkflowEditorProps {
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const ACTION_TYPES = [
-  { value: 'FILL_FORM',   label: 'Fill Form',   icon: FileSearch,    color: 'text-blue-500',   desc: 'Actor fills in form/assessment' },
-  { value: 'REVIEW',      label: 'Review',       icon: Eye,           color: 'text-green-500',  desc: 'Actor performs review' },
-  { value: 'APPROVE',     label: 'Approve',      icon: CheckCircle2,  color: 'text-purple-500', desc: 'Actor gives approval' },
-  { value: 'ACKNOWLEDGE', label: 'Acknowledge',  icon: ClipboardCheck,color: 'text-amber-500',  desc: 'Actor acknowledges/signs the result' },
+  { value: 'FILL_FORM',   label: 'Fill Form',   icon: FileSearch,    color: 'text-primary',   desc: 'Actor fills in form/assessment' },
+  { value: 'REVIEW',      label: 'Review',       icon: Eye,           color: 'text-success',  desc: 'Actor performs review' },
+  { value: 'APPROVE',     label: 'Approve',      icon: CheckCircle2,  color: 'text-primary', desc: 'Actor gives approval' },
+  { value: 'ACKNOWLEDGE', label: 'Acknowledge',  icon: ClipboardCheck,color: 'text-warning-foreground',  desc: 'Actor acknowledges/signs the result' },
 ] as const;
 
 const WORKFLOW_TYPES = [
-  { value: 'KPI_APPRAISAL',        label: 'KPI Appraisal',        color: 'bg-blue-100 text-blue-700'   },
-  { value: 'CLASSROOM_OBSERVATION', label: 'Classroom Observation', color: 'bg-green-100 text-green-700' },
-  { value: 'GENERIC',              label: 'Generic',               color: 'bg-gray-100 text-gray-700'   },
+  { value: 'KPI_APPRAISAL',        label: 'KPI Appraisal',        color: 'bg-primary-soft text-primary'   },
+  { value: 'CLASSROOM_OBSERVATION', label: 'Classroom Observation', color: 'bg-success-soft text-success' },
+  { value: 'GENERIC',              label: 'Generic',               color: 'bg-muted text-foreground'   },
 ] as const;
 
 const ACTOR_ROLES = [
@@ -376,7 +376,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
       <Card className="glass-panel border-border/30">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
-            <GitBranch className="h-5 w-5 text-purple-500" />
+            <GitBranch className="h-5 w-5 text-primary" />
             Workflow Configuration
           </CardTitle>
           <CardDescription>
@@ -631,7 +631,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <ShieldCheck className="h-5 w-5 text-orange-500" />
+                <ShieldCheck className="h-5 w-5 text-warning-foreground" />
                 Workflow Definitions
               </CardTitle>
               <CardDescription>
@@ -718,7 +718,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                         <Badge className={`text-xs ${typeInfo.color}`}>{typeInfo.label}</Badge>
                         <Badge variant="secondary" className="text-xs">{workflow.steps.length} steps</Badge>
                         {assignCount > 0 && (
-                          <Badge variant="outline" className="text-xs text-green-600 border-green-300">
+                          <Badge variant="outline" className="text-xs text-success border-success/40">
                             {assignCount} role{assignCount > 1 ? 's' : ''} assigned
                           </Badge>
                         )}

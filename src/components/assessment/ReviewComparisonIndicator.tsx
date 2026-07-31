@@ -36,16 +36,16 @@ interface ReviewComparisonIndicatorProps {
 }
 
 const scoreStyles: Record<number, string> = {
-  1: "border-red-200 bg-red-50 text-red-700",
-  2: "border-amber-200 bg-amber-50 text-amber-700",
-  3: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  1: "border-destructive/40 bg-destructive-soft text-destructive",
+  2: "border-warning/40 bg-warning-soft text-warning-foreground",
+  3: "border-success/40 bg-success-soft text-success",
   4: "border-primary bg-primary text-primary-foreground",
 };
 
 function ScoreBadge({ label, score, changed = false }: { label: string; score: number | "X" | null; changed?: boolean }) {
   const scoreStyle = typeof score === "number" ? scoreStyles[Math.round(score)] : undefined;
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-bold", score === "X" ? "border-slate-200 bg-slate-100 text-slate-500" : score === null ? "border-border bg-muted text-muted-foreground" : scoreStyle, changed && "ring-2 ring-amber-400 ring-offset-1")}>
+    <span className={cn("inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-bold", score === "X" ? "border-border bg-muted text-muted-foreground" : score === null ? "border-border bg-muted text-muted-foreground" : scoreStyle, changed && "ring-2 ring-warning/40 ring-offset-1")}>
       <span className="text-[10px] font-medium opacity-80">{label}</span>
       <span className="font-mono">{typeof score === "number" ? score.toFixed(1) : score ?? "—"}</span>
     </span>
@@ -81,12 +81,12 @@ export function ReviewComparisonIndicator({
     activeScore < 4 ? "accent-emerald-500" : "accent-blue-500";
   const selectedDotColor =
     typeof activeScore !== "number" ? "bg-primary text-primary-foreground border-primary" :
-    activeScore < 2 ? "bg-red-500 text-white border-red-600" :
-    activeScore < 3 ? "bg-amber-500 text-white border-amber-600" :
-    activeScore < 4 ? "bg-emerald-500 text-white border-emerald-600" : "bg-blue-500 text-white border-blue-600";
+    activeScore < 2 ? "bg-destructive text-white border-destructive/40" :
+    activeScore < 3 ? "bg-warning text-white border-warning/40" :
+    activeScore < 4 ? "bg-success text-white border-success/40" : "bg-primary text-white border-primary/40";
 
   return (
-    <div className={cn("flex flex-col gap-3 rounded-lg border bg-card px-3 py-3", scoreChanged && "border-amber-300 bg-amber-50/30")}>
+    <div className={cn("flex flex-col gap-3 rounded-lg border bg-card px-3 py-3", scoreChanged && "border-warning/40 bg-warning/30")}>
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-bold text-muted-foreground">{index + 1}</span>
@@ -120,7 +120,7 @@ export function ReviewComparisonIndicator({
             />
             <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-1/2 z-20 flex -translate-y-1/2 justify-between px-0.5">
               {[1, 2, 3, 4].map((score) => (
-                <span key={score} className={cn("flex h-7 w-7 items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-md", selectedRubricScore === score ? selectedDotColor : "border-slate-300 bg-white text-slate-600 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300")}>
+                <span key={score} className={cn("flex h-7 w-7 items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-md", selectedRubricScore === score ? selectedDotColor : "border-border bg-white text-muted-foreground dark:border-border dark:bg-foreground dark:text-muted-foreground")}>
                   {score}
                 </span>
               ))}
@@ -159,7 +159,7 @@ export function ReviewComparisonIndicator({
         </div>
       )}
 
-      {scoreChanged && <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700"><UserCheck className="h-3.5 w-3.5" /> Revision requested</span>}
+      {scoreChanged && <span className="inline-flex items-center gap-1 text-xs font-semibold text-warning-foreground"><UserCheck className="h-3.5 w-3.5" /> Revision requested</span>}
     </div>
   );
 }

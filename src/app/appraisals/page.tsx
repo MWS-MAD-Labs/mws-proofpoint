@@ -31,8 +31,8 @@ function PerformanceAppraisalsContent() {
               <>
                 <Card className="glass-panel border-border/30">
                   <CardHeader>
-                    <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/10">
-                      <UserRoundCheck className="h-6 w-6 text-blue-600" />
+                    <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                      <UserRoundCheck className="h-6 w-6 text-primary" />
                     </div>
                     <CardTitle>Self-Assessment</CardTitle>
                     <CardDescription>
@@ -48,8 +48,8 @@ function PerformanceAppraisalsContent() {
 
                 <Card className="glass-panel border-border/30">
                   <CardHeader>
-                    <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-violet-500/10">
-                      <Users className="h-6 w-6 text-violet-600" />
+                    <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                      <Users className="h-6 w-6 text-primary" />
                     </div>
                     <CardTitle>Staff Appraisal</CardTitle>
                     <CardDescription>

@@ -235,9 +235,9 @@ function AssessmentContent() {
     };
 
     const statusClass = (status: string) => {
-      if (status === "acknowledged") return "bg-emerald-100 text-emerald-700 border-emerald-200";
-      if (["director_reviewed", "director_approved", "admin_reviewed"].includes(status)) return "bg-blue-100 text-blue-700 border-blue-200";
-      return "bg-amber-100 text-amber-700 border-amber-200";
+      if (status === "acknowledged") return "bg-success-soft text-success border-success/40";
+      if (["director_reviewed", "director_approved", "admin_reviewed"].includes(status)) return "bg-primary-soft text-primary border-primary/40";
+      return "bg-warning-soft text-warning-foreground border-warning/40";
     };
 
     return (
@@ -489,8 +489,8 @@ function AssessmentContent() {
                     className="flex items-center justify-between p-4 rounded-xl bg-background/50 border border-border/30 hover:border-primary/50 hover:bg-primary/[0.02] transition-all cursor-pointer group"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                      <div className="w-10 h-10 rounded-lg bg-success-soft flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <ShieldCheck className="h-5 w-5 text-success" />
                       </div>
                       <div>
                         <h4 className="font-bold text-foreground group-hover:text-primary transition-colors">
@@ -505,8 +505,8 @@ function AssessmentContent() {
                       <Badge
                         className={
                           a.status === "acknowledged"
-                            ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-                            : "bg-blue-100 text-blue-700 border-blue-200"
+                            ? "bg-success-soft text-success border-success/40"
+                            : "bg-primary-soft text-primary border-primary/40"
                         }
                       >
                         {a.status === "acknowledged"
@@ -543,25 +543,25 @@ function AssessmentContent() {
     <div className="max-w-7xl mx-auto py-8">
       {/* Returned for Revision Alert */}
       {isReturned && assessment?.return_feedback && (
-        <Alert className="mb-8 border-2 shadow-lg animate-in fade-in slide-in-from-top-4 duration-500 bg-amber-50 border-amber-500/50">
-          <RotateCcw className="h-5 w-5 text-amber-600" />
-          <AlertTitle className="font-bold text-lg mb-2 text-amber-800">
+        <Alert className="mb-8 border-2 shadow-lg animate-in fade-in slide-in-from-top-4 duration-500 bg-warning-soft border-warning/50">
+          <RotateCcw className="h-5 w-5 text-warning-foreground" />
+          <AlertTitle className="font-bold text-lg mb-2 text-warning-foreground">
             Assessment Returned for Revision
           </AlertTitle>
           <AlertDescription className="space-y-3">
-            <p className="text-amber-900">
+            <p className="text-warning-foreground">
               Your assessment has been returned by your reviewer. Please review
               the feedback below and make the necessary corrections before
               resubmitting.
             </p>
-            <div className="bg-white/50 border border-amber-200 rounded-lg p-4 mt-3">
+            <div className="bg-white/50 border border-warning/40 rounded-lg p-4 mt-3">
               <div className="flex items-center gap-2 mb-2">
-                <MessageSquare className="h-4 w-4 text-amber-600" />
-                <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
+                <MessageSquare className="h-4 w-4 text-warning-foreground" />
+                <span className="text-xs font-bold text-warning-foreground uppercase tracking-wider">
                   Reviewer Feedback
                 </span>
               </div>
-              <p className="text-amber-950 whitespace-pre-wrap leading-relaxed">
+              <p className="text-warning-foreground whitespace-pre-wrap leading-relaxed">
                 {assessment.return_feedback}
               </p>
             </div>
@@ -575,20 +575,20 @@ function AssessmentContent() {
           className={cn(
             "mb-8 border-2 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500",
             isAcknowledged
-              ? "bg-emerald-50 border-emerald-500/30"
+              ? "bg-success-soft border-success/30"
               : isAdminReviewed
-                ? "bg-amber-50 border-amber-500/30"
+                ? "bg-warning-soft border-warning/30"
                 : isDirectorApprovedOnly
-                  ? "bg-blue-50 border-blue-500/30"
+                  ? "bg-primary-soft border-primary/30"
                   : "bg-primary/5 border-primary/20",
           )}
         >
           {isAcknowledged ? (
-            <ShieldCheck className="h-5 w-5 text-emerald-600" />
+            <ShieldCheck className="h-5 w-5 text-success" />
           ) : isAdminReviewed ? (
-            <MessageSquare className="h-5 w-5 text-amber-600" />
+            <MessageSquare className="h-5 w-5 text-warning-foreground" />
           ) : isDirectorApprovedOnly ? (
-            <Clock className="h-5 w-5 text-blue-600" />
+            <Clock className="h-5 w-5 text-primary" />
           ) : (
             <AlertCircle className="h-5 w-5 text-primary" />
           )}
@@ -766,9 +766,9 @@ function AssessmentContent() {
 
               {/* Director Final Feedback Section (Read-only for staff) */}
               <Card className="glass-panel border-border/30 overflow-hidden shadow-xl">
-                <CardHeader className="bg-emerald-500/5 border-b border-border/10 pb-6 pt-8 px-8">
+                <CardHeader className="bg-success/5 border-b border-border/10 pb-6 pt-8 px-8">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600">
+                    <div className="p-2 rounded-lg bg-success/10 text-success">
                       <ShieldCheck className="h-6 w-6" />
                     </div>
                     <CardTitle className="text-2xl font-black">
@@ -791,7 +791,7 @@ function AssessmentContent() {
                       </div>
                     )}
                     <div className="relative">
-                      <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500/20 rounded-full" />
+                      <div className="absolute top-0 left-0 w-1 h-full bg-success/20 rounded-full" />
                       <div className="pl-6 py-2">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-2">
                           Director's Comments
@@ -805,7 +805,7 @@ function AssessmentContent() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-500/20 text-emerald-700">
+                    <div className="flex items-center gap-3 p-4 rounded-xl bg-success-soft border border-success/20 text-success">
                       <ShieldCheck className="h-6 w-6" />
                       <div className="text-sm font-bold">
                         Director Approved & Signed
@@ -849,7 +849,7 @@ function AssessmentContent() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-500/20 text-emerald-700">
+                      <div className="flex items-center gap-3 p-4 rounded-xl bg-success-soft border border-success/20 text-success">
                         <ShieldCheck className="h-6 w-6" />
                         <div className="text-sm font-bold">
                           Electronically Signed & Acknowledged
@@ -858,9 +858,9 @@ function AssessmentContent() {
                     </div>
                   ) : (
                     <div className="space-y-8">
-                      <div className="bg-amber-50 border-l-4 border-amber-400 p-5 rounded-r-xl text-amber-900 shadow-sm">
+                      <div className="bg-warning-soft border-l-4 border-warning/40 p-5 rounded-r-xl text-warning-foreground shadow-sm">
                         <div className="flex gap-4">
-                          <Info className="h-6 w-6 text-amber-500 shrink-0" />
+                          <Info className="h-6 w-6 text-warning-foreground shrink-0" />
                           <div className="space-y-1">
                             <p className="font-bold text-base">
                               Framework Review Complete
@@ -916,8 +916,8 @@ function AssessmentContent() {
               {/* If waiting for admin, show placeholder or readonly self assessment */}
               {isDirectorApprovedOnly && (
                 <Card className="glass-panel border-border/30 p-8 text-center flex flex-col items-center justify-center min-h-[400px]">
-                  <div className="p-4 rounded-full bg-blue-100 mb-6 animate-pulse">
-                    <Clock className="h-12 w-12 text-blue-600" />
+                  <div className="p-4 rounded-full bg-primary-soft mb-6 animate-pulse">
+                    <Clock className="h-12 w-12 text-primary" />
                   </div>
                   <h3 className="text-2xl font-bold mb-2">
                     Pending Administrative Release

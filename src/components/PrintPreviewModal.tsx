@@ -52,10 +52,10 @@ export function PrintPreviewModal({
   if (!data) return null;
 
   const getGradeColor = (grade: string): string => {
-    if (grade.startsWith("A")) return "bg-emerald-500";
-    if (grade.startsWith("B")) return "bg-blue-500";
-    if (grade.startsWith("C")) return "bg-amber-500";
-    if (grade.startsWith("D")) return "bg-orange-500";
+    if (grade.startsWith("A")) return "bg-success";
+    if (grade.startsWith("B")) return "bg-primary";
+    if (grade.startsWith("C")) return "bg-warning";
+    if (grade.startsWith("D")) return "bg-warning";
     return "bg-destructive";
   };
 

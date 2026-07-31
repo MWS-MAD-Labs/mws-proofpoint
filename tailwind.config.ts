@@ -1,6 +1,20 @@
 import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
 
+const semanticScale = (soft: string, base: string, foreground: string) => ({
+  50: soft,
+  100: soft,
+  200: soft,
+  300: base,
+  400: base,
+  500: base,
+  600: foreground,
+  700: foreground,
+  800: foreground,
+  900: foreground,
+  950: foreground,
+});
+
 export default {
   darkMode: ["class"],
   content: [
@@ -28,6 +42,8 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          soft: "hsl(var(--primary-soft))",
+          hover: "hsl(var(--primary-hover))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -36,6 +52,22 @@ export default {
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
+          soft: "hsl(var(--destructive-soft))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+          soft: "hsl(var(--success-soft))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+          soft: "hsl(var(--warning-soft))",
+        },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          foreground: "hsl(var(--info-foreground))",
+          soft: "hsl(var(--info-soft))",
         },
         muted: {
           DEFAULT: "hsl(var(--muted))",
@@ -88,11 +120,44 @@ export default {
           3: "hsl(var(--score-3))",
           4: "hsl(var(--score-4))",
         },
+        /* Legacy palette names resolve to MWS semantic roles during migration. */
+        slate: semanticScale("hsl(var(--muted))", "hsl(var(--border-strong))", "hsl(var(--foreground))"),
+        gray: semanticScale("hsl(var(--muted))", "hsl(var(--border-strong))", "hsl(var(--foreground))"),
+        zinc: semanticScale("hsl(var(--muted))", "hsl(var(--border-strong))", "hsl(var(--foreground))"),
+        neutral: semanticScale("hsl(var(--muted))", "hsl(var(--border-strong))", "hsl(var(--foreground))"),
+        stone: semanticScale("hsl(var(--muted))", "hsl(var(--border-strong))", "hsl(var(--foreground))"),
+        blue: semanticScale("hsl(var(--primary-soft))", "hsl(var(--primary))", "hsl(var(--primary))"),
+        indigo: semanticScale("hsl(var(--primary-soft))", "hsl(var(--primary))", "hsl(var(--primary))"),
+        violet: semanticScale("hsl(var(--primary-soft))", "hsl(var(--primary))", "hsl(var(--primary))"),
+        purple: semanticScale("hsl(var(--primary-soft))", "hsl(var(--primary))", "hsl(var(--primary))"),
+        cyan: semanticScale("hsl(var(--info-soft))", "hsl(var(--info))", "hsl(var(--info-foreground))"),
+        sky: semanticScale("hsl(var(--info-soft))", "hsl(var(--info))", "hsl(var(--info-foreground))"),
+        teal: semanticScale("hsl(var(--info-soft))", "hsl(var(--info))", "hsl(var(--info-foreground))"),
+        green: semanticScale("hsl(var(--success-soft))", "hsl(var(--success))", "hsl(var(--success))"),
+        emerald: semanticScale("hsl(var(--success-soft))", "hsl(var(--success))", "hsl(var(--success))"),
+        lime: semanticScale("hsl(var(--success-soft))", "hsl(var(--success))", "hsl(var(--success))"),
+        yellow: semanticScale("hsl(var(--warning-soft))", "hsl(var(--warning))", "hsl(var(--warning-foreground))"),
+        amber: semanticScale("hsl(var(--warning-soft))", "hsl(var(--warning))", "hsl(var(--warning-foreground))"),
+        orange: semanticScale("hsl(var(--warning-soft))", "hsl(var(--warning))", "hsl(var(--warning-foreground))"),
+        red: semanticScale("hsl(var(--destructive-soft))", "hsl(var(--destructive))", "hsl(var(--destructive))"),
+        rose: semanticScale("hsl(var(--destructive-soft))", "hsl(var(--destructive))", "hsl(var(--destructive))"),
+        pink: semanticScale("hsl(var(--destructive-soft))", "hsl(var(--destructive))", "hsl(var(--destructive))"),
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        "2xl": "2rem",
+        xl: "1.5rem",
+        lg: "1rem",
+        md: "var(--radius)",
+        sm: "0.5rem",
+        xs: "0.25rem",
+      },
+      boxShadow: {
+        xs: "var(--shadow-xs)",
+        sm: "var(--shadow-sm)",
+        md: "var(--shadow-md)",
+        lg: "var(--shadow-lg)",
+        xl: "var(--shadow-xl)",
+        "2xl": "var(--shadow-xl)",
       },
       keyframes: {
         "accordion-down": {
@@ -117,8 +182,9 @@ export default {
         "accordion-up": "accordion-up 0.2s ease-out",
       },
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["JetBrains Mono", "ui-monospace", "monospace"],
+        sans: ["var(--font-nunito-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        heading: ["var(--font-plus-jakarta-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["var(--font-jetbrains-mono)", "ui-monospace", "monospace"],
       },
     },
   },

@@ -59,7 +59,7 @@ export function AssessmentProgress({ status, className }: AssessmentProgressProp
               "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300",
               // Special handling for returned status
               isReturned && step.id === 1
-                ? "bg-amber-500 text-white ring-4 ring-amber-500/20 scale-110"
+                ? "bg-warning text-white ring-4 ring-warning/20 scale-110"
                 : currentStep > step.id
                   ? "bg-primary text-white"
                   : currentStep === step.id
@@ -75,7 +75,7 @@ export function AssessmentProgress({ status, className }: AssessmentProgressProp
             <span className={cn(
               "text-[10px] font-bold uppercase tracking-tighter",
               isReturned && step.id === 1
-                ? "text-amber-600"
+                ? "text-warning-foreground"
                 : currentStep === step.id
                   ? "text-primary"
                   : "text-muted-foreground"
@@ -89,7 +89,7 @@ export function AssessmentProgress({ status, className }: AssessmentProgressProp
       <div className={cn(
         "p-3 rounded-lg text-xs font-bold text-center border",
         isReturned
-          ? "bg-amber-500/10 text-amber-700 border-amber-500/20"
+          ? "bg-warning/10 text-warning-foreground border-warning/20"
           : "bg-primary/5 text-primary border-primary/10"
       )}>
         Current Phase: {steps.find(s => s.id === currentStep)?.name.toUpperCase()}

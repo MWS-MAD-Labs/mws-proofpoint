@@ -122,7 +122,7 @@ export default function NotificationPreferencesPage() {
           </div>
 
           {!preferences.emailEnabled && (
-            <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded">
+            <p className="text-sm text-warning-foreground bg-warning-soft p-3 rounded">
               All email notifications are currently disabled.
             </p>
           )}

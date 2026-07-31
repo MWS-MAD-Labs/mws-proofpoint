@@ -100,7 +100,7 @@ const actionContent: Record<
       "This confirms that you have reviewed the report. The observation will be marked completed.",
     success: "Observation acknowledged and marked completed.",
     icon: CheckCircle2,
-    className: "bg-emerald-600 hover:bg-emerald-700",
+    className: "bg-success hover:bg-success",
   },
   reopen: {
     label: "Reopen for revision",
@@ -444,7 +444,7 @@ function ObservationLifecycle({
                   className={cn(
                     "rounded-xl border p-4",
                     active && "border-primary/40 bg-primary/5",
-                    reached && !active && "border-emerald-500/30 bg-emerald-500/5",
+                    reached && !active && "border-success/30 bg-success/5",
                   )}
                 >
                   <div className="flex items-start gap-3">
