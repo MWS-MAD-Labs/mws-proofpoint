@@ -205,9 +205,7 @@ function ManagerContent() {
   };
 
   const usesDirectItemPercentages = assessment?.permissions?.isManagerLed ?? false;
-  const staffWeightedScore = usesDirectItemPercentages
-    ? calculateStaffAppraisalScore(domains, "staff")
-    : calculateWeightedScore(domains, "staff");
+
   const managerWeightedScore = usesDirectItemPercentages
     ? calculateStaffAppraisalScore(domains, "manager")
     : calculateWeightedScore(domains, "manager");
@@ -598,11 +596,11 @@ function ManagerContent() {
         {/* Sidebar: Progress & Score - 4 columns */}
         <div className="lg:col-span-4 space-y-8">
           <div className="sticky top-24 space-y-8">
-            {/* Score Comparison Widget - same as director page */}
             <ScoreComparisonWidget
               domains={domains}
               finalScore={managerWeightedScore}
-              projectedScore={staffWeightedScore}
+              primaryLabel="Manager"
+              showComparison={false}
             />
 
             <Card className="bg-muted/30 border-dashed border-2 border-muted-foreground/10">

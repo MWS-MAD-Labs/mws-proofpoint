@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { MessageSquarePlus, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export interface ReviewIndicatorData {
   id: string;
@@ -70,7 +71,7 @@ export function ReviewComparisonIndicator({
   const feedbackRequired = directorMode && scoreChanged;
 
   return (
-    <div className={cn("flex flex-col gap-3 rounded-lg border bg-card px-3 py-3 sm:flex-row sm:items-center", scoreChanged && "border-amber-300 bg-amber-50/30")}>
+    <div className={cn("flex flex-col gap-3 rounded-lg border bg-card px-3 py-3", !showFeedback && "sm:flex-row sm:items-center", scoreChanged && "border-amber-300 bg-amber-50/30")}>
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-bold text-muted-foreground">{index + 1}</span>
         <p className="min-w-0 flex-1 text-sm font-semibold leading-snug">{indicator.name}</p>
@@ -78,22 +79,33 @@ export function ReviewComparisonIndicator({
 
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
         {!managerOnly && <ScoreBadge label="Self" score={indicator.staffScore} />}
-        <ScoreBadge label="Manager" score={indicator.managerScore} />
+        {(directorMode || showDirectorComparison) && <ScoreBadge label="Manager" score={indicator.managerScore} />}
         {(directorMode || showDirectorComparison) && <ScoreBadge label="Director" score={indicator.directorScore ?? indicator.managerScore} changed={scoreChanged} />}
 
         {!readonly && onScoreChange && (
           <div className="flex overflow-hidden rounded-md border border-border">
-            {[1, 2, 3, 4].map((score) => (
-              <button
-                key={score}
-                type="button"
-                aria-label={`Set ${reviewerLabel} score to ${score}`}
-                onClick={() => onScoreChange(score)}
-                className={cn("h-8 w-8 border-r text-xs font-black last:border-r-0", activeScore === score ? scoreStyles[score] : "bg-background text-muted-foreground hover:bg-muted")}
-              >
-                {score}
-              </button>
-            ))}
+            {[1, 2, 3, 4].map((score) => {
+              const rubricDescription = indicator[`rubric_${score}` as "rubric_1" | "rubric_2" | "rubric_3" | "rubric_4"];
+
+              return (
+                <Tooltip key={score}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`Set ${reviewerLabel} score to ${score}`}
+                      onClick={() => onScoreChange(score)}
+                      className={cn("h-8 w-8 border-r text-xs font-black last:border-r-0", activeScore === score ? scoreStyles[score] : "bg-background text-muted-foreground hover:bg-muted")}
+                    >
+                      {score}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-sm whitespace-pre-wrap text-sm leading-relaxed">
+                    <p className="mb-1 font-bold">Score {score}</p>
+                    <p>{rubricDescription || "No score description is available."}</p>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
           </div>
         )}
 

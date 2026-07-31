@@ -482,6 +482,19 @@ function DirectorContent() {
     const managerScore = usesDirectItemPercentages
       ? calculateStaffAppraisalScore(domains, "manager")
       : calculateWeightedScore(domains, "manager");
+    const directorDomains = domains.map((domain) => ({
+      ...domain,
+      standards: domain.standards.map((standard) => ({
+        ...standard,
+        kpis: standard.kpis.map((kpi) => ({
+          ...kpi,
+          managerScore: kpi.directorScore ?? kpi.managerScore,
+        })),
+      })),
+    }));
+    const directorScore = usesDirectItemPercentages
+      ? calculateStaffAppraisalScore(directorDomains, "manager")
+      : calculateWeightedScore(directorDomains, "manager");
     const isApproved =
       assessment?.status === "director_approved" ||
       assessment?.status === "acknowledged";
@@ -846,19 +859,12 @@ function DirectorContent() {
             <div className="sticky top-24 space-y-8">
               {/* Score Comparison Widget */}
               <ScoreComparisonWidget
-                domains={domains}
-                finalScore={managerScore}
-                projectedScore={directorChanges.length > 0
-                  ? calculateStaffAppraisalScore(domains.map((domain) => ({
-                      ...domain,
-                      standards: domain.standards.map((standard) => ({
-                        ...standard,
-                        kpis: standard.kpis.map((kpi) => ({ ...kpi, managerScore: kpi.directorScore ?? kpi.managerScore })),
-                      })),
-                    })), "manager")
-                  : managerScore}
-                primaryLabel="Manager"
-                secondaryLabel="Director"
+                domains={directorDomains}
+                secondaryDomains={domains}
+                finalScore={directorScore}
+                projectedScore={managerScore}
+                primaryLabel="Director"
+                secondaryLabel="Manager"
               />
 
               <Card className="bg-muted/30 border-dashed border-2 border-muted-foreground/10">

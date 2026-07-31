@@ -984,7 +984,7 @@ function AssessmentContent() {
               <WeightedScoreDisplay
                 domains={domains}
                 score={weightedScore}
-                label="Projected Score"
+                label="Score"
                 type="staff"
                 showAlways={true}
               />
