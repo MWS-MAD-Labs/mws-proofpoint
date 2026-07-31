@@ -1,6 +1,6 @@
 # ProofPoint Engineering Constitution
 
-**Version:** 1.0.0  
+**Version:** 1.1.0
 **Ratified:** 2026-07-31  
 **Last amended:** 2026-07-31
 
@@ -8,7 +8,7 @@
 
 ProofPoint MUST remain a distinct product while its complete user experience aligns with the [MWS Heart & Purpose UI Kit](https://ui-kit.mws.web.id/). The MWS UI Kit is the authoritative reference for typography, spacing, radii, elevation, interaction states, component composition, responsive behavior, motion, and accessibility.
 
-ProofPoint MUST use Truth Navy (`#1F2A44`) as its principal brand and primary action color. The existing ProofPoint waveform mark in `src/app/icon.tsx` is the approved product logo and MUST be used consistently, including application icon and print identity. MWS logos, crests, or logo derivatives MUST NOT be committed to or distributed from this repository. Alignment with MWS MUST be expressed through the design system, never by displaying an MWS logo.
+ProofPoint MUST use Truth Navy (`#1F2A44`) as its principal brand and primary action color. Millennia Sky (`#B8DDF8`) MUST be the secondary UI color, providing lighter supporting surfaces, secondary actions, navigation accents, and visual relief without competing with Truth Navy. The existing ProofPoint waveform mark in `src/app/icon.tsx` is the approved product logo and MUST be used consistently, including application icon and print identity. MWS logos, crests, or logo derivatives MUST NOT be committed to or distributed from this repository. Alignment with MWS MUST be expressed through the design system, never by displaying an MWS logo.
 
 **Rationale:** ProofPoint belongs to the MWS product ecosystem but requires a clear identity centered on truth, evidence, and trust.
 
@@ -16,17 +16,19 @@ ProofPoint MUST use Truth Navy (`#1F2A44`) as its principal brand and primary ac
 
 All visual properties MUST use centralized semantic design tokens rather than page-level color decisions. The token system MUST cover brand and action colors, text hierarchy, surfaces, borders, focus indicators, status states, typography, spacing, radii, shadows, motion, charts, and print presentation.
 
-Truth Navy MUST drive primary actions, active navigation, selected states, links and focus treatments, evidence emphasis, primary data visualization, and product identity. Supporting MWS colors MUST be used according to meaning:
+Truth Navy MUST drive primary actions, decisive navigation states, links and focus treatments, evidence emphasis, primary data visualization, and product identity. Millennia Sky MUST drive secondary actions, supporting panels, subtle navigation states, informational emphasis, and light visual accents. Supporting MWS colors MUST be used according to meaning:
 
 - Goodness Sage: success, completion, and growth
 - Happiness Gold: warning, attention, and celebration
 - Compassion Rose: destructive actions, errors, and wellbeing
-- Millennia Sky: information, calm secondary emphasis, and reflection
+- Millennia Sky: required secondary color for information, calm emphasis, supporting surfaces, and reflection
 - Deep Charcoal: primary readable text
 
 Raw hexadecimal colors and direct framework palette utilities MUST NOT be introduced in feature code where a semantic token applies. Official third-party brand artwork is exempt when its colors are required.
 
-**Rationale:** Semantic tokens prevent visual drift across themes, components, print, and future features.
+Truth Navy and Millennia Sky MUST remain visually distinguishable and MUST use foreground colors that meet WCAG 2.1 AA contrast. Sky backgrounds MUST NOT be paired with white text when that combination fails contrast.
+
+**Rationale:** Semantic tokens prevent visual drift across themes, components, print, and future features while the navy-and-sky hierarchy keeps ProofPoint trustworthy but visually light.
 
 ## 3. Complete System Consistency
 

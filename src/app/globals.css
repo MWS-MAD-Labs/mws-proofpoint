@@ -20,12 +20,15 @@
     --primary-soft: 222 42% 94%;
     --primary-hover: 222 38% 14%;
 
-    --secondary: 41 78% 93%;
-    --secondary-foreground: 355 22% 12%;
+    /* Millennia Sky is the lighter secondary UI color. */
+    --secondary: 205 82% 85%;
+    --secondary-foreground: 222 37% 19%;
+    --secondary-soft: 204 88% 97%;
+    --secondary-hover: 204 75% 73%;
     --muted: 19 28% 89%;
     --muted-foreground: 357 11% 36%;
-    --accent: 222 42% 94%;
-    --accent-foreground: 222 37% 19%;
+    --accent: var(--secondary-soft);
+    --accent-foreground: var(--secondary-foreground);
 
     --success: 111 14% 48%;
     --success-foreground: 0 0% 100%;
@@ -50,8 +53,8 @@
     --sidebar-foreground: 355 22% 12%;
     --sidebar-primary: 222 37% 19%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 42% 94%;
-    --sidebar-accent-foreground: 222 37% 19%;
+    --sidebar-accent: var(--secondary-soft);
+    --sidebar-accent-foreground: var(--secondary-foreground);
     --sidebar-border: 17 21% 81%;
     --sidebar-ring: 40 66% 53%;
 
@@ -98,12 +101,14 @@
     --primary-foreground: 222 37% 15%;
     --primary-soft: 222 38% 15%;
     --primary-hover: 222 65% 89%;
-    --secondary: 39 41% 13%;
-    --secondary-foreground: 41 76% 75%;
+    --secondary: 204 75% 73%;
+    --secondary-foreground: 222 37% 15%;
+    --secondary-soft: 207 46% 15%;
+    --secondary-hover: 205 82% 85%;
     --muted: 351 15% 18%;
     --muted-foreground: 18 17% 72%;
-    --accent: 222 38% 15%;
-    --accent-foreground: 222 58% 83%;
+    --accent: var(--secondary-soft);
+    --accent-foreground: 204 100% 91%;
 
     --success: 108 29% 71%;
     --success-foreground: 110 22% 13%;
@@ -217,7 +222,7 @@
   .mesh-gradient {
     background:
       radial-gradient(ellipse 75% 45% at 15% 25%, hsl(var(--primary) / 0.1), transparent),
-      radial-gradient(ellipse 65% 45% at 85% 70%, hsl(var(--info) / 0.18), transparent);
+      radial-gradient(ellipse 65% 45% at 85% 70%, hsl(var(--secondary) / 0.24), transparent);
   }
 
   .score-indicator {

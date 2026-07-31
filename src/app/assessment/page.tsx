@@ -24,16 +24,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import {
   useAssessment,
-  useRubricTemplates,
   useMyAssessments,
   calculateWeightedScore,
   Assessment,
@@ -62,13 +55,13 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { useEffect } from "react";
-import { api } from "@/lib/api-client";
+
 
 function AssessmentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const assessmentId = searchParams.get("id");
-  const { profile, roles, isAdmin } = useAuth();
+  const { roles, isAdmin } = useAuth();
 
   const {
     assessment,
@@ -86,11 +79,13 @@ function AssessmentContent() {
     deleteAssessment,
   } = useAssessment(assessmentId || undefined);
 
-  const { templates, loading: templatesLoading } = useRubricTemplates();
   const { assessments, createAssessment } = useMyAssessments();
 
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+  const [selectedTemplateName, setSelectedTemplateName] = useState<string>("");
   const [period, setPeriod] = useState<string>("");
+  const [assignmentLoading, setAssignmentLoading] = useState(!assessmentId);
+  const [assignmentError, setAssignmentError] = useState<string>("");
   const [isCreating, setIsCreating] = useState(false);
   const [showStickyBar, setShowStickyBar] = useState(false);
   const isManagerSelfAssessment = roles.some((role) => role.toLowerCase() === "manager");
@@ -108,80 +103,52 @@ function AssessmentContent() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [assessmentId]);
 
-  // Auto-prefill period and rubric based on assignment
+  // Semester and rubric are always resolved from the current period and the
+  // signed-in user's active department-role workflow assignment.
   useEffect(() => {
-    if (!assessmentId) {
-      setPeriod(getAutomaticPeriod());
-    }
+    if (assessmentId) return;
+
+    const controller = new AbortController();
+    setPeriod(getAutomaticPeriod());
+    setAssignmentLoading(true);
+    setAssignmentError("");
+
+    fetch("/api/assessments/self-assignment", { signal: controller.signal })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error ?? "Could not resolve your self-assessment rubric");
+        }
+        return result.data as {
+          templateId: string | null;
+          templateName: string | null;
+          period: string;
+        };
+      })
+      .then((assignment) => {
+        setPeriod(assignment.period);
+        setSelectedTemplate(assignment.templateId ?? "");
+        setSelectedTemplateName(assignment.templateName ?? "");
+        if (!assignment.templateId) {
+          setAssignmentError(
+            "No active self-assessment rubric is assigned to your department role. Please contact an administrator.",
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setSelectedTemplate("");
+        setSelectedTemplateName("");
+        setAssignmentError(
+          error instanceof Error
+            ? error.message
+            : "Could not resolve your self-assessment rubric",
+        );
+      })
+      .finally(() => setAssignmentLoading(false));
+
+    return () => controller.abort();
   }, [assessmentId]);
-
-  useEffect(() => {
-    const fetchAssignedRubric = async () => {
-      if (assessmentId || !profile) return;
-
-      const { data, error } = await api.getDepartmentRoles();
-      if (error) {
-        console.error("Failed to fetch department roles:", error);
-        return;
-      }
-
-      if (data) {
-        const configs = data as any[];
-
-        // Finalize matched role - convert to lowercase for matching
-        const normalizedRoles = roles.map((r) => r.toLowerCase());
-        let assignedConfig = null;
-
-        // 1. Try to find a department-specific match for ANY of the user's roles
-        for (const role of normalizedRoles) {
-          const match = configs.find(
-            (c) =>
-              String(c.department_id) === String(profile.department_id) &&
-              c.role.toLowerCase() === role,
-          );
-          if (match) {
-            assignedConfig = match;
-            break;
-          }
-        }
-
-        // 2. Fallback: Try global roles for ANY of the user's roles
-        if (!assignedConfig) {
-          for (const role of normalizedRoles) {
-            const match = configs.find(
-              (c) => !c.department_id && c.role.toLowerCase() === role,
-            );
-            if (match) {
-              assignedConfig = match;
-              break;
-            }
-          }
-        }
-
-        // 3. Last fallback: Try any 'staff' configuration for this department
-        if (!assignedConfig) {
-          assignedConfig = configs.find(
-            (c) =>
-              String(c.department_id) === String(profile.department_id) &&
-              c.role.toLowerCase() === "staff",
-          );
-        }
-
-        if (assignedConfig?.default_template_id) {
-          setSelectedTemplate(assignedConfig.default_template_id);
-        } else {
-          setSelectedTemplate("");
-        }
-      }
-    };
-
-    if (!assessmentId && profile) {
-      fetchAssignedRubric();
-    }
-  }, [assessmentId, profile, roles]);
-
-  // Track if we have a forced selection
-  const isRubricForced = !!selectedTemplate;
 
   const handleCreate = async () => {
     if (!selectedTemplate || !period) return;
@@ -315,7 +282,7 @@ function AssessmentContent() {
             Self-Assessment
           </h1>
           <p className="text-muted-foreground text-lg">
-            Choose a period and template to start your own performance evaluation.
+            Your current semester and assigned rubric are selected automatically.
           </p>
         </div>
 
@@ -324,7 +291,7 @@ function AssessmentContent() {
           <CardHeader className="pb-4">
             <CardTitle className="text-2xl">New Assessment Cycle</CardTitle>
             <CardDescription>
-              Enter the review period details and select your functional rubric.
+              Review the automatically selected semester and functional rubric.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 pt-2">
@@ -336,10 +303,10 @@ function AssessmentContent() {
                 <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                 <Input
                   id="period"
-                  placeholder="e.g., Annual Review 2024"
                   value={period}
-                  onChange={(e) => setPeriod(e.target.value)}
-                  className="pl-9 h-11 bg-muted/30 border-muted-foreground/20 focus-visible:ring-primary/20"
+                  readOnly
+                  aria-busy={assignmentLoading}
+                  className="pl-9 h-11 bg-muted/50 border-muted-foreground/20"
                 />
               </div>
             </div>
@@ -350,52 +317,30 @@ function AssessmentContent() {
                   <Layout className="h-4 w-4" />
                   Functional Rubric
                 </label>
-                <Select
-                  value={selectedTemplate}
-                  onValueChange={setSelectedTemplate}
-                  disabled={isCreating}
-                >
-                  <SelectTrigger className="w-full h-14 bg-background border-primary/20 focus:ring-primary/40 text-lg">
-                    <SelectValue placeholder="Select the appropriate rubric" />
-                  </SelectTrigger>
-                  <SelectContent className="glass-panel-strong">
-                    {templatesLoading ? (
-                      <div className="flex items-center justify-center p-4">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      </div>
-                    ) : (
-                      templates
-                        .filter((t) => t.template_type !== "STAFF_APPRAISAL")
-                        .filter(
-                          (t) => !selectedTemplate || t.id === selectedTemplate,
-                        )
-                        .map((t) => (
-                          <SelectItem
-                            key={t.id}
-                            value={t.id}
-                            className="focus:bg-primary focus:text-white"
-                          >
-                            <div className="flex flex-col py-1">
-                              <span className="font-bold">{t.name}</span>
-                              <span className="text-[10px] opacity-70">
-                                {(t as any).templateType === "KPI_APPRAISAL"
-                                  ? "KPI Appraisal"
-                                  : (t as any).templateType === "GENERIC"
-                                    ? "Generic"
-                                    : "KPI Appraisal"}
-                              </span>
-                            </div>
-                          </SelectItem>
-                        ))
-                    )}
-                  </SelectContent>
-                </Select>
-                {isRubricForced && (
-                  <p className="text-[10px] text-primary flex items-center gap-1 mt-1 font-medium animate-pulse">
-                    <ShieldCheck className="h-3 w-3" />
-                    This rubric has been assigned to you by an administrator
-                    based on your department and role.
-                  </p>
+                <div className="relative">
+                  <Input
+                    value={assignmentLoading ? "Loading assigned rubric…" : selectedTemplateName}
+                    readOnly
+                    aria-busy={assignmentLoading}
+                    placeholder="No rubric assigned"
+                    className="h-14 bg-muted/50 border-primary/20 pr-12 text-lg font-bold"
+                  />
+                  {assignmentLoading ? (
+                    <Loader2 className="absolute right-4 top-5 h-4 w-4 animate-spin text-primary" />
+                  ) : selectedTemplate ? (
+                    <ShieldCheck className="absolute right-4 top-5 h-4 w-4 text-primary" />
+                  ) : null}
+                </div>
+                <p className="text-[10px] text-primary flex items-center gap-1 mt-1 font-medium">
+                  <ShieldCheck className="h-3 w-3" />
+                  Automatically selected from your active department-role workflow assignment.
+                </p>
+                {assignmentError && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Rubric unavailable</AlertTitle>
+                    <AlertDescription>{assignmentError}</AlertDescription>
+                  </Alert>
                 )}
               </div>
               <div className="flex flex-col gap-4 pt-2">
@@ -421,7 +366,13 @@ function AssessmentContent() {
 
                 <Button
                   className="w-full h-12 text-base font-bold transition-all duration-300 shadow-lg hover:shadow-primary/20"
-                  disabled={!selectedTemplate || !period || isCreating}
+                  disabled={
+                    assignmentLoading ||
+                    Boolean(assignmentError) ||
+                    !selectedTemplate ||
+                    !period ||
+                    isCreating
+                  }
                   onClick={handleCreate}
                 >
                   {isCreating ? (

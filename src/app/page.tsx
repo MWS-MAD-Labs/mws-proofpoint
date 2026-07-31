@@ -12,7 +12,7 @@ const features = [
         title: "Real-Time Scoring",
         description: "Watch weighted scores calculate instantly as section weights and performance levels update live.",
         icon: BarChart3,
-        tone: "bg-primary-soft text-primary",
+        tone: "bg-secondary-soft text-secondary-foreground",
     },
     {
         title: "Evidence-Based",
@@ -36,7 +36,7 @@ const features = [
         title: "Focused Workflow",
         description: "Purposeful interfaces reduce the time required to complete rigorous performance reviews.",
         icon: Zap,
-        tone: "bg-primary-soft text-primary",
+        tone: "bg-secondary-soft text-secondary-foreground",
     },
     {
         title: "Protected by Role",
@@ -63,9 +63,9 @@ export default function Home() {
 
             <main>
                 <section className="relative px-5 pb-24 pt-16 text-center sm:pt-24">
-                    <div className="absolute left-1/2 top-0 -z-10 h-72 w-[min(92vw,720px)] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
+                    <div className="absolute left-1/2 top-0 -z-10 h-72 w-[min(92vw,720px)] -translate-x-1/2 rounded-full bg-secondary/35 blur-3xl" />
                     <div className="mx-auto max-w-4xl">
-                        <div className="mx-auto mb-6 w-fit rounded-full border border-primary/20 bg-primary-soft px-4 py-2 font-heading text-xs font-extrabold uppercase tracking-[0.18em] text-primary">
+                        <div className="mx-auto mb-6 w-fit rounded-full border border-secondary bg-secondary-soft px-4 py-2 font-heading text-xs font-extrabold uppercase tracking-[0.18em] text-secondary-foreground">
                             Evidence over assumption
                         </div>
                         <h1 className="mb-6 font-heading text-5xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">

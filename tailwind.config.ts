@@ -48,6 +48,8 @@ export default {
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
           foreground: "hsl(var(--secondary-foreground))",
+          soft: "hsl(var(--secondary-soft))",
+          hover: "hsl(var(--secondary-hover))",
         },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
@@ -130,9 +132,9 @@ export default {
         indigo: semanticScale("hsl(var(--primary-soft))", "hsl(var(--primary))", "hsl(var(--primary))"),
         violet: semanticScale("hsl(var(--primary-soft))", "hsl(var(--primary))", "hsl(var(--primary))"),
         purple: semanticScale("hsl(var(--primary-soft))", "hsl(var(--primary))", "hsl(var(--primary))"),
-        cyan: semanticScale("hsl(var(--info-soft))", "hsl(var(--info))", "hsl(var(--info-foreground))"),
-        sky: semanticScale("hsl(var(--info-soft))", "hsl(var(--info))", "hsl(var(--info-foreground))"),
-        teal: semanticScale("hsl(var(--info-soft))", "hsl(var(--info))", "hsl(var(--info-foreground))"),
+        cyan: semanticScale("hsl(var(--secondary-soft))", "hsl(var(--secondary))", "hsl(var(--secondary-foreground))"),
+        sky: semanticScale("hsl(var(--secondary-soft))", "hsl(var(--secondary))", "hsl(var(--secondary-foreground))"),
+        teal: semanticScale("hsl(var(--secondary-soft))", "hsl(var(--secondary))", "hsl(var(--secondary-foreground))"),
         green: semanticScale("hsl(var(--success-soft))", "hsl(var(--success))", "hsl(var(--success))"),
         emerald: semanticScale("hsl(var(--success-soft))", "hsl(var(--success))", "hsl(var(--success))"),
         lime: semanticScale("hsl(var(--success-soft))", "hsl(var(--success))", "hsl(var(--success))"),

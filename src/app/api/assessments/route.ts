@@ -166,20 +166,67 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { template_id, period, manager_id, director_id, staff_id } = body;
-    if (typeof period !== "string" || !period.trim()) {
-      return NextResponse.json({ error: "Review period is required" }, { status: 400 });
-    }
+    const { template_id, manager_id, director_id, staff_id } = body;
     const roles = ((session.user as { roles?: string[] }).roles ?? []) as string[];
     const isManagerLed = typeof staff_id === "string" && staff_id !== session.user.id;
     if (isManagerLed && !roles.some((role) => role === "manager" || role === "admin")) {
       return NextResponse.json({ error: "Only managers can initiate staff appraisals" }, { status: 403 });
     }
     const subjectId = isManagerLed ? staff_id : session.user.id;
-    const resolvedPeriod = isManagerLed ? getAutomaticPeriod() : period.trim();
+    const resolvedPeriod = getAutomaticPeriod();
     let resolvedTemplateId = typeof template_id === "string" ? template_id : null;
 
-    if (isManagerLed) {
+    if (!isManagerLed) {
+      const assignment = await queryOne<{ templateId: string }>(
+        `SELECT rt.id::text AS "templateId"
+           FROM department_role_memberships drm
+           JOIN department_roles dr ON dr.id = drm.department_role_id
+           JOIN role_workflow_assignments rwa
+             ON rwa.department_role_id = dr.id
+            AND rwa.is_active = true
+           JOIN workflow_definitions wd
+             ON wd.id = rwa.workflow_id
+            AND wd.type = 'KPI_APPRAISAL'
+           JOIN rubric_templates rt
+             ON rt.id = rwa.rubric_id
+            AND rt.is_active = true
+            AND rt.template_type IN ('KPI_APPRAISAL', 'GENERIC')
+          WHERE drm.user_id = $1
+          ORDER BY
+            CASE WHEN dr.department_id IS NOT NULL THEN 0 ELSE 1 END,
+            CASE WHEN dr.role = 'manager' THEN 0 ELSE 1 END,
+            rwa.created_at ASC
+          LIMIT 1`,
+        [subjectId],
+      );
+
+      const legacyAssignment = assignment
+        ? null
+        : await queryOne<{ templateId: string }>(
+            `SELECT rt.id::text AS "templateId"
+               FROM department_role_memberships drm
+               JOIN department_roles dr ON dr.id = drm.department_role_id
+               JOIN rubric_templates rt
+                 ON rt.id = dr.default_template_id
+                AND rt.is_active = true
+                AND rt.template_type IN ('KPI_APPRAISAL', 'GENERIC')
+              WHERE drm.user_id = $1
+              ORDER BY
+                CASE WHEN dr.department_id IS NOT NULL THEN 0 ELSE 1 END,
+                CASE WHEN dr.role = 'manager' THEN 0 ELSE 1 END,
+                dr.updated_at DESC
+              LIMIT 1`,
+            [subjectId],
+          );
+
+      resolvedTemplateId = assignment?.templateId ?? legacyAssignment?.templateId ?? null;
+      if (!resolvedTemplateId) {
+        return NextResponse.json(
+          { error: "No active self-assessment rubric is assigned to your department role" },
+          { status: 403 },
+        );
+      }
+    } else {
       const assignment = await queryOne<{ templateId: string }>(
         `SELECT rt.id AS "templateId"
            FROM department_role_memberships drm
