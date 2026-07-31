@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/lib/api-client";
 import { useAuth } from "./useAuth";
 import { toast } from "./use-toast";
@@ -151,6 +151,15 @@ export function useAssessment(assessmentId?: string) {
   const [managerFeedback, setManagerFeedback]     = useState("");
   const [directorFeedback, setDirectorFeedback]   = useState("");
   const [staffAcknowledgement, setStaffAcknowledgement] = useState("");
+  const [draftDirty, setDraftDirty] = useState(false);
+  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const draftVersionRef = useRef(0);
+
+  const markDraftDirty = () => {
+    draftVersionRef.current += 1;
+    setDraftDirty(true);
+    setAutosaveStatus("idle");
+  };
 
   useEffect(() => {
     if (!assessmentId) {
@@ -259,9 +268,11 @@ export function useAssessment(assessmentId?: string) {
     fetchAssessment();
   }, [assessmentId]);
 
-  const saveDraft = async () => {
+  const saveDraft = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!assessment) return;
 
+    const savedVersion = draftVersionRef.current;
+    if (silent) setAutosaveStatus("saving");
     setSaving(true);
     const updates: Record<string, unknown> = {};
 
@@ -314,11 +325,35 @@ export function useAssessment(assessmentId?: string) {
     setSaving(false);
 
     if (error) {
-      toast({ title: "Error", description: "Failed to save draft", variant: "destructive" });
+      if (silent) {
+        setDraftDirty(false);
+        setAutosaveStatus("error");
+      } else {
+        toast({ title: "Error", description: "Failed to save draft", variant: "destructive" });
+      }
     } else {
-      toast({ title: "Saved", description: "Draft saved successfully" });
+      if (savedVersion === draftVersionRef.current) setDraftDirty(false);
+      setAutosaveStatus("saved");
+      if (!silent) toast({ title: "Saved", description: "Draft saved successfully" });
     }
-  };
+  }, [assessment, domains, managerFeedback]);
+
+  useEffect(() => {
+    const canAutosave = Boolean(
+      assessment && (
+        assessment.permissions?.canSaveDraft ||
+        (!assessment.permissions?.isManagerLed && ["draft", "returned", "self_submitted", "manager_reviewed"].includes(assessment.status))
+      )
+    );
+
+    if (!draftDirty || !canAutosave || saving || autosaveStatus === "error") return;
+
+    const timeout = window.setTimeout(() => {
+      void saveDraft({ silent: true });
+    }, 1500);
+
+    return () => window.clearTimeout(timeout);
+  }, [assessment, autosaveStatus, draftDirty, saveDraft, saving]);
 
   const submitAssessment = async () => {
     if (!assessment) return;
@@ -498,6 +533,7 @@ export function useAssessment(assessmentId?: string) {
   };
 
   const updateKPI = (kpiId: string, updates: Partial<KPIData>) => {
+    markDraftDirty();
     setDomains(prev => prev.map(domain => ({
       ...domain,
       standards: domain.standards.map(standard => ({
@@ -507,6 +543,11 @@ export function useAssessment(assessmentId?: string) {
         )
       }))
     })));
+  };
+
+  const updateManagerFeedback = (feedback: string) => {
+    markDraftDirty();
+    setManagerFeedback(feedback);
   };
 
   const updateAssessmentStatus = (status: string) => {
@@ -573,13 +614,14 @@ export function useAssessment(assessmentId?: string) {
     domains,
     loading,
     saving,
+    autosaveStatus,
     saveDraft,
     submitAssessment,
     submitReview,
     updateKPI,
     updateAssessmentStatus,
     managerFeedback,
-    setManagerFeedback,
+    setManagerFeedback: updateManagerFeedback,
     directorFeedback,
     setDirectorFeedback,
     staffAcknowledgement,

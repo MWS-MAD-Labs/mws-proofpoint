@@ -69,6 +69,7 @@ function AssessmentContent() {
     domains,
     loading: assessmentLoading,
     saving,
+    autosaveStatus,
     saveDraft,
     submitAssessment,
     updateKPI,
@@ -599,9 +600,14 @@ function AssessmentContent() {
 
         {!isReadOnly && !isDirectorApprovedOnly && (
           <div className="flex items-center gap-4">
+            {autosaveStatus !== "idle" && (
+              <span className={`text-sm ${autosaveStatus === "error" ? "text-destructive" : "text-muted-foreground"}`} role="status">
+                {autosaveStatus === "saving" ? "Saving draft…" : autosaveStatus === "saved" ? "All changes saved" : "Autosave failed — save manually"}
+              </span>
+            )}
             <Button
               variant="outline"
-              onClick={saveDraft}
+              onClick={() => void saveDraft()}
               disabled={saving}
               className="h-12 px-6 rounded-xl border-primary/20 hover:bg-primary/5 transition-all"
             >
@@ -977,7 +983,7 @@ function AssessmentContent() {
             <div className="flex items-center gap-4 w-full md:w-auto">
               <Button
                 variant="outline"
-                onClick={saveDraft}
+                onClick={() => void saveDraft()}
                 disabled={saving}
                 className="flex-1 md:flex-none h-12 px-6 rounded-xl border-primary/20 hover:bg-primary/5 transition-all"
               >

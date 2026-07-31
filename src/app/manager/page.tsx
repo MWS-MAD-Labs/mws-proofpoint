@@ -80,6 +80,7 @@ function ManagerContent() {
     saveDraft,
     submitReview,
     saving,
+    autosaveStatus,
     managerFeedback,
     setManagerFeedback,
     directorFeedback,
@@ -273,9 +274,14 @@ function ManagerContent() {
 
         {!isReadOnly && !isManagerLedDraft && (
           <div className="flex items-center gap-4">
+            {autosaveStatus !== "idle" && (
+              <span className={`text-sm ${autosaveStatus === "error" ? "text-destructive" : "text-muted-foreground"}`} role="status">
+                {autosaveStatus === "saving" ? "Saving draft…" : autosaveStatus === "saved" ? "All changes saved" : "Autosave failed — save manually"}
+              </span>
+            )}
             <Button
               variant="outline"
-              onClick={saveDraft}
+              onClick={() => void saveDraft()}
               disabled={saving}
               className="h-12 px-6 rounded-xl border-primary/20 hover:bg-primary/5 transition-all"
             >
@@ -406,12 +412,18 @@ function ManagerContent() {
       {isManagerLedDraft && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-background/95 px-4 py-3 shadow-2xl backdrop-blur supports-[backdrop-filter]:bg-background/85">
           <div className="container mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <p className="mr-auto text-sm text-muted-foreground">
-              Save your progress at any time, then submit when all ratings and feedback are complete.
+            <p className={`mr-auto text-sm ${autosaveStatus === "error" ? "text-destructive" : "text-muted-foreground"}`} role="status">
+              {autosaveStatus === "saving"
+                ? "Saving draft…"
+                : autosaveStatus === "saved"
+                  ? "All changes saved"
+                  : autosaveStatus === "error"
+                    ? "Autosave failed — save manually"
+                    : "Changes save automatically after you pause typing."}
             </p>
             <Button
               variant="outline"
-              onClick={saveDraft}
+              onClick={() => void saveDraft()}
               disabled={saving}
               className="h-12 min-w-40 rounded-xl border-primary/20 hover:bg-primary/5"
             >
