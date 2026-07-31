@@ -6,6 +6,21 @@ import type { NotificationType } from "@/lib/notifications/types";
 import { getAssessmentPermissions } from "@/features/assessments/server/permissions";
 import { getAutomaticPeriod } from "@/lib/utils";
 
+function hasEvidence(value: unknown): boolean {
+  if (typeof value === "string") return value.trim().length > 0;
+  return Array.isArray(value) && value.some(
+    (item) =>
+      typeof item === "object" && item !== null &&
+      "evidence" in item && typeof item.evidence === "string" &&
+      item.evidence.trim().length > 0,
+  );
+}
+
+function isTenthPointRating(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) &&
+    value >= 1 && value <= 4 && Math.round(value * 10) === value * 10;
+}
+
 // GET /api/assessments - List assessments based on user role
 export async function GET(request: Request) {
   try {
@@ -351,6 +366,32 @@ export async function PUT(request: Request) {
         { error: "Workflow-aware appraisals must use their lifecycle action endpoint." },
         { status: 409 },
       );
+    }
+
+    const roles = ((session.user as { roles?: string[] }).roles ?? []).map((role) => role.toLowerCase());
+    const isManagerSelfAssessment = existingAssessment.staff_id === session.user.id && roles.includes("manager");
+
+    if (updates.staff_scores !== undefined) {
+      if (!updates.staff_scores || typeof updates.staff_scores !== "object" || Array.isArray(updates.staff_scores)) {
+        return NextResponse.json({ error: "Assessment scores must be a score map." }, { status: 400 });
+      }
+
+      const scores = updates.staff_scores as Record<string, unknown>;
+      if (Object.values(scores).some((score) => score !== "X" && !isTenthPointRating(score))) {
+        return NextResponse.json({ error: "Ratings must be from 1.0 to 4.0 in 0.1 increments." }, { status: 400 });
+      }
+
+      if (isManagerSelfAssessment) {
+        const evidence = updates.staff_evidence && typeof updates.staff_evidence === "object" && !Array.isArray(updates.staff_evidence)
+          ? updates.staff_evidence as Record<string, unknown>
+          : {};
+        const missingEvidence = Object.entries(scores).some(
+          ([kpiId, score]) => typeof score === "number" && score >= 3 && !hasEvidence(evidence[kpiId]),
+        );
+        if (missingEvidence) {
+          return NextResponse.json({ error: "Supporting evidence is required for every rating of 3.0 or above." }, { status: 400 });
+        }
+      }
     }
 
     // Prevent invalid completed state: only the owner can acknowledge, and feedback is mandatory.

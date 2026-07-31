@@ -10,7 +10,13 @@ import { calculateWeightedPercentageScore, getGradeFromScore } from "@/features/
 const actions = new Set<AssessmentAction>(["save_draft", "submit", "director_review", "return", "acknowledge"]);
 
 function isValidRating(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 4;
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 1 &&
+    value <= 4 &&
+    Math.round(value * 10) === value * 10
+  );
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

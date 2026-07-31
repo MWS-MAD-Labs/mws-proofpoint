@@ -93,6 +93,7 @@ function AssessmentContent() {
   const [period, setPeriod] = useState<string>("");
   const [isCreating, setIsCreating] = useState(false);
   const [showStickyBar, setShowStickyBar] = useState(false);
+  const isManagerSelfAssessment = roles.some((role) => role.toLowerCase() === "manager");
 
   // Scroll detection for sticky bar
   useEffect(() => {
@@ -955,6 +956,7 @@ function AssessmentContent() {
                     section={domain}
                     onIndicatorChange={updateKPI}
                     readonly={isReadOnly}
+                    evidenceRequiredAtOrAbove={isManagerSelfAssessment ? 3 : 1}
                   />
                 ))}
               </Accordion>

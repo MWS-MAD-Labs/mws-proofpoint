@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { MessageSquarePlus, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
 
 export interface ReviewIndicatorData {
   id: string;
@@ -43,10 +43,11 @@ const scoreStyles: Record<number, string> = {
 };
 
 function ScoreBadge({ label, score, changed = false }: { label: string; score: number | "X" | null; changed?: boolean }) {
+  const scoreStyle = typeof score === "number" ? scoreStyles[Math.round(score)] : undefined;
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-bold", score === "X" ? "border-slate-200 bg-slate-100 text-slate-500" : score === null ? "border-border bg-muted text-muted-foreground" : scoreStyles[score], changed && "ring-2 ring-amber-400 ring-offset-1")}>
+    <span className={cn("inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-bold", score === "X" ? "border-slate-200 bg-slate-100 text-slate-500" : score === null ? "border-border bg-muted text-muted-foreground" : scoreStyle, changed && "ring-2 ring-amber-400 ring-offset-1")}>
       <span className="text-[10px] font-medium opacity-80">{label}</span>
-      <span className="font-mono">{score ?? "—"}</span>
+      <span className="font-mono">{typeof score === "number" ? score.toFixed(1) : score ?? "—"}</span>
     </span>
   );
 }
@@ -69,46 +70,67 @@ export function ReviewComparisonIndicator({
   const feedback = directorMode ? indicator.directorEvidence : indicator.managerEvidence;
   const feedbackText = typeof feedback === "string" ? feedback : "";
   const feedbackRequired = directorMode && scoreChanged;
+  const selectedRubricScore = typeof activeScore === "number" ? Math.round(activeScore) : null;
+  const selectedRubricDescription = selectedRubricScore
+    ? indicator[`rubric_${selectedRubricScore}` as "rubric_1" | "rubric_2" | "rubric_3" | "rubric_4"]
+    : null;
+  const scoreColor =
+    typeof activeScore !== "number" ? "accent-primary" :
+    activeScore < 2 ? "accent-red-500" :
+    activeScore < 3 ? "accent-amber-500" :
+    activeScore < 4 ? "accent-emerald-500" : "accent-blue-500";
+  const selectedDotColor =
+    typeof activeScore !== "number" ? "bg-primary text-primary-foreground border-primary" :
+    activeScore < 2 ? "bg-red-500 text-white border-red-600" :
+    activeScore < 3 ? "bg-amber-500 text-white border-amber-600" :
+    activeScore < 4 ? "bg-emerald-500 text-white border-emerald-600" : "bg-blue-500 text-white border-blue-600";
 
   return (
-    <div className={cn("flex flex-col gap-3 rounded-lg border bg-card px-3 py-3", !showFeedback && "sm:flex-row sm:items-center", scoreChanged && "border-amber-300 bg-amber-50/30")}>
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-bold text-muted-foreground">{index + 1}</span>
-        <p className="min-w-0 flex-1 text-sm font-semibold leading-snug">{indicator.name}</p>
+    <div className={cn("flex flex-col gap-3 rounded-lg border bg-card px-3 py-3", scoreChanged && "border-amber-300 bg-amber-50/30")}>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-bold text-muted-foreground">{index + 1}</span>
+          <p className="min-w-0 flex-1 text-sm font-semibold leading-snug">{indicator.name}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {!managerOnly && <ScoreBadge label="Self" score={indicator.staffScore} />}
+          {(directorMode || showDirectorComparison) && <ScoreBadge label="Manager" score={indicator.managerScore} />}
+          {(directorMode || showDirectorComparison) && <ScoreBadge label="Director" score={indicator.directorScore ?? indicator.managerScore} changed={scoreChanged} />}
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-        {!managerOnly && <ScoreBadge label="Self" score={indicator.staffScore} />}
-        {(directorMode || showDirectorComparison) && <ScoreBadge label="Manager" score={indicator.managerScore} />}
-        {(directorMode || showDirectorComparison) && <ScoreBadge label="Director" score={indicator.directorScore ?? indicator.managerScore} changed={scoreChanged} />}
-
-        {!readonly && onScoreChange && (
-          <div className="flex overflow-hidden rounded-md border border-border">
-            {[1, 2, 3, 4].map((score) => {
-              const rubricDescription = indicator[`rubric_${score}` as "rubric_1" | "rubric_2" | "rubric_3" | "rubric_4"];
-
-              return (
-                <Tooltip key={score}>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label={`Set ${reviewerLabel} score to ${score}`}
-                      onClick={() => onScoreChange(score)}
-                      className={cn("h-8 w-8 border-r text-xs font-black last:border-r-0", activeScore === score ? scoreStyles[score] : "bg-background text-muted-foreground hover:bg-muted")}
-                    >
-                      {score}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-sm whitespace-pre-wrap text-sm leading-relaxed">
-                    <p className="mb-1 font-bold">Score {score}</p>
-                    <p>{rubricDescription || "No score description is available."}</p>
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
+      {!readonly && onScoreChange && (
+        <div className="ml-9 rounded-md border bg-background px-4 py-3">
+          <div className="mb-2 flex items-center justify-between text-xs">
+            <span className="font-medium">{reviewerLabel} rating</span>
+            <output className="font-mono font-bold text-primary">
+              {typeof activeScore === "number" ? activeScore.toFixed(1) : "—"}
+            </output>
           </div>
-        )}
+          <div className="relative h-9">
+            <input
+              aria-label={`${reviewerLabel} rating from 1 to 4`}
+              type="range"
+              min={1}
+              max={4}
+              step={0.1}
+              value={typeof activeScore === "number" ? activeScore : 1}
+              onChange={(event) => onScoreChange(Number(event.target.value))}
+              className={cn("absolute inset-x-0 top-1/2 z-10 h-2 w-full -translate-y-1/2 cursor-pointer", scoreColor)}
+            />
+            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-1/2 z-20 flex -translate-y-1/2 justify-between px-0.5">
+              {[1, 2, 3, 4].map((score) => (
+                <span key={score} className={cn("flex h-7 w-7 items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-md", selectedRubricScore === score ? selectedDotColor : "border-slate-300 bg-white text-slate-600 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300")}>
+                  {score}
+                </span>
+              ))}
+            </div>
+          </div>
+          {selectedRubricDescription && <p className="mt-1 border-t pt-2 text-xs leading-5 text-muted-foreground">{selectedRubricDescription}</p>}
+        </div>
+      )}
 
+      <div className="ml-9 flex flex-wrap items-center gap-2">
         {(!directorMode || scoreChanged || feedbackText) && (!readonly || feedbackText) && (
           <Button type="button" variant="ghost" size="sm" onClick={() => setShowFeedback((value) => !value)} className="h-8 gap-1 px-2 text-xs">
             <MessageSquarePlus className="h-3.5 w-3.5" />

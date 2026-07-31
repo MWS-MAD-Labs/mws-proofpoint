@@ -308,11 +308,12 @@ function parseAnswerInput(
     const note = value.note;
     if (
       typeof score !== "number" ||
-      !Number.isInteger(score) ||
+      !Number.isFinite(score) ||
       score < 1 ||
-      score > 100
+      score > 4 ||
+      Math.round(score * 10) !== score * 10
     ) {
-      return { ok: false, error: "Score must be a whole number from 1 to 100." };
+      return { ok: false, error: "Score must be from 1.0 to 4.0 in 0.1 increments." };
     }
     if (note !== undefined && typeof note !== "string") {
       return { ok: false, error: "Note must be text." };

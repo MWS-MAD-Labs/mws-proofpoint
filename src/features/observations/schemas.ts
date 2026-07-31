@@ -15,14 +15,14 @@ export const observationQuestionTypeSchema = z.enum(
 );
 
 export const observationAnswerValueSchema = z.object({
-  score: z.number().int().nullable().optional(),
+  score: z.number().min(1).max(4).multipleOf(0.1).nullable().optional(),
   textValue: z.string().nullable().optional(),
   selectedOption: z.string().nullable().optional(),
 });
 
 export const scaleAnswerSchema = z.object({
   type: z.literal("SCALE"),
-  score: z.number().int().min(1).max(100),
+  score: z.number().min(1).max(4).multipleOf(0.1),
   note: z.string().optional(),
 });
 

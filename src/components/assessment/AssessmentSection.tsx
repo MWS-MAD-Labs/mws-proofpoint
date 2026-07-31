@@ -32,6 +32,7 @@ interface AssessmentSectionProps {
   section: DomainData;
   onIndicatorChange: (indicatorId: string, updates: Partial<KPIData>) => void;
   readonly?: boolean;
+  evidenceRequiredAtOrAbove?: number;
 }
 
 function calculateDomainScore(domain: DomainData): number | null {
@@ -51,6 +52,7 @@ export function AssessmentSection({
   section,
   onIndicatorChange,
   readonly = false,
+  evidenceRequiredAtOrAbove = 1,
 }: AssessmentSectionProps) {
   const domainScore = calculateDomainScore(section);
 
@@ -62,7 +64,7 @@ export function AssessmentSection({
       totalKPIs++;
       if (
         k.score !== null &&
-        (k.score === "X" || hasValidEvidence(k.evidence))
+        (k.score === "X" || (typeof k.score === "number" && (k.score < evidenceRequiredAtOrAbove || hasValidEvidence(k.evidence))) )
       ) {
         completedKPIs++;
       }
@@ -173,6 +175,7 @@ export function AssessmentSection({
                     index={kpiIdx}
                     onChange={(updates) => onIndicatorChange(kpi.id, updates)}
                     readonly={readonly}
+                    evidenceRequiredAtOrAbove={evidenceRequiredAtOrAbove}
                   />
                 ))}
               </div>

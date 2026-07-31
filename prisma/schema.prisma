@@ -523,7 +523,7 @@ model ObservationAnswer {
   id              String   @id @default(uuid())
   observationId   String   @map("observation_id")
   indicatorId     String   @map("indicator_id")
-  score           Int      @default(0)
+  score           Float    @default(0) @db.DoublePrecision
   note            String?  @db.Text
   evidence        String?  @db.Text
   textValue       String?  @map("text_value") @db.Text

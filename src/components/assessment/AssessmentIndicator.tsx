@@ -24,9 +24,10 @@ interface AssessmentIndicatorProps {
   onChange: (updates: Partial<KPIData>) => void;
   index: number;
   readonly?: boolean;
+  evidenceRequiredAtOrAbove?: number;
 }
 
-export function AssessmentIndicator({ indicator, onChange, index, readonly = false }: AssessmentIndicatorProps) {
+export function AssessmentIndicator({ indicator, onChange, index, readonly = false, evidenceRequiredAtOrAbove = 1 }: AssessmentIndicatorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const hasEvidence = Array.isArray(indicator.evidence)
@@ -35,8 +36,9 @@ export function AssessmentIndicator({ indicator, onChange, index, readonly = fal
 
   const isExcluded = indicator.score === 'X';
 
+  const evidenceRequired = typeof indicator.score === "number" && indicator.score >= evidenceRequiredAtOrAbove;
   const isComplete = indicator.score !== null && (
-    isExcluded || hasEvidence
+    isExcluded || !evidenceRequired || hasEvidence
   );
 
   const rubricDescriptions = {
@@ -119,6 +121,22 @@ export function AssessmentIndicator({ indicator, onChange, index, readonly = fal
         <div className="px-4 pb-6 space-y-6 pt-2 animate-in slide-in-from-top-1 duration-200">
           <hr className="border-border/50 mb-4" />
 
+          {/* Rating is immediately below the indicator header. */}
+          <div className={cn("transition-opacity duration-200", isExcluded && "opacity-40 select-none")}>
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm font-bold text-foreground flex items-center gap-2">
+                <Info className="h-4 w-4 text-primary" />
+                Performance Rating
+              </label>
+            </div>
+            <ScoreSelector
+              value={indicator.score}
+              onChange={(score) => onChange({ score })}
+              disabled={readonly || isExcluded}
+              rubricDescriptions={rubricDescriptions}
+            />
+          </div>
+
           {/* Measurement Info */}
           {(indicator.description || indicator.evidence_guidance) && (
             <div className={cn(
@@ -168,20 +186,6 @@ export function AssessmentIndicator({ indicator, onChange, index, readonly = fal
               </div>
             )}
 
-            <div className={cn("transition-opacity duration-200", isExcluded && "opacity-40 select-none")}>
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-sm font-bold text-foreground flex items-center gap-2">
-                  <Info className="h-4 w-4 text-primary" />
-                  Performance Rating
-                </label>
-              </div>
-              <ScoreSelector
-                value={indicator.score}
-                onChange={(score) => onChange({ score })}
-                disabled={readonly}
-                rubricDescriptions={rubricDescriptions}
-              />
-            </div>
 
             <div className={cn("pt-2 transition-opacity duration-200", isExcluded && "opacity-40 select-none")}>
               <EvidenceInput
@@ -189,6 +193,7 @@ export function AssessmentIndicator({ indicator, onChange, index, readonly = fal
                 value={indicator.evidence}
                 onChange={(evidence) => onChange({ evidence })}
                 disabled={readonly || isExcluded}
+                requireAtOrAbove={evidenceRequiredAtOrAbove}
               />
             </div>
           </div>

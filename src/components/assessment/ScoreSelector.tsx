@@ -1,7 +1,6 @@
 import { cn } from "@/lib/utils";
 import {
   Info,
-  Sparkles,
   AlertTriangle,
   CheckCircle,
   TrendingUp,
@@ -110,76 +109,75 @@ export function ScoreSelector({
     },
   ];
 
-  const options = hideNotImplemented
-    ? allOptions.filter((o) => o.score !== "X")
-    : allOptions;
 
-  const selectedOption = options.find((o) => o.score === value);
-  const selectedConfig = selectedOption
-    ? getScoreConfig(selectedOption.score)
-    : null;
+
+  const selectedScore = typeof value === "number" ? value : null;
+  const selectedOption = selectedScore === null
+    ? undefined
+    : allOptions.find((option) => option.score === Math.round(selectedScore));
+  const selectedConfig = selectedOption ? getScoreConfig(selectedOption.score) : null;
+  const scoreColor =
+    selectedScore === null ? "accent-primary" :
+    selectedScore < 2 ? "accent-red-500" :
+    selectedScore < 3 ? "accent-amber-500" :
+    selectedScore < 4 ? "accent-emerald-500" : "accent-blue-500";
+  const selectedDotColor =
+    selectedScore === null ? "bg-primary text-primary-foreground border-primary" :
+    selectedScore < 2 ? "bg-red-500 text-white border-red-600" :
+    selectedScore < 3 ? "bg-amber-500 text-white border-amber-600" :
+    selectedScore < 4 ? "bg-emerald-500 text-white border-emerald-600" : "bg-blue-500 text-white border-blue-600";
 
   return (
     <div className="space-y-4">
-      {/* Score Buttons */}
-      <div className="flex gap-3 flex-wrap items-center">
-        {options.map((option) => {
-          const isSelected = value === option.score;
-          const config = getScoreConfig(option.score);
-          const isX = option.score === "X";
-
-          return (
-            <button
-              key={option.score}
-              type="button"
-              onClick={() => onChange(option.score)}
-              disabled={disabled}
-              className={cn(
-                "relative group transition-all duration-300",
-                disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
-              )}
-            >
-              {/* Glow Effect */}
-              {isSelected && (
-                <div
-                  className={cn(
-                    "absolute inset-0 rounded-xl blur-lg opacity-60 transition-opacity",
-                    config.bg,
-                  )}
-                />
-              )}
-
-              {/* Button */}
-              <div
-                className={cn(
-                  "relative w-14 h-14 rounded-xl border-2 flex flex-col items-center justify-center font-mono font-bold transition-all duration-300",
-                  isSelected
-                    ? cn(
-                        config.bg,
-                        config.border,
-                        config.text,
-                        config.glow,
-                        "scale-110",
-                      )
-                    : isX
-                      ? "bg-slate-100 border-slate-200 text-slate-400 hover:border-slate-400 hover:text-slate-600 hover:scale-105"
-                      : "bg-card border-border hover:border-muted-foreground/50 text-muted-foreground hover:text-foreground hover:scale-105 hover:shadow-lg",
-                  isX ? "text-xl" : "text-lg",
-                )}
-              >
-                {option.score}
-
-                {/* Sparkle for score 4 */}
-                {isSelected && option.score === 4 && (
-                  <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-yellow-300 animate-pulse" />
-                )}
-              </div>
-
-              {/* Tooltip */}
-              {/* Tooltip Removed per user request */}
-            </button>
-          );
-        })}
+      <div className="rounded-xl border bg-card p-4">
+        <div className="mb-3 flex items-center justify-between gap-4">
+          <span className="text-sm font-semibold">Performance rating</span>
+          <output className="rounded-md bg-primary px-3 py-1 font-mono text-lg font-bold text-primary-foreground">
+            {selectedScore?.toFixed(1) ?? "—"}
+          </output>
+        </div>
+        <div className="relative h-9">
+          <input
+            aria-label="Performance rating from 1 to 4"
+            type="range"
+            min={1}
+            max={4}
+            step={0.1}
+            value={selectedScore ?? 1}
+            disabled={disabled}
+            onChange={(event) => onChange(Number(event.target.value))}
+            className={cn("absolute inset-x-0 top-1/2 z-10 h-2 w-full -translate-y-1/2 cursor-pointer disabled:cursor-not-allowed", scoreColor)}
+          />
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-1/2 z-20 flex -translate-y-1/2 justify-between px-0.5">
+            {[1, 2, 3, 4].map((score) => (
+              <span key={score} className={cn("flex h-7 w-7 items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-md", Math.round(selectedScore ?? 0) === score ? selectedDotColor : "border-slate-300 bg-white text-slate-600 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300")}>
+                {score}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
+          {allOptions.slice(0, 4).map((option, index) => (
+            <div key={option.score} className={cn(index === 0 ? "text-left" : index === 3 ? "text-right" : "text-center")}>
+              <p className="font-semibold text-foreground">{option.score} · {option.label}</p>
+              <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">{option.description || "No rubric description provided."}</p>
+            </div>
+          ))}
+        </div>
+        {!hideNotImplemented && (
+          <button
+            type="button"
+            onClick={() => onChange("X")}
+            disabled={disabled}
+            className={cn(
+              "mt-4 rounded-md border px-3 py-1.5 text-sm transition-colors",
+              value === "X" ? "border-slate-500 bg-slate-500 text-white" : "border-slate-200 text-slate-600 hover:bg-slate-50",
+              disabled && "cursor-not-allowed opacity-50",
+            )}
+          >
+            Not Implemented Yet
+          </button>
+        )}
       </div>
 
       {/* Selected Score Info Card */}
@@ -237,7 +235,7 @@ export function ScoreSelector({
               >
                 {selectedOption.score === "X"
                   ? "Not Implemented Yet"
-                  : selectedOption.label}
+                  : `${selectedScore?.toFixed(1)} · ${selectedOption.label}`}
               </p>
               <p className="text-sm text-muted-foreground mt-1">
                 {selectedOption.description}

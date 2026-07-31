@@ -562,7 +562,7 @@ export function ObservationFormEditor() {
                                         onChange={(e) => setEditingIndicator((p) => p ? { ...p, question_type: e.target.value } : null)}
                                         className="w-full text-sm border border-border rounded-md px-2 py-1.5 bg-background"
                                       >
-                                        <option value="SCALE">Scale (numeric, e.g. 1–100)</option>
+                                        <option value="SCALE">Scale (1–4, in 0.1 increments)</option>
                                         <option value="CHOICE">Choice (single select from options)</option>
                                         <option value="TEXT">Text (free text / narrative)</option>
                                       </select>

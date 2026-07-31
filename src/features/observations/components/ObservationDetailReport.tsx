@@ -526,7 +526,7 @@ function IndicatorResponse({
   const answerValue =
     indicator.questionType === "SCALE"
       ? answer?.score && answer.score > 0
-        ? `${answer.score} / 100`
+        ? `${answer.score.toFixed(1)} / 4`
         : null
       : indicator.questionType === "TEXT"
         ? answer?.textValue?.trim() || null
