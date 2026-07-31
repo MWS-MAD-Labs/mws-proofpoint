@@ -398,6 +398,8 @@ export async function PUT(request: Request) {
       "manager_scores",
       "staff_evidence",
       "manager_evidence",
+      "director_scores",
+      "director_evidence",
       "manager_notes",
       "director_comments",
       "staff_notes",

@@ -461,6 +461,7 @@ function ManagerContent() {
                 onIndicatorChange={updateIndicator}
                 readonly={isReadOnly}
                 managerOnly={Boolean(assessment?.permissions?.isManagerLed)}
+                showDirectorComparison={Boolean(assessment?.permissions?.isManagerLed && assessment?.director_scores && Object.keys(assessment.director_scores).length > 0)}
                 section={{
                   ...domain,
                   standards: domain.standards.map((s: StandardData) => ({
@@ -472,6 +473,8 @@ function ManagerContent() {
                       staffEvidence: i.evidence,
                       managerScore: i.managerScore ?? null,
                       managerEvidence: i.managerEvidence ?? "",
+                      directorScore: i.directorScore ?? null,
+                      directorEvidence: i.directorEvidence ?? "",
                     })),
                   })),
                 }}

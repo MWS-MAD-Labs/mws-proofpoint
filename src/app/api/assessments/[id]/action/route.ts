@@ -39,7 +39,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const staffNotes = typeof body.staffNotes === "string" ? body.staffNotes.trim() : undefined;
     const returnFeedback = typeof body.returnFeedback === "string" ? body.returnFeedback.trim() : undefined;
     if (action === "submit" && !managerNotes) throw Object.assign(new Error("Manager feedback is required before submission"), { statusCode: 400 });
-    if (action === "director_review" && !directorComments) throw Object.assign(new Error("Director comments are required"), { statusCode: 400 });
+
     if (action === "return" && !returnFeedback) throw Object.assign(new Error("Return feedback is required"), { statusCode: 400 });
     if (action === "acknowledge" && !staffNotes) throw Object.assign(new Error("Acknowledgement comments are required"), { statusCode: 400 });
 
@@ -86,8 +86,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       add("manager_submitted_at", new Date());
       add("current_step_order", 2);
     }
-    if (action === "director_review") { add("director_comments", directorComments); add("director_reviewed_at", new Date()); add("current_step_order", 3); }
-    if (action === "return") { add("return_feedback", returnFeedback); add("returned_at", new Date()); add("returned_by", session.user.id); add("current_step_order", 1); }
+    if (action === "director_review") {
+      if (directorComments !== undefined) add("director_comments", directorComments);
+      add("director_reviewed_at", new Date());
+      add("current_step_order", 3);
+    }
+    if (action === "return") {
+      if (body.directorScores !== undefined) add("director_scores", JSON.stringify(body.directorScores));
+      if (body.directorEvidence !== undefined) add("director_evidence", JSON.stringify(body.directorEvidence));
+      add("return_feedback", returnFeedback);
+      add("returned_at", new Date());
+      add("returned_by", session.user.id);
+      add("current_step_order", 1);
+    }
     if (action === "acknowledge") { add("staff_notes", staffNotes); add("acknowledged_at", new Date()); add("completed_at", new Date()); add("current_step_order", 3); }
     const updatedResult = await client.query(`UPDATE assessments SET ${fields.join(", ")} WHERE id = $1 RETURNING *`, values);
     await client.query(`INSERT INTO assessment_updates (id, assessment_id, updated_by_id, step_order, status_from, status_to, event_type, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, [randomUUID(), id, session.user.id, action === "submit" ? 2 : action === "director_review" ? 3 : 1, assessment.status, nextStatus, action, directorComments ?? managerNotes ?? staffNotes ?? returnFeedback ?? null]);

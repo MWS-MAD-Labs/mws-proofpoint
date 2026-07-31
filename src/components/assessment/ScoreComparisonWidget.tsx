@@ -7,6 +7,8 @@ interface ScoreComparisonWidgetProps {
   domains?: DomainData[];
   finalScore?: number | null;
   projectedScore?: number | null;
+  primaryLabel?: string;
+  secondaryLabel?: string;
 }
 
 function calculateWeightedScore(
@@ -107,6 +109,8 @@ export function ScoreComparisonWidget({
   domains,
   finalScore,
   projectedScore,
+  primaryLabel = "Final Score",
+  secondaryLabel = "Projected",
 }: ScoreComparisonWidgetProps) {
   const calculatedFinal = calculateWeightedScore(domains, "manager");
   const calculatedProjected = calculateWeightedScore(domains, "staff");
@@ -214,7 +218,7 @@ export function ScoreComparisonWidget({
               className={cn("h-4 w-4", getScoreColor(finalWeighted))}
             />
             <span className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
-              Final Score
+              {primaryLabel}
             </span>
           </div>
           <div
@@ -249,7 +253,7 @@ export function ScoreComparisonWidget({
               className={cn("h-4 w-4", getScoreColor(projectedWeighted))}
             />
             <span className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
-              Projected
+              {secondaryLabel}
             </span>
           </div>
           <div
@@ -332,8 +336,8 @@ export function ScoreComparisonWidget({
           <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2 flex items-center justify-between">
             <span>Domain Averages</span>
             <div className="flex gap-4 text-[9px]">
-              <span>Final</span>
-              <span>Projected</span>
+              <span>{primaryLabel}</span>
+              <span>{secondaryLabel}</span>
             </div>
           </div>
           {domainAverages.map((domain, idx) => (

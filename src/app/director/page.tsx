@@ -38,7 +38,6 @@ import {
   Search,
   ShieldCheck,
   Trash2,
-  Save,
   Layout,
   FileText,
   Info,
@@ -97,7 +96,6 @@ function DirectorContent() {
     domains,
     loading: assessmentLoading,
     saving,
-    saveDraft,
     approveAssessment,
     updateKPI,
     managerFeedback,
@@ -115,6 +113,24 @@ function DirectorContent() {
   const [showStickyBar, setShowStickyBar] = useState(false);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnFeedbackInput, setReturnFeedbackInput] = useState("");
+
+  const directorChanges = domains.flatMap((domain) =>
+    domain.standards.flatMap((standard) =>
+      standard.kpis.filter(
+        (kpi) =>
+          kpi.directorScore !== null &&
+          kpi.directorScore !== undefined &&
+          kpi.directorScore !== kpi.managerScore,
+      ),
+    ),
+  );
+  const directorChangesHaveFeedback = directorChanges.every(
+    (kpi) => typeof kpi.directorEvidence === "string" && kpi.directorEvidence.trim(),
+  );
+  const directorProposal = () => ({
+    scores: Object.fromEntries(directorChanges.map((kpi) => [kpi.id, kpi.directorScore!])),
+    feedback: Object.fromEntries(directorChanges.map((kpi) => [kpi.id, typeof kpi.directorEvidence === "string" ? kpi.directorEvidence : ""])),
+  });
 
   // Derived filters
   const uniqueDepartments = Array.from(
@@ -462,9 +478,7 @@ function DirectorContent() {
     }
 
     const usesDirectItemPercentages = assessment?.permissions?.isManagerLed ?? false;
-    const staffScore = usesDirectItemPercentages
-      ? calculateStaffAppraisalScore(domains, "staff")
-      : calculateWeightedScore(domains, "staff");
+
     const managerScore = usesDirectItemPercentages
       ? calculateStaffAppraisalScore(domains, "manager")
       : calculateWeightedScore(domains, "manager");
@@ -533,20 +547,6 @@ function DirectorContent() {
 
           {!isReadOnly && (
             <div className="flex items-center gap-4">
-              <Button
-                variant="outline"
-                onClick={saveDraft}
-                disabled={saving}
-                className="h-12 px-6 rounded-xl border-primary/20 hover:bg-primary/5 transition-all"
-              >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Save className="h-4 w-4 mr-2" />
-                )}
-                Save Draft
-              </Button>
-
               {/* Return for Revision Dialog */}
               <AlertDialog
                 open={returnDialogOpen}
@@ -571,10 +571,7 @@ function DirectorContent() {
                     <AlertDialogDescription asChild>
                       <div className="space-y-4">
                         <p>
-                          This will return the assessment to{" "}
-                          <strong>{assessment?.staff_name}</strong> for
-                          revision. Please provide clear feedback on what needs
-                          to be corrected.
+                          This will return the assessment to the assigned manager for revision. They will see the proposed changes and feedback only for the affected performance items.
                         </p>
                         <div className="space-y-2">
                           <Label
@@ -605,12 +602,12 @@ function DirectorContent() {
                     </AlertDialogCancel>
                     <AlertDialogAction
                       className="bg-amber-600 hover:bg-amber-700 text-white"
-                      disabled={!returnFeedbackInput.trim() || saving}
+                      disabled={!returnFeedbackInput.trim() || saving || (directorChanges.length > 0 && !directorChangesHaveFeedback)}
                       onClick={async (e) => {
                         e.preventDefault();
                         if (
                           user &&
-                          (await returnAssessment(returnFeedbackInput, user.id))
+                          (await returnAssessment(returnFeedbackInput, user.id, directorProposal()))
                         ) {
                           setReturnDialogOpen(false);
                           setReturnFeedbackInput("");
@@ -632,16 +629,15 @@ function DirectorContent() {
               <Button
                 className="h-12 px-8 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 glow-primary transition-all duration-300"
                 onClick={approveAssessment}
-                disabled={saving || !directorFeedback.trim()}
+                disabled={saving || directorChanges.length > 0}
+                title={directorChanges.length > 0 ? "Return the appraisal for manager revision after proposing score changes." : undefined}
               >
                 {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : (
                   <ShieldCheck className="h-4 w-4 mr-2" />
                 )}
-                {isDirectorReviewMode
-                  ? "Submit Director Review & Approve"
-                  : "Approve Assessment"}
+                {directorChanges.length > 0 ? "Return changes for revision" : "Approve Assessment"}
               </Button>
             </div>
           )}
@@ -700,9 +696,8 @@ function DirectorContent() {
                   onIndicatorChange={isReadOnly ? undefined : updateKPI}
                   readonly={isReadOnly}
                   managerOnly={Boolean(assessment?.permissions?.isManagerLed)}
-                  reviewerLabel={
-                    isDirectorReviewAndApproval ? "Director" : "Manager"
-                  }
+                  directorMode={Boolean(assessment?.permissions?.isManagerLed)}
+                  reviewerLabel="Director"
                   section={{
                     ...domain,
                     standards: domain.standards.map((s: StandardData) => ({
@@ -714,6 +709,8 @@ function DirectorContent() {
                         staffEvidence: i.evidence,
                         managerScore: i.managerScore ?? null,
                         managerEvidence: i.managerEvidence ?? "",
+                        directorScore: i.directorScore ?? null,
+                        directorEvidence: i.directorEvidence ?? "",
                       })),
                     })),
                   }}
@@ -822,8 +819,7 @@ function DirectorContent() {
                         htmlFor="director-feedback"
                         className="text-base font-bold flex items-center gap-2"
                       >
-                        Director Final Feedback{" "}
-                        <span className="text-destructive">*</span>
+                        Director Final Feedback <span className="text-muted-foreground text-sm font-normal">(optional)</span>
                       </Label>
                       <Textarea
                         id="director-feedback"
@@ -832,10 +828,10 @@ function DirectorContent() {
                         value={directorFeedback}
                         onChange={(e) => setDirectorFeedback(e.target.value)}
                       />
-                      {!directorFeedback.trim() && (
-                        <div className="flex items-center gap-2 text-xs text-destructive font-medium">
+                      {directorChanges.length > 0 && (
+                        <div className="flex items-center gap-2 text-xs text-amber-700 font-medium">
                           <AlertCircle className="h-3 w-3" />
-                          Feedback is required to approve this assessment
+                          Score changes must be returned to the manager for revision.
                         </div>
                       )}
                     </div>
@@ -852,7 +848,17 @@ function DirectorContent() {
               <ScoreComparisonWidget
                 domains={domains}
                 finalScore={managerScore}
-                projectedScore={staffScore}
+                projectedScore={directorChanges.length > 0
+                  ? calculateStaffAppraisalScore(domains.map((domain) => ({
+                      ...domain,
+                      standards: domain.standards.map((standard) => ({
+                        ...standard,
+                        kpis: standard.kpis.map((kpi) => ({ ...kpi, managerScore: kpi.directorScore ?? kpi.managerScore })),
+                      })),
+                    })), "manager")
+                  : managerScore}
+                primaryLabel="Manager"
+                secondaryLabel="Director"
               />
 
               <Card className="bg-muted/30 border-dashed border-2 border-muted-foreground/10">
@@ -877,9 +883,9 @@ function DirectorContent() {
                     : "Director Approval"}
                 </AlertTitle>
                 <AlertDescription className="text-xs">
-                  {isDirectorReviewAndApproval
-                    ? "As the direct approver, review and score each KPI, then provide your final feedback to complete the assessment."
-                    : "Review the manager's assessment and provide final approval to complete the evaluation cycle."}
+                  {directorChanges.length > 0
+                    ? "Score changes require a return for manager revision. Add feedback only to the changed items, then return the appraisal."
+                    : "Compare the manager's appraisal and approve it, or propose changes and return it for revision."}
                 </AlertDescription>
               </Alert>
             </div>
@@ -898,19 +904,7 @@ function DirectorContent() {
                 </span>
               </div>
               <div className="flex items-center gap-4 w-full md:w-auto">
-                <Button
-                  variant="outline"
-                  onClick={saveDraft}
-                  disabled={saving}
-                  className="flex-1 md:flex-none h-12 px-6 rounded-xl border-primary/20 hover:bg-primary/5 transition-all"
-                >
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <Save className="h-4 w-4 mr-2" />
-                  )}
-                  Save Draft
-                </Button>
+
                 <Button
                   variant="outline"
                   onClick={() => setReturnDialogOpen(true)}

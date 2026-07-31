@@ -308,6 +308,8 @@ model Assessment {
   managerScores       Json              @default("{}") @map("manager_scores")
   staffEvidence       Json              @default("{}") @map("staff_evidence")
   managerEvidence     Json              @default("{}") @map("manager_evidence")
+  directorScores      Json              @default("{}") @map("director_scores")
+  directorEvidence    Json              @default("{}") @map("director_evidence")
   managerNotes        String?           @map("manager_notes") @db.Text
   directorComments    String?           @map("director_comments") @db.Text
   returnFeedback      String?           @map("return_feedback") @db.Text

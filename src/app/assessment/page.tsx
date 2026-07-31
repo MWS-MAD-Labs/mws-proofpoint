@@ -81,6 +81,7 @@ function AssessmentContent() {
     staffAcknowledgement,
     setStaffAcknowledgement,
     acknowledgeAssessment,
+    managerFeedback,
     directorFeedback,
     deleteAssessment,
   } = useAssessment(assessmentId || undefined);
@@ -753,6 +754,8 @@ function AssessmentContent() {
                           staffEvidence: k.evidence,
                           managerScore: k.managerScore ?? null,
                           managerEvidence: k.managerEvidence ?? "",
+                          directorScore: k.directorScore ?? null,
+                          directorEvidence: k.directorEvidence ?? "",
                         })),
                       })),
                     }}
@@ -768,16 +771,24 @@ function AssessmentContent() {
                       <ShieldCheck className="h-6 w-6" />
                     </div>
                     <CardTitle className="text-2xl font-black">
-                      Director Final Feedback
+                      Final Appraisal Feedback
                     </CardTitle>
                   </div>
                   <CardDescription className="text-base mt-2">
-                    Final assessment summary and organizational feedback from
-                    the Director.
+                    Final feedback from your manager and director.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-8 px-8 pb-10">
                   <div className="space-y-6">
+                    {managerFeedback && (
+                      <div className="relative">
+                        <div className="absolute top-0 left-0 h-full w-1 rounded-full bg-primary/20" />
+                        <div className="pl-6 py-2">
+                          <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Manager&apos;s Comments</span>
+                          <p className="whitespace-pre-wrap text-base leading-relaxed text-foreground">{managerFeedback}</p>
+                        </div>
+                      </div>
+                    )}
                     <div className="relative">
                       <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500/20 rounded-full" />
                       <div className="pl-6 py-2">

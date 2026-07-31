@@ -22,6 +22,8 @@ export interface KPIData {
   evidence:         string | EvidenceItem[];
   managerScore?:    number | 'X' | null;
   managerEvidence?: string | EvidenceItem[];
+  directorScore?: number | 'X' | null;
+  directorEvidence?: string | EvidenceItem[];
   performanceWeight?: number;
 }
 
@@ -57,6 +59,8 @@ export interface Assessment {
   staff_evidence:      Record<string, string>;
   manager_scores:      Record<string, number | 'X'>;
   manager_evidence:    Record<string, string>;
+  director_scores?:    Record<string, number | 'X'>;
+  director_evidence?:  Record<string, string>;
   final_score:         number | null;
   final_grade:         string | null;
   manager_notes:       string | null;
@@ -183,6 +187,8 @@ export function useAssessment(assessmentId?: string) {
           const staffEvidence = (rawAssessment.staff_evidence  || {}) as Record<string, string | EvidenceItem[]>;
           const managerScores = (rawAssessment.manager_scores  || {}) as Record<string, number | 'X'>;
           const managerEvidence = (rawAssessment.manager_evidence || {}) as Record<string, string | EvidenceItem[]>;
+          const directorScores = (rawAssessment.director_scores || {}) as Record<string, number | 'X'>;
+          const directorEvidence = (rawAssessment.director_evidence || {}) as Record<string, string | EvidenceItem[]>;
 
           const formattedDomains: DomainData[] = ((template.domains as RubricTemplate['domains']) || [])
             .map(d => ({
@@ -206,6 +212,8 @@ export function useAssessment(assessmentId?: string) {
                   evidence:         staffEvidence[k.id] || '',
                   managerScore:     managerScores[k.id] ?? null,
                   managerEvidence:  managerEvidence[k.id] || '',
+                  directorScore:     directorScores[k.id] ?? null,
+                  directorEvidence:  directorEvidence[k.id] || '',
                   performanceWeight: Number(k.performance_weight ?? 100),
                 }))
               }))
@@ -520,7 +528,11 @@ export function useAssessment(assessmentId?: string) {
     return true;
   };
 
-  const returnAssessment = async (returnFeedback: string, returnedBy: string) => {
+  const returnAssessment = async (
+    returnFeedback: string,
+    returnedBy: string,
+    directorProposals?: { scores: Record<string, number | 'X'>; feedback: Record<string, string | EvidenceItem[]> },
+  ) => {
     if (!assessment) return false;
 
     if (!returnFeedback?.trim()) {
@@ -534,7 +546,12 @@ export function useAssessment(assessmentId?: string) {
 
     setSaving(true);
     const { error } = assessment.permissions?.isManagerLed
-      ? await api.performAssessmentAction(assessment.id, { action: "return", returnFeedback })
+      ? await api.performAssessmentAction(assessment.id, {
+          action: "return",
+          returnFeedback,
+          directorScores: directorProposals?.scores,
+          directorEvidence: directorProposals?.feedback,
+        })
       : await api.updateAssessment(assessment.id, {
           status: 'returned', return_feedback: returnFeedback,
           returned_at: new Date().toISOString(), returned_by: returnedBy,
