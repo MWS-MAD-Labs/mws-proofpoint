@@ -19,8 +19,13 @@ export function getObservationPermissions(
   const isDirector = hasRole(actor, "director");
   const isSubjectStaff = observation.staffId === actor.id;
 
+  // The observation subject must not learn that a manager's draft exists.
+  // A separate privileged role (admin, director, or assigned manager) retains access.
   const canViewRecord =
-    isAdmin || isAssignedManager || isDirector || isSubjectStaff;
+    isAdmin ||
+    isAssignedManager ||
+    isDirector ||
+    (isSubjectStaff && status !== "draft");
   const canViewResponses =
     isAdmin ||
     isAssignedManager ||

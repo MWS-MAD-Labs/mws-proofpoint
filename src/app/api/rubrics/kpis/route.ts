@@ -22,6 +22,7 @@ export async function POST(request: Request) {
       rubric_3,
       rubric_2,
       rubric_1,
+      performance_weight,
     } = body;
 
     if (
@@ -34,6 +35,13 @@ export async function POST(request: Request) {
     ) {
       return NextResponse.json(
         { error: "Missing required fields" },
+        { status: 400 },
+      );
+    }
+
+    if (!isValidPerformancePercentage(performance_weight)) {
+      return NextResponse.json(
+        { error: "Performance item percentage must be a number from 0 to 100" },
         { status: 400 },
       );
     }
@@ -58,8 +66,8 @@ export async function POST(request: Request) {
     );
     const order = sort_order || Number(next?.next_order ?? 1);
     const newKPI = await queryOne(
-      `INSERT INTO kpis (standard_id, template_id, name, description, evidence_guidance, trainings, sort_order, code, rubric_4, rubric_3, rubric_2, rubric_1)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `INSERT INTO kpis (standard_id, template_id, name, description, evidence_guidance, trainings, sort_order, code, rubric_4, rubric_3, rubric_2, rubric_1, performance_weight)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
              RETURNING *`,
       [
         standard_id,
@@ -74,6 +82,7 @@ export async function POST(request: Request) {
         rubric_3,
         rubric_2,
         rubric_1,
+        performance_weight ?? 100,
       ],
     );
 
@@ -107,11 +116,19 @@ export async function PATCH(request: Request) {
       rubric_3,
       rubric_2,
       rubric_1,
+      performance_weight,
     } = body;
 
     if (!id) {
       return NextResponse.json(
         { error: "KPI ID is required" },
+        { status: 400 },
+      );
+    }
+
+    if (performance_weight !== undefined && !isValidPerformancePercentage(performance_weight)) {
+      return NextResponse.json(
+        { error: "Performance item percentage must be a number from 0 to 100" },
         { status: 400 },
       );
     }
@@ -126,8 +143,9 @@ export async function PATCH(request: Request) {
                  rubric_4 = COALESCE($6, rubric_4),
                  rubric_3 = COALESCE($7, rubric_3),
                  rubric_2 = COALESCE($8, rubric_2),
-                 rubric_1 = COALESCE($9, rubric_1)
-             WHERE id = $10
+                 rubric_1 = COALESCE($9, rubric_1),
+                 performance_weight = COALESCE($10, performance_weight)
+             WHERE id = $11
              RETURNING *`,
       [
         name,
@@ -139,6 +157,7 @@ export async function PATCH(request: Request) {
         rubric_3,
         rubric_2,
         rubric_1,
+        performance_weight,
         id,
       ],
     );
@@ -155,6 +174,11 @@ export async function PATCH(request: Request) {
       { status: 500 },
     );
   }
+}
+
+function isValidPerformancePercentage(value: unknown): boolean {
+  if (value === undefined) return true;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100;
 }
 
 // DELETE /api/rubrics/kpis - Delete KPI

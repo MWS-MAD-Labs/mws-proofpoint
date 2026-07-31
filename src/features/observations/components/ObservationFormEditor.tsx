@@ -442,7 +442,27 @@ function IndicatorEditor({
   const scoreNumber = Number(value.score);
   const scoreInvalid =
     value.score !== "" &&
-    (!Number.isInteger(scoreNumber) || scoreNumber < 1 || scoreNumber > 100);
+    (!Number.isFinite(scoreNumber) || scoreNumber < 1 || scoreNumber > 4 ||
+      Math.round(scoreNumber * 10) !== scoreNumber * 10);
+  const scoreDescriptions = [
+    [1, "Beginning", "Performance is beginning to meet expectations."],
+    [2, "Developing", "Performance is progressing toward expectations."],
+    [3, "Proficient", "Performance consistently meets expectations."],
+    [4, "Exemplary", "Performance consistently exceeds expectations."],
+  ] as const;
+  const selectedScoreDescription = value.score === ""
+    ? null
+    : scoreDescriptions.find(([score]) => score === Math.round(scoreNumber));
+  const scoreColor =
+    value.score === "" ? "accent-primary" :
+    scoreNumber < 2 ? "accent-red-500" :
+    scoreNumber < 3 ? "accent-amber-500" :
+    scoreNumber < 4 ? "accent-emerald-500" : "accent-blue-500";
+  const selectedDotColor =
+    value.score === "" ? "bg-primary text-primary-foreground border-primary" :
+    scoreNumber < 2 ? "bg-destructive text-white border-destructive/40" :
+    scoreNumber < 3 ? "bg-warning text-white border-warning/40" :
+    scoreNumber < 4 ? "bg-success text-white border-success/40" : "bg-primary text-white border-primary/40";
 
   return (
     <Card
@@ -483,33 +503,42 @@ function IndicatorEditor({
       </CardHeader>
       <CardContent>
         {indicator.questionType === "SCALE" && (
-          <div className="grid gap-4 sm:grid-cols-[8rem_minmax(0,1fr)]">
+          <div className="grid gap-4 sm:grid-cols-[12rem_minmax(0,1fr)]">
             <div>
-              <Label htmlFor={`score-${indicator.id}`}>Score (1–100)</Label>
-              <Input
-                id={`score-${indicator.id}`}
-                data-indicator-input={indicator.id}
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={100}
-                step={1}
-                value={value.score}
-                aria-invalid={scoreInvalid}
-                aria-describedby={scoreInvalid ? `score-error-${indicator.id}` : undefined}
-                onChange={(event) =>
-                  onChange({ score: event.target.value }, "manual")
-                }
-                onBlur={onBlur}
-                className="mt-2"
-              />
+              <div className="flex items-center justify-between">
+                <Label htmlFor={`score-${indicator.id}`}>Score (1–4)</Label>
+                <output className="font-mono text-sm font-bold text-primary">
+                  {value.score === "" ? "—" : Number(value.score).toFixed(1)}
+                </output>
+              </div>
+              <div className="relative mt-3 h-9">
+                <input
+                  id={`score-${indicator.id}`}
+                  data-indicator-input={indicator.id}
+                  type="range"
+                  min={1}
+                  max={4}
+                  step={0.1}
+                  value={value.score === "" ? 1 : value.score}
+                  aria-invalid={scoreInvalid}
+                  aria-describedby={scoreInvalid ? `score-error-${indicator.id}` : undefined}
+                  onChange={(event) => onChange({ score: event.target.value }, "manual")}
+                  onBlur={onBlur}
+                  className={cn("absolute inset-x-0 top-1/2 z-10 h-2 w-full -translate-y-1/2 cursor-pointer", scoreColor)}
+                />
+                <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-1/2 z-20 flex -translate-y-1/2 justify-between px-0.5">
+                  {scoreDescriptions.map(([score]) => (
+                    <span key={score} className={cn("flex h-7 w-7 items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-md", Math.round(scoreNumber) === score ? selectedDotColor : "border-border bg-white text-muted-foreground dark:border-border dark:bg-foreground dark:text-muted-foreground")}>{score}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-2 grid grid-cols-4 text-[10px] font-medium text-muted-foreground">
+                {scoreDescriptions.map(([score, label], index) => <span key={score} className={cn(index === 0 ? "text-left" : index === 3 ? "text-right" : "text-center")}>{label}</span>)}
+              </div>
+              {selectedScoreDescription && <p className="mt-3 rounded-md bg-muted/50 p-2 text-xs leading-5 text-muted-foreground"><span className="font-semibold text-foreground">{selectedScoreDescription[1]}: </span>{selectedScoreDescription[2]}</p>}
               {scoreInvalid && (
-                <p
-                  id={`score-error-${indicator.id}`}
-                  role="alert"
-                  className="mt-2 text-xs text-destructive"
-                >
-                  Enter a whole number from 1 to 100.
+                <p id={`score-error-${indicator.id}`} role="alert" className="mt-2 text-xs text-destructive">
+                  Enter a score from 1.0 to 4.0 in 0.1 increments.
                 </p>
               )}
             </div>
@@ -637,7 +666,7 @@ function SectionNavigator({
                 {failed ? (
                   <AlertCircle className="mt-0.5 h-4 w-4 text-destructive" />
                 ) : complete ? (
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />
                 ) : (
                   <Clock3 className="mt-0.5 h-4 w-4 text-muted-foreground" />
                 )}
@@ -758,7 +787,7 @@ function SaveSummary({
     );
   }
   return (
-    <div role="status" aria-live="polite" className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
+    <div role="status" aria-live="polite" className="flex items-center gap-2 text-sm text-success dark:text-success">
       <CheckCircle2 className="h-4 w-4" />
       <span>
         All changes saved
@@ -777,7 +806,7 @@ function ItemSaveStatus({
 }) {
   if (!state || state.status === "saved") {
     return (
-      <span role="status" aria-live="polite" className="flex shrink-0 items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400">
+      <span role="status" aria-live="polite" className="flex shrink-0 items-center gap-1 text-xs text-success dark:text-success">
         <Check className="h-3.5 w-3.5" />
         Saved
       </span>
@@ -793,7 +822,7 @@ function ItemSaveStatus({
   }
   if (state.status === "unsaved") {
     return (
-      <span role="status" aria-live="polite" className="flex shrink-0 items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
+      <span role="status" aria-live="polite" className="flex shrink-0 items-center gap-1 text-xs text-warning-foreground dark:text-warning-foreground">
         <Clock3 className="h-3.5 w-3.5" />
         Unsaved
       </span>
@@ -892,7 +921,7 @@ function ReviewDialog({
                       className="h-auto justify-start px-2 py-2 text-left"
                       onClick={() => onIndicator(item.indicatorId)}
                     >
-                      <AlertCircle className="h-4 w-4 text-amber-600" />
+                      <AlertCircle className="h-4 w-4 text-warning-foreground" />
                       <span className="whitespace-normal">{item.indicatorName}</span>
                     </Button>
                   ))}
@@ -902,7 +931,7 @@ function ReviewDialog({
           </div>
         ) : (
           <Alert>
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            <CheckCircle2 className="h-4 w-4 text-success" />
             <AlertTitle>Required responses are complete</AlertTitle>
             <AlertDescription>
               The observation is ready once all changes are safely saved.
@@ -942,7 +971,7 @@ function answerInput(
 ): ObservationAnswerInput | null {
   if (indicator.questionType === "SCALE") {
     const score = Number(value.score);
-    if (!Number.isInteger(score) || score < 1 || score > 100) return null;
+    if (!Number.isFinite(score) || score < 1 || score > 4 || Math.round(score * 10) !== score * 10) return null;
     return { type: "SCALE", score, note: value.note };
   }
   if (indicator.questionType === "TEXT") {

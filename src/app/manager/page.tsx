@@ -26,6 +26,7 @@ import {
   useAssessment,
   useTeamAssessments,
   calculateWeightedScore,
+  calculateStaffAppraisalScore,
   DomainData,
   StandardData,
   KPIData,
@@ -79,6 +80,7 @@ function ManagerContent() {
     saveDraft,
     submitReview,
     saving,
+    autosaveStatus,
     managerFeedback,
     setManagerFeedback,
     directorFeedback,
@@ -134,19 +136,31 @@ function ManagerContent() {
         );
       case "self_submitted":
         return (
-          <Badge className="bg-amber-100 text-amber-700 border-amber-200">
+          <Badge className="bg-warning-soft text-warning-foreground border-warning/40">
             Pending Review
+          </Badge>
+        );
+      case "pending_director_review":
+        return (
+          <Badge className="bg-warning-soft text-warning-foreground border-warning/40">
+            Pending Director Review
+          </Badge>
+        );
+      case "director_reviewed":
+        return (
+          <Badge className="bg-primary-soft text-primary border-primary/40">
+            Awaiting Staff Acknowledgement
           </Badge>
         );
       case "manager_reviewed":
         return (
-          <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+          <Badge className="bg-primary-soft text-primary border-primary/40">
             Reviewed
           </Badge>
         );
       case "director_approved":
         return (
-          <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
+          <Badge className="bg-success-soft text-success border-success/40">
             Approved
           </Badge>
         );
@@ -191,23 +205,29 @@ function ManagerContent() {
     window.open(url, "_blank");
   };
 
-  const staffWeightedScore = calculateWeightedScore(domains, "staff");
-  const managerWeightedScore = calculateWeightedScore(domains, "manager");
+  const usesDirectItemPercentages = assessment?.permissions?.isManagerLed ?? false;
+
+  const managerWeightedScore = usesDirectItemPercentages
+    ? calculateStaffAppraisalScore(domains, "manager")
+    : calculateWeightedScore(domains, "manager");
   const isReadOnly =
     assessment?.status === "manager_reviewed" ||
+    assessment?.status === "pending_director_review" ||
+    assessment?.status === "director_reviewed" ||
     assessment?.status === "director_approved" ||
     assessment?.status === "acknowledged";
   const isApproved =
     assessment?.status === "director_approved" ||
     assessment?.status === "acknowledged";
+  const isManagerLedDraft = Boolean(assessment?.permissions?.isManagerLed) && assessment?.status === "draft";
 
   const content = assessmentId ? (
     // Detailed Assessment View - matches director page layout
-    <div className="max-w-7xl mx-auto py-8">
+    <div className="max-w-7xl mx-auto py-8 pb-32">
       {/* Status Alert Bar */}
       {isApproved && (
-        <Alert className="mb-8 border-2 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500 bg-emerald-50 border-emerald-500/30">
-          <ShieldCheck className="h-5 w-5 text-emerald-600" />
+        <Alert className="mb-8 border-2 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500 bg-success-soft border-success/30">
+          <ShieldCheck className="h-5 w-5 text-success" />
           <AlertTitle className="font-bold text-lg mb-1">
             {assessment?.status === "acknowledged"
               ? "Cycle Complete"
@@ -252,11 +272,16 @@ function ManagerContent() {
           </div>
         </div>
 
-        {!isReadOnly && (
+        {!isReadOnly && !isManagerLedDraft && (
           <div className="flex items-center gap-4">
+            {autosaveStatus !== "idle" && (
+              <span className={`text-sm ${autosaveStatus === "error" ? "text-destructive" : "text-muted-foreground"}`} role="status">
+                {autosaveStatus === "saving" ? "Saving draft…" : autosaveStatus === "saved" ? "All changes saved" : "Autosave failed — save manually"}
+              </span>
+            )}
             <Button
               variant="outline"
-              onClick={saveDraft}
+              onClick={() => void saveDraft()}
               disabled={saving}
               className="h-12 px-6 rounded-xl border-primary/20 hover:bg-primary/5 transition-all"
             >
@@ -276,7 +301,7 @@ function ManagerContent() {
               <AlertDialogTrigger asChild>
                 <Button
                   variant="outline"
-                  className="h-12 px-6 rounded-xl border-amber-500/30 text-amber-600 hover:bg-amber-500/10 hover:border-amber-500/50 transition-all"
+                  className="h-12 px-6 rounded-xl border-warning/30 text-warning-foreground hover:bg-warning/10 hover:border-warning/50 transition-all"
                   disabled={saving}
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
@@ -285,7 +310,7 @@ function ManagerContent() {
               </AlertDialogTrigger>
               <AlertDialogContent className="max-w-lg">
                 <AlertDialogHeader>
-                  <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
+                  <AlertDialogTitle className="flex items-center gap-2 text-warning-foreground">
                     <RotateCcw className="h-5 w-5" />
                     Return Assessment for Revision
                   </AlertDialogTitle>
@@ -323,7 +348,7 @@ function ManagerContent() {
                     Cancel
                   </AlertDialogCancel>
                   <AlertDialogAction
-                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                    className="bg-warning hover:bg-warning text-white"
                     disabled={!returnFeedbackInput.trim() || saving}
                     onClick={async (e) => {
                       e.preventDefault();
@@ -384,6 +409,39 @@ function ManagerContent() {
         )}
       </div>
 
+      {isManagerLedDraft && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-background/95 px-4 py-3 shadow-2xl backdrop-blur supports-[backdrop-filter]:bg-background/85">
+          <div className="container mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+            <p className={`mr-auto text-sm ${autosaveStatus === "error" ? "text-destructive" : "text-muted-foreground"}`} role="status">
+              {autosaveStatus === "saving"
+                ? "Saving draft…"
+                : autosaveStatus === "saved"
+                  ? "All changes saved"
+                  : autosaveStatus === "error"
+                    ? "Autosave failed — save manually"
+                    : "Changes save automatically after you pause typing."}
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => void saveDraft()}
+              disabled={saving}
+              className="h-12 min-w-40 rounded-xl border-primary/20 hover:bg-primary/5"
+            >
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Save Draft
+            </Button>
+            <Button
+              className="h-12 min-w-44 rounded-xl font-bold glow-primary"
+              onClick={submitReview}
+              disabled={saving || !managerFeedback.trim()}
+            >
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Submit Review
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Cycle Progress Panel - matches director page */}
       <div className="mb-10">
         <Card className="glass-panel border-border/30 shadow-lg overflow-hidden">
@@ -412,6 +470,8 @@ function ManagerContent() {
                 index={index}
                 onIndicatorChange={updateIndicator}
                 readonly={isReadOnly}
+                managerOnly={Boolean(assessment?.permissions?.isManagerLed)}
+                showDirectorComparison={Boolean(assessment?.permissions?.isManagerLed && assessment?.director_scores && Object.keys(assessment.director_scores).length > 0)}
                 section={{
                   ...domain,
                   standards: domain.standards.map((s: StandardData) => ({
@@ -423,6 +483,8 @@ function ManagerContent() {
                       staffEvidence: i.evidence,
                       managerScore: i.managerScore ?? null,
                       managerEvidence: i.managerEvidence ?? "",
+                      directorScore: i.directorScore ?? null,
+                      directorEvidence: i.directorEvidence ?? "",
                     })),
                   })),
                 }}
@@ -456,7 +518,7 @@ function ManagerContent() {
                   {assessment?.status === "acknowledged" &&
                     staffAcknowledgement && (
                       <div className="relative">
-                        <div className="absolute top-0 left-0 w-1 h-full bg-blue-500/20 rounded-full" />
+                        <div className="absolute top-0 left-0 w-1 h-full bg-primary/20 rounded-full" />
                         <div className="pl-6 py-2">
                           <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-2">
                             Staff Acknowledgment & Feedback
@@ -488,7 +550,7 @@ function ManagerContent() {
                     (assessment?.status === "director_approved" ||
                       assessment?.status === "acknowledged") && (
                       <div className="relative">
-                        <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500/20 rounded-full" />
+                        <div className="absolute top-0 left-0 w-1 h-full bg-success/20 rounded-full" />
                         <div className="pl-6 py-2">
                           <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-2">
                             Director Feedback
@@ -546,11 +608,11 @@ function ManagerContent() {
         {/* Sidebar: Progress & Score - 4 columns */}
         <div className="lg:col-span-4 space-y-8">
           <div className="sticky top-24 space-y-8">
-            {/* Score Comparison Widget - same as director page */}
             <ScoreComparisonWidget
               domains={domains}
               finalScore={managerWeightedScore}
-              projectedScore={staffWeightedScore}
+              primaryLabel="Manager"
+              showComparison={false}
             />
 
             <Card className="bg-muted/30 border-dashed border-2 border-muted-foreground/10">
@@ -589,14 +651,16 @@ function ManagerContent() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold tracking-tight mb-2">
-            Team Assessments
+            Staff Appraisal
           </h1>
           <p className="text-muted-foreground">
-            Manage and review performance evaluations for your team.
+            Start and manage staff appraisals through director review and staff acknowledgement.
           </p>
         </div>
 
-        <div className="relative w-full md:w-72">
+        <div className="flex w-full md:w-auto gap-3 items-center">
+          <Button onClick={() => router.push("/manager/new")}>Start Staff Appraisal</Button>
+          <div className="relative w-full md:w-72">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search staff or period..."
@@ -604,19 +668,20 @@ function ManagerContent() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          </div>
         </div>
       </div>
 
       {/* Active Reviews Section */}
       <Card className="glass-panel border-border/30 overflow-hidden">
-        <div className="h-1 bg-gradient-to-r from-violet-500/30 via-violet-500 to-violet-500/30" />
+        <div className="h-1 bg-gradient-to-r from-primary/30 via-primary to-primary/30" />
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-violet-500" />
-            Active Reviews
+            <Users className="h-5 w-5 text-primary" />
+            Active Staff Appraisals
           </CardTitle>
           <CardDescription>
-            Assessments waiting for your review or currently in progress
+            Draft appraisals and records awaiting director review or staff acknowledgement
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -641,14 +706,14 @@ function ManagerContent() {
                 <div
                   key={a.id}
                   onClick={() => router.push(`/manager?id=${a.id}`)}
-                  className="group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl bg-background/50 border border-border/30 hover:border-violet-500/50 hover:bg-violet-500/[0.02] transition-all cursor-pointer"
+                  className="group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl bg-background/50 border border-border/30 hover:border-primary/50 hover:bg-primary/[0.02] transition-all cursor-pointer"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <FileText className="h-6 w-6 text-violet-600" />
+                    <div className="w-12 h-12 rounded-xl bg-primary-soft flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <FileText className="h-6 w-6 text-primary" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-foreground group-hover:text-violet-600 transition-colors">
+                      <h4 className="font-bold text-foreground group-hover:text-primary transition-colors">
                         {a.staff_name}
                       </h4>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -668,7 +733,7 @@ function ManagerContent() {
                       </p>
                       <div className="mt-1">{getStatusBadge(a.status)}</div>
                     </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-violet-500 group-hover:translate-x-1 transition-all" />
+                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
                   </div>
                 </div>
               ))}
@@ -681,7 +746,7 @@ function ManagerContent() {
       <Card className="glass-panel border-border/30 overflow-hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+            <CheckCircle2 className="h-5 w-5 text-success" />
             Completed History
           </CardTitle>
           <CardDescription>
@@ -709,14 +774,14 @@ function ManagerContent() {
                 <div
                   key={a.id}
                   onClick={() => router.push(`/manager?id=${a.id}`)}
-                  className="group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl bg-background/50 border border-border/30 hover:border-emerald-500/50 hover:bg-emerald-500/[0.02] transition-all cursor-pointer"
+                  className="group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl bg-background/50 border border-border/30 hover:border-success/50 hover:bg-success/[0.02] transition-all cursor-pointer"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                    <div className="w-12 h-12 rounded-xl bg-success-soft flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <CheckCircle2 className="h-6 w-6 text-success" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-foreground group-hover:text-emerald-600 transition-colors">
+                      <h4 className="font-bold text-foreground group-hover:text-success transition-colors">
                         {a.staff_name}
                       </h4>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -724,7 +789,7 @@ function ManagerContent() {
                         <span>•</span>
                         <Badge
                           variant="outline"
-                          className="bg-emerald-50 text-emerald-700 border-emerald-200"
+                          className="bg-success-soft text-success border-success/40"
                         >
                           Finalized
                         </Badge>
@@ -742,7 +807,7 @@ function ManagerContent() {
                       <FileText className="h-4 w-4" />
                       Download Report
                     </Button>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-emerald-500 group-hover:translate-x-1 transition-all" />
+                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-success group-hover:translate-x-1 transition-all" />
                   </div>
                 </div>
               ))}

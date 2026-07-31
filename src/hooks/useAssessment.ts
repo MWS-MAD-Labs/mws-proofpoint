@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/lib/api-client";
 import { useAuth } from "./useAuth";
 import { toast } from "./use-toast";
+import { calculateWeightedPercentageScore } from "@/features/assessments/scoring";
 
 // Import and re-export EvidenceItem from canonical source to avoid type mismatch
 import type { EvidenceItem } from "@/components/assessment/EvidenceInput";
@@ -21,6 +22,9 @@ export interface KPIData {
   evidence:         string | EvidenceItem[];
   managerScore?:    number | 'X' | null;
   managerEvidence?: string | EvidenceItem[];
+  directorScore?: number | 'X' | null;
+  directorEvidence?: string | EvidenceItem[];
+  performanceWeight?: number;
 }
 
 export interface StandardData {
@@ -55,6 +59,8 @@ export interface Assessment {
   staff_evidence:      Record<string, string>;
   manager_scores:      Record<string, number | 'X'>;
   manager_evidence:    Record<string, string>;
+  director_scores?:    Record<string, number | 'X'>;
+  director_evidence?:  Record<string, string>;
   final_score:         number | null;
   final_grade:         string | null;
   manager_notes:       string | null;
@@ -77,13 +83,15 @@ export interface Assessment {
   staff_department_id?:string;
   staff_job_title?:    string;
   staff_roles?:        string[];
+  workflow_snapshot?:   { name?: string; steps?: Array<{ actorRole?: string; actionType?: string }> } | null;
+  permissions?: { isManagerLed?: boolean; canSaveDraft?: boolean; canSubmit?: boolean; canDirectorReview?: boolean; canAcknowledge?: boolean };
 }
 
 interface RubricTemplate {
   id:          string;
   name:        string;
   description: string | null;
-  template_type: 'KPI_APPRAISAL' | 'CLASSROOM_OBSERVATION' | 'GENERIC' | null;
+  template_type: 'KPI_APPRAISAL' | 'STAFF_APPRAISAL' | 'CLASSROOM_OBSERVATION' | 'GENERIC' | null;
   domains: {
     id:         string;
     name:       string;
@@ -104,6 +112,7 @@ interface RubricTemplate {
         rubric_2:         string;
         rubric_1:         string;
         sort_order:       number;
+        performance_weight?: number;
       }[];
     }[];
   }[];
@@ -142,6 +151,15 @@ export function useAssessment(assessmentId?: string) {
   const [managerFeedback, setManagerFeedback]     = useState("");
   const [directorFeedback, setDirectorFeedback]   = useState("");
   const [staffAcknowledgement, setStaffAcknowledgement] = useState("");
+  const [draftDirty, setDraftDirty] = useState(false);
+  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const draftVersionRef = useRef(0);
+
+  const markDraftDirty = () => {
+    draftVersionRef.current += 1;
+    setDraftDirty(true);
+    setAutosaveStatus("idle");
+  };
 
   useEffect(() => {
     if (!assessmentId) {
@@ -178,6 +196,8 @@ export function useAssessment(assessmentId?: string) {
           const staffEvidence = (rawAssessment.staff_evidence  || {}) as Record<string, string | EvidenceItem[]>;
           const managerScores = (rawAssessment.manager_scores  || {}) as Record<string, number | 'X'>;
           const managerEvidence = (rawAssessment.manager_evidence || {}) as Record<string, string | EvidenceItem[]>;
+          const directorScores = (rawAssessment.director_scores || {}) as Record<string, number | 'X'>;
+          const directorEvidence = (rawAssessment.director_evidence || {}) as Record<string, string | EvidenceItem[]>;
 
           const formattedDomains: DomainData[] = ((template.domains as RubricTemplate['domains']) || [])
             .map(d => ({
@@ -201,6 +221,9 @@ export function useAssessment(assessmentId?: string) {
                   evidence:         staffEvidence[k.id] || '',
                   managerScore:     managerScores[k.id] ?? null,
                   managerEvidence:  managerEvidence[k.id] || '',
+                  directorScore:     directorScores[k.id] ?? null,
+                  directorEvidence:  directorEvidence[k.id] || '',
+                  performanceWeight: Number(k.performance_weight ?? 100),
                 }))
               }))
             }));
@@ -228,6 +251,7 @@ export function useAssessment(assessmentId?: string) {
                   evidence:         staffEvidence[ind.id] || '',
                   managerScore:     managerScores[ind.id] ?? null,
                   managerEvidence:  managerEvidence[ind.id] || '',
+                  performanceWeight: 100,
                 }))
               }]
             }));
@@ -244,13 +268,15 @@ export function useAssessment(assessmentId?: string) {
     fetchAssessment();
   }, [assessmentId]);
 
-  const saveDraft = async () => {
+  const saveDraft = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!assessment) return;
 
+    const savedVersion = draftVersionRef.current;
+    if (silent) setAutosaveStatus("saving");
     setSaving(true);
     const updates: Record<string, unknown> = {};
 
-    const isManagerView = assessment.status === 'self_submitted' || assessment.status === 'manager_reviewed';
+    const isManagerView = assessment.permissions?.isManagerLed || assessment.status === 'self_submitted' || assessment.status === 'manager_reviewed';
 
     if (isManagerView) {
       const managerScores:   Record<string, number | 'X'>         = {};
@@ -293,15 +319,41 @@ export function useAssessment(assessmentId?: string) {
       updates.staff_evidence = staffEvidence;
     }
 
-    const { error } = await api.updateAssessment(assessment.id, updates);
+    const { error } = assessment.permissions?.isManagerLed
+      ? await api.performAssessmentAction(assessment.id, { action: "save_draft", managerScores: updates.manager_scores, managerEvidence: updates.manager_evidence, managerNotes: updates.manager_notes })
+      : await api.updateAssessment(assessment.id, updates);
     setSaving(false);
 
     if (error) {
-      toast({ title: "Error", description: "Failed to save draft", variant: "destructive" });
+      if (silent) {
+        setDraftDirty(false);
+        setAutosaveStatus("error");
+      } else {
+        toast({ title: "Error", description: "Failed to save draft", variant: "destructive" });
+      }
     } else {
-      toast({ title: "Saved", description: "Draft saved successfully" });
+      if (savedVersion === draftVersionRef.current) setDraftDirty(false);
+      setAutosaveStatus("saved");
+      if (!silent) toast({ title: "Saved", description: "Draft saved successfully" });
     }
-  };
+  }, [assessment, domains, managerFeedback]);
+
+  useEffect(() => {
+    const canAutosave = Boolean(
+      assessment && (
+        assessment.permissions?.canSaveDraft ||
+        (!assessment.permissions?.isManagerLed && ["draft", "returned", "self_submitted", "manager_reviewed"].includes(assessment.status))
+      )
+    );
+
+    if (!draftDirty || !canAutosave || saving || autosaveStatus === "error") return;
+
+    const timeout = window.setTimeout(() => {
+      void saveDraft({ silent: true });
+    }, 1500);
+
+    return () => window.clearTimeout(timeout);
+  }, [assessment, autosaveStatus, draftDirty, saveDraft, saving]);
 
   const submitAssessment = async () => {
     if (!assessment) return;
@@ -356,7 +408,9 @@ export function useAssessment(assessmentId?: string) {
       });
     });
 
-    const finalScore = calculateWeightedScore(domains, 'manager');
+    const finalScore = assessment.permissions?.isManagerLed
+      ? calculateStaffAppraisalScore(domains, "manager")
+      : calculateWeightedScore(domains, "manager");
     const finalGrade = finalScore !== null ? getGradeFromScore(finalScore) : null;
 
     if (!managerFeedback?.trim()) {
@@ -369,15 +423,19 @@ export function useAssessment(assessmentId?: string) {
       return;
     }
 
-    const { error } = await api.updateAssessment(assessment.id, {
-      manager_scores:     managerScores,
-      manager_evidence:   managerEvidence,
-      manager_notes:      managerFeedback,
-      status:             'manager_reviewed',
-      manager_reviewed_at:new Date().toISOString(),
-      final_score:        finalScore,
-      final_grade:        finalGrade,
-    });
+    const { error } = assessment.permissions?.isManagerLed
+      ? await api.performAssessmentAction(assessment.id, {
+          action: "submit",
+          managerScores,
+          managerEvidence,
+          managerNotes: managerFeedback,
+          finalScore,
+          finalGrade,
+        })
+      : await api.updateAssessment(assessment.id, {
+          manager_scores: managerScores, manager_evidence: managerEvidence, manager_notes: managerFeedback,
+          status: 'manager_reviewed', manager_reviewed_at: new Date().toISOString(), final_score: finalScore, final_grade: finalGrade,
+        });
 
     setSaving(false);
 
@@ -385,7 +443,7 @@ export function useAssessment(assessmentId?: string) {
       toast({ title: "Error", description: "Failed to submit review", variant: "destructive" });
     } else {
       toast({ title: "Submitted", description: "Review submitted successfully" });
-      setAssessment(prev => prev ? { ...prev, status: 'manager_reviewed' } : null);
+      setAssessment(prev => prev ? { ...prev, status: assessment.permissions?.isManagerLed ? 'pending_director_review' : 'manager_reviewed' } : null);
     }
   };
 
@@ -418,18 +476,17 @@ export function useAssessment(assessmentId?: string) {
       });
     });
 
-    const finalScore = calculateWeightedScore(domains, 'manager');
+    const finalScore = assessment.permissions?.isManagerLed
+      ? calculateStaffAppraisalScore(domains, "manager")
+      : calculateWeightedScore(domains, "manager");
     const finalGrade = finalScore !== null ? getGradeFromScore(finalScore) : null;
 
-    const { error } = await api.updateAssessment(assessment.id, {
-      status:               'director_approved',
-      director_comments:    directorFeedback,
-      director_approved_at: new Date().toISOString(),
-      final_score:          finalScore,
-      final_grade:          finalGrade,
-      manager_scores:       managerScores,
-      manager_evidence:     managerEvidence
-    });
+    const { error } = assessment.permissions?.isManagerLed
+      ? await api.performAssessmentAction(assessment.id, { action: "director_review", directorComments: directorFeedback })
+      : await api.updateAssessment(assessment.id, {
+          status: 'director_approved', director_comments: directorFeedback, director_approved_at: new Date().toISOString(),
+          final_score: finalScore, final_grade: finalGrade, manager_scores: managerScores, manager_evidence: managerEvidence,
+        });
 
     setSaving(false);
 
@@ -437,7 +494,7 @@ export function useAssessment(assessmentId?: string) {
       toast({ title: "Error", description: "Failed to approve assessment", variant: "destructive" });
     } else {
       toast({ title: "Approved", description: "Assessment approved successfully" });
-      setAssessment(prev => prev ? { ...prev, status: 'director_approved' } : null);
+      setAssessment(prev => prev ? { ...prev, status: assessment.permissions?.isManagerLed ? 'director_reviewed' : 'director_approved' } : null);
     }
   };
 
@@ -454,15 +511,16 @@ export function useAssessment(assessmentId?: string) {
     }
 
     setSaving(true);
-    const finalScore = calculateWeightedScore(domains, 'manager');
+    const finalScore = assessment.permissions?.isManagerLed
+      ? calculateStaffAppraisalScore(domains, "manager")
+      : calculateWeightedScore(domains, "manager");
     const finalGrade = finalScore !== null ? getGradeFromScore(finalScore) : null;
 
-    const { error } = await api.updateAssessment(assessment.id, {
-      status:      'acknowledged',
-      staff_notes: staffAcknowledgement,
-      final_score: finalScore,
-      final_grade: finalGrade,
-    });
+    const { error } = assessment.permissions?.isManagerLed
+      ? await api.performAssessmentAction(assessment.id, { action: "acknowledge", staffNotes: staffAcknowledgement })
+      : await api.updateAssessment(assessment.id, {
+          status: 'acknowledged', staff_notes: staffAcknowledgement, final_score: finalScore, final_grade: finalGrade,
+        });
 
     setSaving(false);
 
@@ -475,6 +533,7 @@ export function useAssessment(assessmentId?: string) {
   };
 
   const updateKPI = (kpiId: string, updates: Partial<KPIData>) => {
+    markDraftDirty();
     setDomains(prev => prev.map(domain => ({
       ...domain,
       standards: domain.standards.map(standard => ({
@@ -484,6 +543,11 @@ export function useAssessment(assessmentId?: string) {
         )
       }))
     })));
+  };
+
+  const updateManagerFeedback = (feedback: string) => {
+    markDraftDirty();
+    setManagerFeedback(feedback);
   };
 
   const updateAssessmentStatus = (status: string) => {
@@ -505,7 +569,11 @@ export function useAssessment(assessmentId?: string) {
     return true;
   };
 
-  const returnAssessment = async (returnFeedback: string, returnedBy: string) => {
+  const returnAssessment = async (
+    returnFeedback: string,
+    returnedBy: string,
+    directorProposals?: { scores: Record<string, number | 'X'>; feedback: Record<string, string | EvidenceItem[]> },
+  ) => {
     if (!assessment) return false;
 
     if (!returnFeedback?.trim()) {
@@ -518,12 +586,17 @@ export function useAssessment(assessmentId?: string) {
     }
 
     setSaving(true);
-    const { error } = await api.updateAssessment(assessment.id, {
-      status:          'returned',
-      return_feedback: returnFeedback,
-      returned_at:     new Date().toISOString(),
-      returned_by:     returnedBy,
-    });
+    const { error } = assessment.permissions?.isManagerLed
+      ? await api.performAssessmentAction(assessment.id, {
+          action: "return",
+          returnFeedback,
+          directorScores: directorProposals?.scores,
+          directorEvidence: directorProposals?.feedback,
+        })
+      : await api.updateAssessment(assessment.id, {
+          status: 'returned', return_feedback: returnFeedback,
+          returned_at: new Date().toISOString(), returned_by: returnedBy,
+        });
 
     setSaving(false);
 
@@ -532,7 +605,7 @@ export function useAssessment(assessmentId?: string) {
       return false;
     }
     toast({ title: "Returned", description: "Assessment returned to staff for revision" });
-    setAssessment(prev => prev ? { ...prev, status: 'returned', return_feedback: returnFeedback } : null);
+    setAssessment(prev => prev ? { ...prev, status: assessment.permissions?.isManagerLed ? 'draft' : 'returned', return_feedback: returnFeedback } : null);
     return true;
   };
 
@@ -541,13 +614,14 @@ export function useAssessment(assessmentId?: string) {
     domains,
     loading,
     saving,
+    autosaveStatus,
     saveDraft,
     submitAssessment,
     submitReview,
     updateKPI,
     updateAssessmentStatus,
     managerFeedback,
-    setManagerFeedback,
+    setManagerFeedback: updateManagerFeedback,
     directorFeedback,
     setDirectorFeedback,
     staffAcknowledgement,
@@ -644,6 +718,20 @@ export function useTeamAssessments() {
   return { assessments, loading };
 }
 
+export function calculateStaffAppraisalScore(
+  domains: DomainData[] | undefined | null,
+  type: "staff" | "manager" = "manager",
+): number | null {
+  if (!domains || !Array.isArray(domains)) return null;
+
+  return calculateWeightedPercentageScore(
+    domains.flatMap((domain) =>
+      domain.standards.flatMap((standard) => standard.kpis),
+    ),
+    type,
+  );
+}
+
 export function calculateWeightedScore(
   domains: DomainData[] | undefined | null,
   type: 'staff' | 'manager' = 'staff'
@@ -666,10 +754,11 @@ export function calculateWeightedScore(
 
     if (scoredKPIs.length === 0) continue;
 
+    const itemWeightTotal = scoredKPIs.reduce((sum, kpi) => sum + Number(kpi.performanceWeight ?? 100), 0);
     const domainAvg = scoredKPIs.reduce((sum, kpi) => {
       const score = type === 'staff' ? kpi.score : kpi.managerScore;
-      return sum + (Number(score) || 0);
-    }, 0) / scoredKPIs.length;
+      return sum + (Number(score) || 0) * Number(kpi.performanceWeight ?? 100);
+    }, 0) / (itemWeightTotal || scoredKPIs.length);
 
     weightedSum  += domainAvg * domain.weight;
     totalWeight  += domain.weight;
@@ -677,20 +766,21 @@ export function calculateWeightedScore(
 
   if (totalWeight === 0) {
     // ✅ FIX: prefer-const — pakai const karena array tidak di-reassign
-    const allScoredKPIs: number[] = [];
+    const allScoredKPIs: Array<{ score: number; weight: number }> = [];
     domains.forEach(d => {
       d.standards.forEach(s => {
         s.kpis.forEach(kpi => {
           const score = type === 'staff' ? kpi.score : kpi.managerScore;
           if (score !== null && score !== undefined && score !== 'X') {
-            allScoredKPIs.push(Number(score));
+            allScoredKPIs.push({ score: Number(score), weight: Number(kpi.performanceWeight ?? 100) });
           }
         });
       });
     });
 
     if (allScoredKPIs.length === 0) return null;
-    return allScoredKPIs.reduce((a, b) => a + b, 0) / allScoredKPIs.length;
+    const weightTotal = allScoredKPIs.reduce((sum, item) => sum + item.weight, 0);
+    return allScoredKPIs.reduce((sum, item) => sum + item.score * item.weight, 0) / (weightTotal || allScoredKPIs.length);
   }
 
   return weightedSum / totalWeight;

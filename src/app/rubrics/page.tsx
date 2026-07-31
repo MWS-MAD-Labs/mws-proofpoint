@@ -81,6 +81,7 @@ interface KPI {
   rubric_3: string;
   rubric_2: string;
   rubric_1: string;
+  performance_weight?: number;
 }
 
 interface Standard {
@@ -104,6 +105,8 @@ interface Template {
   id: string;
   name: string;
   description: string | null;
+  template_type?: "KPI_APPRAISAL" | "STAFF_APPRAISAL" | "CLASSROOM_OBSERVATION" | "GENERIC";
+  templateType?: "KPI_APPRAISAL" | "STAFF_APPRAISAL" | "CLASSROOM_OBSERVATION" | "GENERIC";
   domains: Domain[];
 }
 
@@ -117,6 +120,7 @@ function TemplateSelectorDialog({
   selectedTemplate,
   onSelectTemplate,
   isEditMode,
+  modeLabel,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -124,6 +128,7 @@ function TemplateSelectorDialog({
   selectedTemplate: Template | null;
   onSelectTemplate: (template: Template) => void;
   isEditMode: boolean;
+  modeLabel: string;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -143,10 +148,10 @@ function TemplateSelectorDialog({
         <DialogHeader className="p-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2">
             <Layout className="h-5 w-5 text-primary" />
-            Select KPI Template
+            Select {modeLabel}
           </DialogTitle>
           <DialogDescription>
-            Choose a template to view or edit its KPI framework.
+            Choose a template to view or edit its {modeLabel.toLowerCase()}.
           </DialogDescription>
         </DialogHeader>
 
@@ -471,8 +476,9 @@ function DomainWeightEditor({
 // ============================================================================
 // MAIN RUBRICS CONTENT COMPONENT
 // ============================================================================
-function RubricsContent() {
+function RubricsContent({ mode = "KPI_APPRAISAL" }: { mode?: "KPI_APPRAISAL" | "STAFF_APPRAISAL" }) {
   const { templates, loading, refreshTemplates } = useRubricTemplates() as any;
+  const visibleTemplates = (templates as Template[]).filter((template) => (template.template_type ?? template.templateType ?? "KPI_APPRAISAL") === mode);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -586,7 +592,8 @@ function RubricsContent() {
               kpi.rubric_4 !== originalKPI.rubric_4 ||
               kpi.rubric_3 !== originalKPI.rubric_3 ||
               kpi.rubric_2 !== originalKPI.rubric_2 ||
-              kpi.rubric_1 !== originalKPI.rubric_1;
+              kpi.rubric_1 !== originalKPI.rubric_1 ||
+              Number(kpi.performance_weight ?? 100) !== Number(originalKPI.performance_weight ?? 100);
 
             if (hasChanged) {
               const { error } = await api.updateKPI(kpi.id, {
@@ -598,6 +605,7 @@ function RubricsContent() {
                 rubric_3: kpi.rubric_3,
                 rubric_2: kpi.rubric_2,
                 rubric_1: kpi.rubric_1,
+                performance_weight: Number(kpi.performance_weight ?? 100),
               });
               if (error) console.error(`Failed to sync KPI ${kpi.id}`);
             }
@@ -686,7 +694,7 @@ function RubricsContent() {
   const handleAddDomain = async () => {
     const { data, error } = await api.createDomain({
       template_id: selectedTemplate.id,
-      name: "New Domain",
+      name: isStaffAppraisalMode ? "New Part" : "New Domain",
       sort_order: editData.domains?.length || 0,
     });
 
@@ -813,11 +821,13 @@ function RubricsContent() {
     });
   };
 
-  const handleCreateTemplate = async () => {
+  const handleCreateTemplate = async (templateType: "KPI_APPRAISAL" | "STAFF_APPRAISAL") => {
+    const isStaffAppraisal = templateType === "STAFF_APPRAISAL";
     const { data, error } = await api.createRubric({
-      name: "New KPI Template",
-      description: "",
+      name: isStaffAppraisal ? "New Staff Appraisal Rubric" : "New KPI Template",
+      description: isStaffAppraisal ? "Role-specific staff appraisal rubric with four anchored performance ratings." : "",
       is_global: false,
+      template_type: templateType,
     });
 
     if (error) {
@@ -839,7 +849,7 @@ function RubricsContent() {
     const domain = editData.domains.find((d: Domain) => d.id === domainId);
     const { data, error } = await api.createStandard({
       domain_id: domainId,
-      name: "New Standard",
+      name: isStaffAppraisalMode ? "New Area" : "New Standard",
       sort_order: domain.standards?.length || 0,
     });
 
@@ -920,15 +930,16 @@ function RubricsContent() {
 
     const { data, error } = await api.createKPI({
       standard_id: standardId,
-      name: "New KPI",
+      performance_weight: 100,
+      name: isStaffAppraisalMode ? "New Performance Item" : "New KPI",
       description: "",
       evidence_guidance: "",
       trainings: "",
       sort_order: standard?.kpis?.length || 0,
-      rubric_4: "≥95%",
-      rubric_3: "80-94%",
-      rubric_2: "60-79%",
-      rubric_1: "<60%",
+      rubric_4: isStaffAppraisalMode ? "Consistently exceeds the role expectation" : "≥95%",
+      rubric_3: isStaffAppraisalMode ? "Meets the role expectation" : "80-94%",
+      rubric_2: isStaffAppraisalMode ? "Partially meets the role expectation" : "60-79%",
+      rubric_1: isStaffAppraisalMode ? "Does not meet the role expectation" : "<60%",
     });
 
     if (error) {
@@ -1006,6 +1017,10 @@ function RubricsContent() {
   }
 
   const currentData = isEditMode ? editData : selectedTemplate;
+  const isStaffAppraisalMode = mode === "STAFF_APPRAISAL" || (currentData?.template_type ?? currentData?.templateType) === "STAFF_APPRAISAL";
+  const labels = isStaffAppraisalMode
+    ? { framework: "Staff Appraisal Rubric", hierarchy: "Part → Area → Performance Item", domain: "Part", domains: "Parts", standard: "Area", standards: "Areas", kpi: "Performance Item", kpis: "Performance Items" }
+    : { framework: "KPI Framework", hierarchy: "Domain → Standard → KPI", domain: "Domain", domains: "Domains", standard: "Standard", standards: "Standards", kpi: "KPI", kpis: "KPIs" };
 
   // Count KPIs across all domains and standards
   const countKPIs = (domains: Domain[]) => {
@@ -1032,17 +1047,17 @@ function RubricsContent() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-4xl font-bold tracking-tight mb-2">
-            KPI Framework
+            {labels.framework}
           </h1>
           <p className="text-muted-foreground">
-            Domain → Standard → KPI structure for performance evaluation.
+            {labels.hierarchy} structure for performance evaluation.
           </p>
         </div>
         <div className="flex items-center gap-3">
           {!isEditMode && (
-            <Button className="glow-primary" onClick={handleCreateTemplate}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Template
+            <Button className="glow-primary" onClick={() => handleCreateTemplate(mode)}>
+              {isStaffAppraisalMode ? <ClipboardCheck className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+              {isStaffAppraisalMode ? "New Staff Appraisal Rubric" : "New KPI Template"}
             </Button>
           )}
         </div>
@@ -1089,19 +1104,19 @@ function RubricsContent() {
                   <div className="flex items-center gap-2">
                     <BookOpen className="h-4 w-4 text-primary" />
                     <span className="font-medium text-foreground">
-                      {currentData.domains?.length || 0} Domains
+                      {currentData.domains?.length || 0} {labels.domains}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Award className="h-4 w-4 text-primary" />
                     <span className="font-medium text-foreground">
-                      {countStandards(currentData.domains)} Standards
+                      {countStandards(currentData.domains)} {labels.standards}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Target className="h-4 w-4 text-primary" />
                     <span className="font-medium text-foreground">
-                      {countKPIs(currentData.domains)} KPIs
+                      {countKPIs(currentData.domains)} {labels.kpis}
                     </span>
                   </div>
                 </div>
@@ -1292,7 +1307,7 @@ function RubricsContent() {
                             </Badge>
                           )}
                           <span className="text-sm text-muted-foreground">
-                            {domain.standards?.length || 0} standards
+                            {domain.standards?.length || 0} {labels.standards.toLowerCase()}
                           </span>
                         </div>
                       </div>
@@ -1356,7 +1371,7 @@ function RubricsContent() {
                                     </span>
                                   )}
                                   <span className="text-xs text-muted-foreground">
-                                    {standard.kpis?.length || 0} KPIs
+                                    {standard.kpis?.length || 0} {labels.kpis}
                                   </span>
                                 </div>
 
@@ -1389,7 +1404,7 @@ function RubricsContent() {
                                                         )
                                                       }
                                                       className="font-semibold text-sm h-8"
-                                                      placeholder="KPI Name"
+                                                      placeholder={`${labels.kpi} Name`}
                                                     />
                                                     <Button
                                                       variant="ghost"
@@ -1415,9 +1430,24 @@ function RubricsContent() {
                                                           e.target.value,
                                                       })
                                                     }
-                                                    placeholder="KPI Description / Measurement"
+                                                    placeholder={`${labels.kpi} Description / Measurement`}
                                                     className="text-sm min-h-[60px]"
                                                   />
+                                                  {isStaffAppraisalMode && (
+                                                    <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
+                                                      <label className="text-xs font-semibold text-muted-foreground">Item Percentage</label>
+                                                      <Input
+                                                        type="number"
+                                                        min="0"
+                                                        max="100"
+                                                        step="0.01"
+                                                        value={kpi.performance_weight ?? 100}
+                                                        onChange={(e) => handleUpdateKPI(kpi.id, { performance_weight: Number(e.target.value) })}
+                                                        className="h-8 w-28"
+                                                      />
+                                                      <span className="text-sm text-muted-foreground">% relative weight</span>
+                                                    </div>
+                                                  )}
                                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                                     <div className="space-y-1.5">
                                                       <label className="text-xs font-medium text-muted-foreground">
@@ -1586,7 +1616,7 @@ function RubricsContent() {
                                         }
                                       >
                                         <Plus className="h-3.5 w-3.5 mr-1.5" />
-                                        Add KPI
+                                        Add {labels.kpi}
                                       </Button>
                                     )}
                                   </div>
@@ -1602,7 +1632,7 @@ function RubricsContent() {
                               onClick={() => handleAddStandard(domain.id)}
                             >
                               <Plus className="h-3.5 w-3.5 mr-1.5" />
-                              Add Standard
+                              Add {labels.standard}
                             </Button>
                           )}
                         </div>
@@ -1620,7 +1650,7 @@ function RubricsContent() {
                       onClick={handleAddDomain}
                     >
                       <Plus className="h-5 w-5 mr-2" />
-                      Add New Domain
+                      Add New {labels.domain}
                     </Button>
                     <Button
                       className="py-6 border-dashed border-2 rounded-xl"
@@ -1628,7 +1658,7 @@ function RubricsContent() {
                       onClick={() => setImportDialogOpen(true)}
                     >
                       <Import className="h-5 w-5 mr-2" />
-                      Import Domain
+                      Import {labels.domain}
                     </Button>
                   </div>
                 )}
@@ -1676,10 +1706,11 @@ function RubricsContent() {
       <TemplateSelectorDialog
         open={templateSelectorOpen}
         onOpenChange={setTemplateSelectorOpen}
-        templates={templates}
+        templates={visibleTemplates}
         selectedTemplate={selectedTemplate}
         onSelectTemplate={handleSelectTemplate}
         isEditMode={isEditMode}
+        modeLabel={isStaffAppraisalMode ? "Staff Appraisal Rubric" : "KPI Template"}
       />
 
       {/* Import Domain Dialog */}
@@ -1687,7 +1718,7 @@ function RubricsContent() {
         <ImportDomainDialog
           open={importDialogOpen}
           onOpenChange={setImportDialogOpen}
-          templates={templates}
+          templates={visibleTemplates}
           currentTemplateId={selectedTemplate.id}
           onImport={handleImportDomains}
         />
@@ -1743,8 +1774,10 @@ function RubricsContent() {
 function RubricsTabs() {
   const { isAdmin, loading } = useAuth();
   const searchParams = useSearchParams();
-  const defaultTab =
-    isAdmin && searchParams.get("tab") === "observation-form"
+  const requestedTab = searchParams.get("tab");
+  const defaultTab = requestedTab === "staff-appraisal"
+    ? "staff-appraisal"
+    : isAdmin && requestedTab === "observation-form"
       ? "observation-form"
       : "kpi-framework";
 
@@ -1763,6 +1796,10 @@ function RubricsTabs() {
           <Target className="h-4 w-4" />
           KPI Framework
         </TabsTrigger>
+        <TabsTrigger value="staff-appraisal" className="flex items-center gap-2">
+          <ClipboardCheck className="h-4 w-4" />
+          Staff Appraisal Rubrics
+        </TabsTrigger>
         {isAdmin && (
           <TabsTrigger
             value="observation-form"
@@ -1775,7 +1812,10 @@ function RubricsTabs() {
       </TabsList>
 
       <TabsContent value="kpi-framework" className="mt-0">
-        <RubricsContent />
+        <RubricsContent mode="KPI_APPRAISAL" />
+      </TabsContent>
+      <TabsContent value="staff-appraisal" className="mt-0">
+        <RubricsContent mode="STAFF_APPRAISAL" />
       </TabsContent>
       {isAdmin && (
         <TabsContent value="observation-form" className="mt-0">

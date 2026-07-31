@@ -155,20 +155,33 @@ export function DepartmentRoleAssignmentDialog({
             availableUsers.map((user) => {
               const checked = selected.has(user.id);
               return (
-                <button
-                  type="button"
+                <div
                   key={user.id}
+                  role="checkbox"
+                  aria-checked={checked}
+                  tabIndex={0}
                   onClick={() => toggleUser(user.id)}
-                  className="flex w-full items-center gap-3 border-b p-3 text-left last:border-b-0 hover:bg-muted/50"
+                  onKeyDown={(event) => {
+                    if (event.key === " " || event.key === "Enter") {
+                      event.preventDefault();
+                      toggleUser(user.id);
+                    }
+                  }}
+                  className="flex w-full cursor-pointer items-center gap-3 border-b p-3 text-left last:border-b-0 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                 >
-                  <Checkbox checked={checked} aria-label={`Select ${user.full_name || user.email}`} />
+                  <Checkbox
+                    checked={checked}
+                    aria-label={`Select ${user.full_name || user.email}`}
+                    onClick={(event) => event.stopPropagation()}
+                    onCheckedChange={() => toggleUser(user.id)}
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm font-medium">
                         {user.full_name || user.email}
                       </p>
                       {user.status !== "active" && (
-                        <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium uppercase text-amber-700">
+                        <span className="shrink-0 rounded-full border border-warning/40 bg-warning-soft px-2 py-0.5 text-[10px] font-medium uppercase text-warning-foreground">
                           {user.status}
                         </span>
                       )}
@@ -179,7 +192,7 @@ export function DepartmentRoleAssignmentDialog({
                     </p>
                   </div>
                   {checked && <Check className="h-4 w-4 text-primary" />}
-                </button>
+                </div>
               );
             })
           )}

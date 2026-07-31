@@ -7,6 +7,7 @@ interface AssessmentProgressProps {
 }
 
 export function AssessmentProgress({ status, className }: AssessmentProgressProps) {
+  const isManagerLed = ['pending_director_review', 'director_reviewed'].includes(status);
   const isReturned = status === 'returned';
 
   // Determine step number based on status
@@ -15,7 +16,9 @@ export function AssessmentProgress({ status, className }: AssessmentProgressProp
       case 'draft': return 1;
       case 'returned': return 1; // Goes back to step 1
       case 'self_submitted': return 2;
+      case 'pending_director_review': return 2;
       case 'manager_reviewed': return 3;
+      case 'director_reviewed': return 3;
       case 'director_approved': return 4;
       case 'admin_reviewed': return 4;
       case 'pending_release': return 4;
@@ -25,13 +28,20 @@ export function AssessmentProgress({ status, className }: AssessmentProgressProp
   };
 
   const currentStep = getStep(status);
-  const steps = [
-    { id: 1, name: isReturned ? 'Returned' : 'Drafting' },
-    { id: 2, name: 'Submission' },
-    { id: 3, name: 'Review' },
-    { id: 4, name: 'Approval' },
-    { id: 5, name: 'Finalized' }
-  ];
+  const steps = isManagerLed
+    ? [
+        { id: 1, name: isReturned ? 'Returned' : 'Manager Draft' },
+        { id: 2, name: 'Director Review' },
+        { id: 3, name: 'Staff Acknowledgement' },
+        { id: 4, name: 'Complete' },
+      ]
+    : [
+        { id: 1, name: isReturned ? 'Returned' : 'Drafting' },
+        { id: 2, name: 'Submission' },
+        { id: 3, name: 'Review' },
+        { id: 4, name: 'Approval' },
+        { id: 5, name: 'Finalized' },
+      ];
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -39,7 +49,7 @@ export function AssessmentProgress({ status, className }: AssessmentProgressProp
         {steps.map((step) => (
           <div key={step.id} className="flex flex-col items-center gap-2 flex-1 relative">
             {/* Connecting line */}
-            {step.id < 5 && (
+            {step.id < steps.length && (
               <div className={cn(
                 "absolute left-1/2 top-4 w-full h-0.5 -z-10",
                 currentStep > step.id ? "bg-primary" : "bg-muted"
@@ -49,7 +59,7 @@ export function AssessmentProgress({ status, className }: AssessmentProgressProp
               "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300",
               // Special handling for returned status
               isReturned && step.id === 1
-                ? "bg-amber-500 text-white ring-4 ring-amber-500/20 scale-110"
+                ? "bg-warning text-white ring-4 ring-warning/20 scale-110"
                 : currentStep > step.id
                   ? "bg-primary text-white"
                   : currentStep === step.id
@@ -65,7 +75,7 @@ export function AssessmentProgress({ status, className }: AssessmentProgressProp
             <span className={cn(
               "text-[10px] font-bold uppercase tracking-tighter",
               isReturned && step.id === 1
-                ? "text-amber-600"
+                ? "text-warning-foreground"
                 : currentStep === step.id
                   ? "text-primary"
                   : "text-muted-foreground"
@@ -79,7 +89,7 @@ export function AssessmentProgress({ status, className }: AssessmentProgressProp
       <div className={cn(
         "p-3 rounded-lg text-xs font-bold text-center border",
         isReturned
-          ? "bg-amber-500/10 text-amber-700 border-amber-500/20"
+          ? "bg-warning/10 text-warning-foreground border-warning/20"
           : "bg-primary/5 text-primary border-primary/10"
       )}>
         Current Phase: {steps.find(s => s.id === currentStep)?.name.toUpperCase()}

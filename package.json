@@ -15,7 +15,8 @@
     "db:migrate:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
-    "db:seed:milestone1": "tsx prisma/seed-milestone1.ts"
+    "db:seed:milestone1": "tsx prisma/seed-milestone1.ts",
+    "db:seed:it-support-appraisal": "tsx scripts/seed-it-support-staff-appraisal.ts"
   },
   "dependencies": {
     "@auth/pg-adapter": "^1.11.1",

@@ -3,6 +3,8 @@
 export type AssessmentStatus =
   | 'draft'
   | 'self_submitted'
+  | 'pending_director_review'
+  | 'director_reviewed'
   | 'manager_reviewed'
   | 'acknowledged'
   | 'director_approved'
@@ -25,6 +27,16 @@ export const STATUS_CONFIG: Record<AssessmentStatus, StatusInfo> = {
     label: 'Submitted',
     description: 'Awaiting manager appraisal',
     step: 1,
+  },
+  pending_director_review: {
+    label: 'Pending Director Review',
+    description: 'Awaiting director review',
+    step: 2,
+  },
+  director_reviewed: {
+    label: 'Director Reviewed',
+    description: 'Awaiting staff acknowledgement',
+    step: 3,
   },
   manager_reviewed: {
     label: 'Manager Reviewed',

@@ -16,9 +16,11 @@ export function isObservationAnswerComplete(
   switch (questionType) {
     case "SCALE":
       return (
-        Number.isInteger(answer.score) &&
-        (answer.score ?? 0) >= 1 &&
-        (answer.score ?? 0) <= 100
+        typeof answer.score === "number" &&
+        Number.isFinite(answer.score) &&
+        Math.round(answer.score * 10) === answer.score * 10 &&
+        answer.score >= 1 &&
+        answer.score <= 4
       );
     case "TEXT":
       return (answer.textValue?.trim().length ?? 0) > 0;

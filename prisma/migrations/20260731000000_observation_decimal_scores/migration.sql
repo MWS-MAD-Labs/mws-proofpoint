@@ -1,0 +1,3 @@
+ALTER TABLE "observation_answers"
+  ALTER COLUMN "score" TYPE DOUBLE PRECISION
+  USING "score"::DOUBLE PRECISION;

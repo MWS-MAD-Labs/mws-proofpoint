@@ -17,7 +17,6 @@ import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api-client";
 import {
   ClipboardList,
-  Users,
   Building2,
   FileText,
   Settings,
@@ -134,26 +133,17 @@ function DashboardContent() {
 
   const actionCards = [
     {
-      title: "Self Assessment",
-      description: "Complete your performance evaluation",
+      title: "Performance Appraisals",
+      description: isManager || isAdmin
+        ? "Open self-assessment and staff appraisal workflows"
+        : "Review and acknowledge your performance appraisals",
       icon: ClipboardList,
-      link: "/assessment",
-      buttonText: "Start Assessment",
+      link: "/appraisals",
+      buttonText: "Open Performance Appraisals",
       buttonVariant: "default" as const,
       show: true,
-      gradient: "from-blue-500/10 to-cyan-500/10",
-      iconColor: "text-blue-500",
-    },
-    {
-      title: "Team Dashboard",
-      description: "Review your team's assessments",
-      icon: Users,
-      link: "/manager",
-      buttonText: "View Team",
-      buttonVariant: "outline" as const,
-      show: isManager || isAdmin,
-      gradient: "from-violet-500/10 to-purple-500/10",
-      iconColor: "text-violet-500",
+      gradient: "from-primary/10 to-primary/10",
+      iconColor: "text-primary",
     },
     {
       title: "Director Overview",
@@ -163,8 +153,8 @@ function DashboardContent() {
       buttonText: "View Organization",
       buttonVariant: "outline" as const,
       show: isDirector || isAdmin,
-      gradient: "from-emerald-500/10 to-teal-500/10",
-      iconColor: "text-emerald-500",
+      gradient: "from-success/10 to-info/10",
+      iconColor: "text-success",
     },
     {
       title: "Strategic Plans",
@@ -174,8 +164,8 @@ function DashboardContent() {
       buttonText: "Open Plans",
       buttonVariant: "outline" as const,
       show: true,
-      gradient: "from-teal-500/10 to-cyan-500/10",
-      iconColor: "text-teal-500",
+      gradient: "from-info/10 to-info/10",
+      iconColor: "text-info-foreground",
     },
     {
       title: "Rubric Templates",
@@ -185,8 +175,8 @@ function DashboardContent() {
       buttonText: "Manage Rubrics",
       buttonVariant: "outline" as const,
       show: isManager || isDirector || isAdmin,
-      gradient: "from-amber-500/10 to-orange-500/10",
-      iconColor: "text-amber-500",
+      gradient: "from-warning/10 to-warning/10",
+      iconColor: "text-warning-foreground",
     },
     {
       title: "Admin Panel",
@@ -196,8 +186,8 @@ function DashboardContent() {
       buttonText: "Open Admin",
       buttonVariant: "outline" as const,
       show: isAdmin,
-      gradient: "from-rose-500/10 to-pink-500/10",
-      iconColor: "text-rose-500",
+      gradient: "from-destructive/10 to-destructive/10",
+      iconColor: "text-destructive",
     },
   ];
 

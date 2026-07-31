@@ -1,4 +1,4 @@
-import { Activity } from "lucide-react";
+import { ProofPointMark } from "@/components/ProofPointMark";
 import { cn } from "@/lib/utils";
 
 interface LogoProps {
@@ -9,19 +9,14 @@ interface LogoProps {
 export function Logo({ className, showText = true }: LogoProps) {
     return (
         <div className={cn("flex items-center gap-3 group", className)}>
-            <div className="relative">
-                <div className="absolute inset-0 bg-[#2563eb] rounded-2xl blur-lg opacity-40 group-hover:opacity-60 transition-opacity" />
-                <div className="relative flex items-center justify-center w-12 h-12 rounded-2xl bg-[#2563eb] shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-transform">
-                    <Activity className="h-6 w-6 text-white" strokeWidth={2.5} />
-                </div>
-            </div>
+            <ProofPointMark className="h-12 w-12 rounded-lg transition-transform duration-200 group-hover:-translate-y-0.5" />
 
             {showText && (
                 <div className="flex flex-col justify-center">
-                    <h1 className="text-2xl font-bold tracking-tight text-slate-900 leading-none mb-1 group-hover:text-[#2563eb] transition-colors">
+                    <h1 className="mb-1 font-heading text-2xl font-extrabold leading-none tracking-tight text-foreground transition-colors group-hover:text-primary">
                         ProofPoint
                     </h1>
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-medium leading-none">
+                    <p className="font-heading text-[10px] font-bold uppercase leading-none tracking-[0.2em] text-muted-foreground">
                         Command Center
                     </p>
                 </div>

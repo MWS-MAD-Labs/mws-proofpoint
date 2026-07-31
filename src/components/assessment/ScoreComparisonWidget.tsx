@@ -5,8 +5,12 @@ import { TrendingUp, Award, AlertTriangle, Lock } from "lucide-react";
 
 interface ScoreComparisonWidgetProps {
   domains?: DomainData[];
+  secondaryDomains?: DomainData[];
   finalScore?: number | null;
   projectedScore?: number | null;
+  primaryLabel?: string;
+  secondaryLabel?: string;
+  showComparison?: boolean;
 }
 
 function calculateWeightedScore(
@@ -105,11 +109,15 @@ function getLetterGrade(score: number): {
 
 export function ScoreComparisonWidget({
   domains,
+  secondaryDomains,
   finalScore,
   projectedScore,
+  primaryLabel = "Final Score",
+  secondaryLabel = "Projected",
+  showComparison = true,
 }: ScoreComparisonWidgetProps) {
   const calculatedFinal = calculateWeightedScore(domains, "manager");
-  const calculatedProjected = calculateWeightedScore(domains, "staff");
+  const calculatedProjected = calculateWeightedScore(secondaryDomains ?? domains, "manager");
 
   const finalWeighted =
     finalScore !== undefined && finalScore !== null
@@ -151,6 +159,7 @@ export function ScoreComparisonWidget({
     totalKPIs > 0 ? (completedKPIs / totalKPIs) * 100 : 0;
 
   // Calculate domain averages
+  const secondaryDomainById = new Map((secondaryDomains ?? domains ?? []).map((domain) => [domain.id, domain]));
   const domainAverages = hasDomains
     ? domains!.map((domain) => {
         let domainKPIs: KPIData[] = [];
@@ -158,8 +167,9 @@ export function ScoreComparisonWidget({
           domainKPIs = [...domainKPIs, ...s.kpis];
         });
 
-        const staffScoredKPIs = domainKPIs.filter(
-          (k) => k.score !== null && k.score !== undefined && k.score !== "X",
+        const secondaryKPIs = secondaryDomainById.get(domain.id)?.standards.flatMap((standard) => standard.kpis) ?? [];
+        const staffScoredKPIs = secondaryKPIs.filter(
+          (k) => k.managerScore !== null && k.managerScore !== undefined && k.managerScore !== "X",
         );
         const managerScoredKPIs = domainKPIs.filter(
           (k) =>
@@ -170,7 +180,7 @@ export function ScoreComparisonWidget({
 
         const staffAvg =
           staffScoredKPIs.length > 0
-            ? staffScoredKPIs.reduce((a, k) => a + (Number(k.score) || 0), 0) /
+            ? staffScoredKPIs.reduce((a, k) => a + (Number(k.managerScore) || 0), 0) /
               staffScoredKPIs.length
             : null;
 
@@ -189,7 +199,7 @@ export function ScoreComparisonWidget({
   const getScoreColor = (score: number | null) => {
     if (score === null) return "text-muted-foreground/30";
     if (score < 2) return "text-evidence-alert";
-    if (score < 3) return "text-amber-500";
+    if (score < 3) return "text-warning-foreground";
     return "text-evidence-success";
   };
 
@@ -206,7 +216,7 @@ export function ScoreComparisonWidget({
   return (
     <div className="bg-card border rounded-xl overflow-hidden shadow-md">
       {/* Header Row: Score Comparison */}
-      <div className="grid grid-cols-2 divide-x border-b">
+      <div className={cn("divide-x border-b", showComparison ? "grid grid-cols-2" : "grid grid-cols-1")}>
         {/* Final Score Column */}
         <div className="p-4 text-center bg-gradient-to-b from-muted/30 to-background">
           <div className="flex items-center justify-center gap-1.5 mb-2">
@@ -214,7 +224,7 @@ export function ScoreComparisonWidget({
               className={cn("h-4 w-4", getScoreColor(finalWeighted))}
             />
             <span className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
-              Final Score
+              {primaryLabel}
             </span>
           </div>
           <div
@@ -242,14 +252,14 @@ export function ScoreComparisonWidget({
           )}
         </div>
 
-        {/* Projected Score Column */}
-        <div className="p-4 text-center bg-gradient-to-b from-muted/30 to-background">
+        {/* Secondary Score Column */}
+        {showComparison && <div className="p-4 text-center bg-gradient-to-b from-muted/30 to-background">
           <div className="flex items-center justify-center gap-1.5 mb-2">
             <ProjectedIcon
               className={cn("h-4 w-4", getScoreColor(projectedWeighted))}
             />
             <span className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
-              Projected
+              {secondaryLabel}
             </span>
           </div>
           <div
@@ -275,12 +285,12 @@ export function ScoreComparisonWidget({
               </div>
             </div>
           )}
-        </div>
+        </div>}
       </div>
 
       {/* Description Row */}
-      {(finalGrade || projectedGrade) && (
-        <div className="grid grid-cols-2 divide-x border-b text-[10px] text-muted-foreground leading-snug">
+      {(finalGrade || (showComparison && projectedGrade)) && (
+        <div className={cn("divide-x border-b text-[10px] text-muted-foreground leading-snug", showComparison ? "grid grid-cols-2" : "grid grid-cols-1")}> 
           <div className="p-3">
             {finalGrade?.description || (
               <span className="italic opacity-50">
@@ -288,11 +298,11 @@ export function ScoreComparisonWidget({
               </span>
             )}
           </div>
-          <div className="p-3">
+          {showComparison && <div className="p-3">
             {projectedGrade?.description || (
               <span className="italic opacity-50">—</span>
             )}
-          </div>
+          </div>}
         </div>
       )}
 
@@ -313,7 +323,7 @@ export function ScoreComparisonWidget({
               completionPercent < 50 && "bg-evidence-alert",
               completionPercent >= 50 &&
                 completionPercent < 100 &&
-                "bg-amber-400",
+                "bg-warning",
               completionPercent === 100 && "bg-evidence-success",
             )}
             style={{ width: `${completionPercent}%` }}
@@ -332,8 +342,8 @@ export function ScoreComparisonWidget({
           <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2 flex items-center justify-between">
             <span>Domain Averages</span>
             <div className="flex gap-4 text-[9px]">
-              <span>Final</span>
-              <span>Projected</span>
+              <span>{primaryLabel}</span>
+              {showComparison && <span>{secondaryLabel}</span>}
             </div>
           </div>
           {domainAverages.map((domain, idx) => (
@@ -362,7 +372,7 @@ export function ScoreComparisonWidget({
                     —
                   </span>
                 )}
-                {domain.staffAvg !== null ? (
+                {showComparison && (domain.staffAvg !== null ? (
                   <span
                     className={cn(
                       "font-mono font-bold text-sm min-w-[2.5rem] text-right",
@@ -375,7 +385,7 @@ export function ScoreComparisonWidget({
                   <span className="text-[9px] font-bold text-muted-foreground/30 uppercase min-w-[2.5rem] text-right">
                     —
                   </span>
-                )}
+                ))}
               </div>
             </div>
           ))}
@@ -384,7 +394,7 @@ export function ScoreComparisonWidget({
 
       {/* Final Bonus Payout */}
       {finalGrade && (
-        <div className="p-4 border-t bg-gradient-to-r from-emerald-500/5 to-emerald-500/10">
+        <div className="p-4 border-t bg-gradient-to-r from-success/5 to-success/10">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
               Final Bonus Payout
@@ -395,7 +405,7 @@ export function ScoreComparisonWidget({
                 finalGrade.bonusPayout >= 80 && "text-evidence-success",
                 finalGrade.bonusPayout >= 50 &&
                   finalGrade.bonusPayout < 80 &&
-                  "text-amber-500",
+                  "text-warning-foreground",
                 finalGrade.bonusPayout < 50 && "text-evidence-alert",
               )}
             >

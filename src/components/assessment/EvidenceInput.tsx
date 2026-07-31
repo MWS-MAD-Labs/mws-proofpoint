@@ -22,6 +22,7 @@ interface EvidenceInputProps {
   onChange: (value: EvidenceItem[]) => void;
   disabled?: boolean;
   evidenceGuidance?: string;
+  requireAtOrAbove?: number;
 }
 
 // Parse legacy string value or return array as-is
@@ -43,19 +44,18 @@ function parseEvidenceValue(value: string | EvidenceItem[]): EvidenceItem[] {
   return [{ evidence: "", name: "", notes: "", inputMode: "initial" }];
 }
 
-function isEvidenceRequired(score: number | null): boolean {
-  // Evidence required for scores 1-4
-  return score !== null && score >= 1;
+function isEvidenceRequired(score: number | null, requireAtOrAbove = 1): boolean {
+  return score !== null && score >= requireAtOrAbove;
 }
 
 function hasMinimumEvidence(items: EvidenceItem[]): boolean {
   return items.some(item => item.evidence.trim().length > 0);
 }
 
-export function EvidenceInput({ score, value, onChange, disabled, evidenceGuidance }: EvidenceInputProps) {
+export function EvidenceInput({ score, value, onChange, disabled, evidenceGuidance, requireAtOrAbove = 1 }: EvidenceInputProps) {
   const { user } = useAuth();
   const items = parseEvidenceValue(value);
-  const required = isEvidenceRequired(score);
+  const required = isEvidenceRequired(score, requireAtOrAbove);
   const hasEvidence = hasMinimumEvidence(items);
   const showWarning = required && !hasEvidence && score !== null;
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);

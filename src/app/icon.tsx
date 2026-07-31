@@ -32,8 +32,8 @@ export default function Icon() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        backgroundColor: '#2563eb', // Matches the visual blue from Tailwind
-                        borderRadius: '64px', // Standard squircle/rounded-rect shape
+                        backgroundColor: '#1F2A44', // MWS Truth Navy: ProofPoint primary identity
+                        borderRadius: '64px',
                     }}
                 >
                     <svg

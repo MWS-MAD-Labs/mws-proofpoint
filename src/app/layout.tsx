@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { JetBrains_Mono, Nunito_Sans, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const inter = Inter({
+const nunitoSans = Nunito_Sans({
     subsets: ["latin"],
-    variable: "--font-inter",
+    variable: "--font-nunito-sans",
+});
+
+const plusJakartaSans = Plus_Jakarta_Sans({
+    subsets: ["latin"],
+    variable: "--font-plus-jakarta-sans",
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -26,7 +31,9 @@ export const metadata: Metadata = {
         card: "summary_large_image",
     },
     icons: {
-        icon: "/favicon.svg",
+        icon: [{ url: "/icon", type: "image/png" }],
+        shortcut: [{ url: "/icon", type: "image/png" }],
+        apple: [{ url: "/icon", type: "image/png" }],
     },
 };
 
@@ -60,7 +67,7 @@ export default function RootLayout({
                 />
             </head>
             <body
-                className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased bg-background text-foreground`}
+                className={`${nunitoSans.variable} ${plusJakartaSans.variable} ${jetbrainsMono.variable} font-sans antialiased bg-background text-foreground`}
                 suppressHydrationWarning
             >
                 <Providers>{children}</Providers>

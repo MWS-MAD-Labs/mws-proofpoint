@@ -6,10 +6,7 @@ import { assertObservationTransition } from "@/features/observations/server/life
 import { getObservationPermissions } from "@/features/observations/server/permissions";
 import { observationReopenSchema } from "@/features/observations/schemas";
 import type { ObservationStatus } from "@/features/observations/types";
-import {
-  notifyManagerObservationReopened,
-  notifyStaffObservationReopened,
-} from "@/lib/notifications/observation-notifications";
+import { notifyManagerObservationReopened } from "@/lib/notifications/observation-notifications";
 
 interface ReopenObservationRow {
   id: string;
@@ -143,17 +140,7 @@ export async function PATCH(
         ),
       );
     }
-    if (observation.staffEmail) {
-      notifications.push(
-        notifyStaffObservationReopened(
-          observation.staffEmail,
-          staffName,
-          rubricName,
-          parsedBody.data.reason,
-          id,
-        ),
-      );
-    }
+
     await Promise.allSettled(notifications).then((results) => {
       for (const result of results) {
         if (result.status === "rejected") {

@@ -3,7 +3,11 @@ import test, { after } from "node:test";
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { pool, query, queryOne } from "@/lib/db";
-import { POST as createObservationRoute } from "@/app/api/observations/route";
+import {
+  GET as listObservationsRoute,
+  POST as createObservationRoute,
+} from "@/app/api/observations/route";
+import { GET as observationSummaryRoute } from "@/app/api/observations/summary/route";
 import {
   DELETE as deleteObservationRoute,
   GET as getObservationRoute,
@@ -231,7 +235,7 @@ async function insertFixture(): Promise<Fixture> {
   await query(
     `INSERT INTO observation_answers
        (id, observation_id, indicator_id, score, note, created_at, updated_at)
-     VALUES ($1, $2, $3, 80, 'complete', NOW(), NOW())`,
+     VALUES ($1, $2, $3, 4, 'complete', NOW(), NOW())`,
     [randomUUID(), observationIds[0], requiredIndicatorId],
   );
 
@@ -315,9 +319,9 @@ test("Phase 1 list and summary queries enforce role scope, filters, pagination, 
     assert.equal(adminList.pagination.total, 12);
     assert.equal(directorList.pagination.total, 12);
     assert.equal(managerList.pagination.total, 10);
-    assert.equal(staffList.pagination.total, 10);
+    assert.equal(staffList.pagination.total, 9);
     assert.equal(managerBList.pagination.total, 2);
-    assert.equal(staffBList.pagination.total, 2);
+    assert.equal(staffBList.pagination.total, 1);
     assert.ok(adminList.data.every((item) => !("answers" in item)));
     assert.equal(
       managerList.data.find((item) => item.title?.includes("overdue-draft"))?.progress
@@ -325,8 +329,8 @@ test("Phase 1 list and summary queries enforce role scope, filters, pagination, 
       1,
     );
     assert.equal(
-      staffList.data.find((item) => item.title?.includes("overdue-draft"))?.progress,
-      null,
+      staffList.data.some((item) => item.title?.includes("overdue-draft")),
+      false,
     );
     assert.equal(
       directorList.data.find((item) => item.title?.includes("overdue-draft"))?.progress,
@@ -426,14 +430,17 @@ test("Phase 1 list and summary queries enforce role scope, filters, pagination, 
       completedThisMonth: 8,
     });
     assertCountDelta(baseline.staff, staffSummary.counts, {
-      draft: 1,
       awaitingAcknowledgement: 1,
       completed: 8,
       actionRequired: 1,
-      overdue: 1,
-      stale: 1,
       completedThisMonth: 8,
     });
+    assert.equal(
+      [...staffSummary.needsAttention, ...staffSummary.recent].some((item) =>
+        item.title?.includes("overdue-draft"),
+      ),
+      false,
+    );
 
     for (const summary of [adminSummary, directorSummary, managerSummary, staffSummary]) {
       assert.ok(summary.needsAttention.length <= 5);
@@ -757,6 +764,15 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
     fixture = await insertWorkflowFixture();
     const dueAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
+    setObservationTestActor(fixture.staffA);
+    const baselineStaffSummaryResponse = await observationSummaryRoute();
+    assert.equal(baselineStaffSummaryResponse.status, 200);
+    const baselineStaffSummary = await responseBody<{
+      counts: ObservationSummaryCounts;
+      needsAttention: Array<{ id: string }>;
+      recent: Array<{ id: string }>;
+    }>(baselineStaffSummaryResponse);
+
     setObservationTestActor(fixture.managerA);
     const managerStaffResponse = await listCreationStaffRoute();
     assert.equal(managerStaffResponse.status, 200);
@@ -810,13 +826,63 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
       new NextRequest(`http://localhost/api/observations/${created.observation.id}`),
       { params: Promise.resolve({ id: created.observation.id }) },
     );
-    assert.equal(privateDraftResponse.status, 200);
-    const privateDraft = await responseBody<Record<string, unknown>>(privateDraftResponse);
-    const privateObservation = privateDraft.observation as Record<string, unknown>;
-    assert.equal("answers" in privateObservation, false);
-    assert.equal(privateObservation.progress, null);
+    assert.equal(privateDraftResponse.status, 403);
+    assert.deepEqual(await responseBody(privateDraftResponse), { error: "Forbidden." });
+
+    const draftListResponse = await listObservationsRoute(
+      new Request(
+        `http://localhost/api/observations?q=${encodeURIComponent(fixture.prefix)}&page=1&pageSize=10`,
+      ),
+    );
+    assert.equal(draftListResponse.status, 200);
+    const draftList = await responseBody<{
+      data: Array<{ id: string }>;
+      pagination: { total: number; totalPages: number };
+      summary: ObservationSummaryCounts;
+    }>(draftListResponse);
+    assert.deepEqual(draftList.data, []);
+    assert.equal(draftList.pagination.total, 0);
+    assert.equal(draftList.pagination.totalPages, 0);
+    assert.equal(draftList.summary.draft, 0);
+
+    const draftSummaryResponse = await observationSummaryRoute();
+    assert.equal(draftSummaryResponse.status, 200);
+    const draftSummary = await responseBody<{
+      counts: ObservationSummaryCounts;
+      needsAttention: Array<{ id: string }>;
+      recent: Array<{ id: string }>;
+    }>(draftSummaryResponse);
+    assert.deepEqual(draftSummary.counts, baselineStaffSummary.counts);
+    assert.equal(
+      [...draftSummary.needsAttention, ...draftSummary.recent].some(
+        (item) => item.id === created.observation.id,
+      ),
+      false,
+    );
+
+    const draftAnswerResponse = await saveAnswerRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}/answers/${fixture.requiredIndicatorId}`,
+        "PUT",
+        { type: "SCALE", score: 3, note: "Unauthorized staff edit" },
+      ) as Parameters<typeof saveAnswerRoute>[0],
+      {
+        params: Promise.resolve({
+          id: created.observation.id,
+          indicatorId: fixture.requiredIndicatorId,
+        }),
+      },
+    );
+    assert.equal(draftAnswerResponse.status, 403);
+    const draftAnswerBody = await responseBody<{ error: string }>(draftAnswerResponse);
+    assert.equal(draftAnswerBody.error.includes(fixture.prefix), false);
 
     setObservationTestActor(fixture.managerA);
+    const managerDraftResponse = await getObservationRoute(
+      new NextRequest(`http://localhost/api/observations/${created.observation.id}`),
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(managerDraftResponse.status, 200);
     const invalidIndicatorResponse = await saveAnswerRoute(
       jsonRequest(
         `http://localhost/api/observations/${created.observation.id}/answers/${fixture.optionalIndicatorId}`,
@@ -836,7 +902,7 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
       jsonRequest(
         `http://localhost/api/observations/${created.observation.id}/answers/${fixture.requiredIndicatorId}`,
         "PUT",
-        { type: "SCALE", score: 88, note: "Meets expectations" },
+        { type: "SCALE", score: 4, note: "Meets expectations" },
       ) as Parameters<typeof saveAnswerRoute>[0],
       {
         params: Promise.resolve({
@@ -867,8 +933,44 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
       new NextRequest(`http://localhost/api/observations/${created.observation.id}`),
       { params: Promise.resolve({ id: created.observation.id }) },
     );
-    const staffReport = await responseBody<{ observation: { answers?: unknown[] } }>(staffReportResponse);
+    assert.equal(staffReportResponse.status, 200);
+    const staffReport = await responseBody<{
+      observation: { answers?: unknown[]; activity: unknown[] };
+      permissions: { canEdit: boolean; canAcknowledge: boolean };
+    }>(staffReportResponse);
     assert.equal(staffReport.observation.answers?.length, 1);
+    assert.ok(staffReport.observation.activity.length > 0);
+    assert.equal(staffReport.permissions.canEdit, false);
+    assert.equal(staffReport.permissions.canAcknowledge, true);
+
+    const submittedListResponse = await listObservationsRoute(
+      new Request(
+        `http://localhost/api/observations?q=${encodeURIComponent(fixture.prefix)}&page=1&pageSize=10`,
+      ),
+    );
+    const submittedList = await responseBody<{
+      data: Array<{ id: string; nextAction: string }>;
+      pagination: { total: number; totalPages: number };
+    }>(submittedListResponse);
+    assert.equal(submittedList.pagination.total, 1);
+    assert.equal(submittedList.pagination.totalPages, 1);
+    assert.deepEqual(submittedList.data.map((item) => item.id), [created.observation.id]);
+    assert.equal(submittedList.data[0]?.nextAction, "acknowledge");
+
+    const submittedAnswerResponse = await saveAnswerRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}/answers/${fixture.requiredIndicatorId}`,
+        "PUT",
+        { type: "SCALE", score: 2, note: "Submitted records are read-only" },
+      ) as Parameters<typeof saveAnswerRoute>[0],
+      {
+        params: Promise.resolve({
+          id: created.observation.id,
+          indicatorId: fixture.requiredIndicatorId,
+        }),
+      },
+    );
+    assert.equal(submittedAnswerResponse.status, 409);
 
     const acknowledgedResponse = await acknowledgeObservationRoute(
       jsonRequest(
@@ -913,10 +1015,79 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
       new NextRequest(`http://localhost/api/observations/${created.observation.id}`),
       { params: Promise.resolve({ id: created.observation.id }) },
     );
-    const reopenedPrivate = await responseBody<{ observation: Record<string, unknown> }>(
-      reopenedPrivateResponse,
+    assert.equal(reopenedPrivateResponse.status, 403);
+
+    const reopenedListResponse = await listObservationsRoute(
+      new Request(
+        `http://localhost/api/observations?q=${encodeURIComponent(fixture.prefix)}&page=1&pageSize=10`,
+      ),
     );
-    assert.equal("answers" in reopenedPrivate.observation, false);
+    const reopenedList = await responseBody<{
+      data: Array<{ id: string }>;
+      pagination: { total: number; totalPages: number };
+    }>(reopenedListResponse);
+    assert.deepEqual(reopenedList.data, []);
+    assert.deepEqual(reopenedList.pagination, { page: 1, pageSize: 10, total: 0, totalPages: 0 });
+
+    const reopenedSummaryResponse = await observationSummaryRoute();
+    const reopenedSummary = await responseBody<{
+      counts: ObservationSummaryCounts;
+      needsAttention: Array<{ id: string }>;
+      recent: Array<{ id: string }>;
+    }>(reopenedSummaryResponse);
+    assert.deepEqual(reopenedSummary.counts, baselineStaffSummary.counts);
+    assert.equal(
+      [...reopenedSummary.needsAttention, ...reopenedSummary.recent].some(
+        (item) => item.id === created.observation.id,
+      ),
+      false,
+    );
+
+    const reopenedAnswerResponse = await saveAnswerRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}/answers/${fixture.requiredIndicatorId}`,
+        "PUT",
+        { type: "SCALE", score: 4, note: "Reopened record remains private" },
+      ) as Parameters<typeof saveAnswerRoute>[0],
+      {
+        params: Promise.resolve({
+          id: created.observation.id,
+          indicatorId: fixture.requiredIndicatorId,
+        }),
+      },
+    );
+    assert.equal(reopenedAnswerResponse.status, 403);
+
+    setObservationTestActor({
+      id: fixture.staffA.id,
+      roles: ["staff", "director"],
+    });
+    const independentlyPrivilegedResponse = await getObservationRoute(
+      new NextRequest(`http://localhost/api/observations/${created.observation.id}`),
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(independentlyPrivilegedResponse.status, 200);
+    const independentlyPrivileged = await responseBody<{
+      observation: { answers?: unknown[] };
+      permissions: { canEdit: boolean; canViewResponses: boolean };
+    }>(independentlyPrivilegedResponse);
+    assert.equal("answers" in independentlyPrivileged.observation, false);
+    assert.equal(independentlyPrivileged.permissions.canViewResponses, false);
+    assert.equal(independentlyPrivileged.permissions.canEdit, false);
+
+    setObservationTestActor(fixture.admin);
+    const adminDraftResponse = await getObservationRoute(
+      new NextRequest(`http://localhost/api/observations/${created.observation.id}`),
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(adminDraftResponse.status, 200);
+    const adminDraft = await responseBody<{
+      observation: { answers?: unknown[] };
+      permissions: { canEdit: boolean; canViewResponses: boolean };
+    }>(adminDraftResponse);
+    assert.equal(adminDraft.observation.answers?.length, 1);
+    assert.equal(adminDraft.permissions.canViewResponses, true);
+    assert.equal(adminDraft.permissions.canEdit, true);
   } finally {
     setObservationTestActor(null);
     if (fixture) await cleanupWorkflowFixture(fixture);

@@ -978,13 +978,13 @@ function OutlineButton({
 function StatusDot({ status }: { status: string }) {
   const color =
     status === "completed"
-      ? "bg-green-500"
+      ? "bg-success"
       : status === "on_track"
-        ? "bg-blue-500"
+        ? "bg-primary"
         : status === "at_risk"
-          ? "bg-yellow-500"
+          ? "bg-warning"
           : status === "off_track"
-            ? "bg-red-500"
+            ? "bg-destructive"
             : "bg-muted-foreground";
   return (
     <span
@@ -1615,7 +1615,7 @@ function ProgramEditor({
                 <CheckCircle2
                   className={
                     item.done
-                      ? "h-4 w-4 text-green-500"
+                      ? "h-4 w-4 text-success"
                       : "h-4 w-4 text-muted-foreground"
                   }
                 />
@@ -2043,9 +2043,9 @@ function HealthRow({ ok, label }: { ok: boolean; label: string }) {
   return (
     <div className="flex items-center gap-2">
       {ok ? (
-        <CheckCircle2 className="h-4 w-4 text-green-500" />
+        <CheckCircle2 className="h-4 w-4 text-success" />
       ) : (
-        <AlertTriangle className="h-4 w-4 text-yellow-500" />
+        <AlertTriangle className="h-4 w-4 text-warning-foreground" />
       )}
       <span>{label}</span>
     </div>

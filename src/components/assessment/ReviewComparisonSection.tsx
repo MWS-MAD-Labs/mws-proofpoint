@@ -1,12 +1,8 @@
 import { cn } from "@/lib/utils";
 import { ReviewComparisonIndicator, ReviewIndicatorData } from "./ReviewComparisonIndicator";
-import { Percent, Target, Layers } from "lucide-react";
+import { Percent, Target } from "lucide-react";
 import { KPIData } from "@/hooks/useAssessment";
-import {
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 export interface ReviewStandardData {
   id: string;
@@ -21,18 +17,11 @@ export interface DomainReviewData {
   standards: ReviewStandardData[];
 }
 
-function calculateDomainReviewScore(domain: DomainReviewData, type: 'staff' | 'manager'): number | null {
-  let allKPIs: ReviewIndicatorData[] = [];
-  domain.standards.forEach(s => {
-    allKPIs = [...allKPIs, ...s.kpis];
-  });
-
-  const scores = allKPIs
-    .map(k => type === 'staff' ? k.staffScore : k.managerScore)
-    .filter((s): s is number => s !== null && s !== 'X');
-
-  if (scores.length === 0) return null;
-  return scores.reduce((a, b) => a + Number(b), 0) / scores.length;
+function average(domain: DomainReviewData, type: "staff" | "manager" | "director") {
+  const scores = domain.standards.flatMap((standard) => standard.kpis)
+    .map((kpi) => type === "staff" ? kpi.staffScore : type === "manager" ? kpi.managerScore : (kpi.directorScore ?? kpi.managerScore))
+    .filter((score): score is number => typeof score === "number");
+  return scores.length ? scores.reduce((total, score) => total + score, 0) / scores.length : null;
 }
 
 interface ReviewComparisonSectionProps {
@@ -41,96 +30,52 @@ interface ReviewComparisonSectionProps {
   readonly?: boolean;
   reviewerLabel?: string;
   index?: number;
+  managerOnly?: boolean;
+  directorMode?: boolean;
+  showDirectorComparison?: boolean;
 }
 
-export function ReviewComparisonSection({ section, onIndicatorChange, readonly, reviewerLabel = "Manager", index }: ReviewComparisonSectionProps) {
-  const staffScore = calculateDomainReviewScore(section, 'staff');
-  const managerScore = calculateDomainReviewScore(section, 'manager');
-
-  let totalKPIs = 0;
-  section.standards.forEach(s => totalKPIs += s.kpis.length);
+export function ReviewComparisonSection({ section, onIndicatorChange, readonly, reviewerLabel = "Manager", index, managerOnly = false, directorMode = false, showDirectorComparison = false }: ReviewComparisonSectionProps) {
+  const managerScore = average(section, "manager");
+  const directorScore = average(section, "director");
+  const totalKPIs = section.standards.reduce((total, standard) => total + standard.kpis.length, 0);
 
   return (
-    <AccordionItem value={section.id} className="bg-card border rounded-xl overflow-hidden shadow-sm mb-4 data-[state=open]:shadow-md transition-all duration-300">
-      {/* Domain Header */}
-      <AccordionTrigger className="px-6 py-5 bg-secondary/10 hover:bg-secondary/20 border-b flex items-center justify-between hover:no-underline transition-colors">
-        <div className="flex items-center gap-4 flex-1">
-          <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-primary/10 text-primary border border-primary/20 min-w-[60px]">
-            {index !== undefined ? (
-              <span className="font-black text-sm">D{index + 1}</span>
-            ) : (
-              <Percent className="h-4 w-4 mb-0.5" />
-            )}
-            <span className="font-mono font-bold text-[10px] leading-tight mt-0.5">{section.weight}%</span>
+    <AccordionItem value={section.id} className="mb-4 overflow-hidden rounded-xl border bg-card shadow-sm transition-all data-[state=open]:shadow-md">
+      <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-muted/40">
+        <div className="flex flex-1 items-center gap-3 text-left">
+          <div className="flex min-w-12 flex-col items-center rounded-lg border border-primary/20 bg-primary/10 p-1.5 text-primary">
+            <span className="text-xs font-black">{index === undefined ? <Percent className="h-4 w-4" /> : `P${index + 1}`}</span>
+            <span className="font-mono text-[10px] font-bold">{section.weight}%</span>
           </div>
-          <div className="text-left">
-            <h3 className="text-xl font-bold text-foreground">{section.name}</h3>
-            <div className="flex items-center gap-3 mt-1">
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Target className="h-3 w-3" />
-                {totalKPIs} KPIs
-              </p>
-              <span className="text-muted-foreground opacity-20">|</span>
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Layers className="h-3 w-3" />
-                {section.standards.length} Standards
-              </p>
-            </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-bold sm:text-lg">{section.name}</h3>
+            <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"><Target className="h-3 w-3" />{totalKPIs} performance items</p>
           </div>
-        </div>
-
-        <div className="flex items-center gap-6 mr-4">
-          {/* Staff Score */}
-          {staffScore !== null && (
-            <div className="text-right hidden sm:block">
-              <div className={cn(
-                "text-xl font-mono font-bold",
-                staffScore < 2 && "text-evidence-alert",
-                staffScore >= 2 && staffScore < 3 && "text-amber-500",
-                staffScore >= 3 && "text-evidence-success"
-              )}>
-                {staffScore.toFixed(2)}
-              </div>
-              <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Self</div>
-            </div>
-          )}
-
-          {/* Manager Score */}
-          {managerScore !== null && (
-            <div className="text-right hidden sm:block">
-              <div className={cn(
-                "text-2xl font-mono font-black text-primary",
-              )}>
-                {managerScore.toFixed(2)}
-              </div>
-              <div className="text-[10px] uppercase font-bold tracking-widest text-primary/70">{reviewerLabel}</div>
-            </div>
-          )}
+          <div className="mr-3 hidden items-center gap-4 sm:flex">
+            {managerScore !== null && <div className="text-right"><p className="font-mono text-lg font-black text-primary">{managerScore.toFixed(2)}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Manager</p></div>}
+            {(directorMode || showDirectorComparison) && directorScore !== null && <div className="text-right"><p className={cn("font-mono text-lg font-black", directorScore !== managerScore && "text-warning-foreground")}>{directorScore.toFixed(2)}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Director</p></div>}
+          </div>
         </div>
       </AccordionTrigger>
-
-      {/* Standards and KPIs */}
-      <AccordionContent className="pt-0 pb-6 px-6 border-t border-border/50">
-        <div className="space-y-8 pt-6">
-          {section.standards.map((standard, stdIdx) => (
-            <div key={standard.id} className="space-y-4">
-              <div className="flex items-center gap-2 pb-2 border-b border-border/50">
-                <div className="w-6 h-6 rounded bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground uppercase">
-                  S{stdIdx + 1}
-                </div>
-                <h4 className="font-bold text-sm text-foreground uppercase tracking-wide italic">{standard.name}</h4>
-              </div>
-
-              <div className="space-y-4 pl-4 border-l-2 border-muted/50">
-                {standard.kpis.map((indicator, index) => (
+      <AccordionContent className="border-t px-4 pb-5 pt-4">
+        <div className="space-y-5">
+          {section.standards.map((standard) => (
+            <div key={standard.id} className="space-y-2">
+              <h4 className="border-b pb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">{standard.name}</h4>
+              <div className="space-y-2">
+                {standard.kpis.map((indicator, itemIndex) => (
                   <ReviewComparisonIndicator
                     key={indicator.id}
                     indicator={indicator}
-                    index={index}
-                    onScoreChange={(score) => onIndicatorChange?.(indicator.id, { managerScore: score })}
-                    onEvidenceChange={(evidence) => onIndicatorChange?.(indicator.id, { managerEvidence: evidence })}
+                    index={itemIndex}
+                    onScoreChange={(score) => onIndicatorChange?.(indicator.id, directorMode ? { directorScore: score } : { managerScore: score })}
+                    onEvidenceChange={(evidence) => onIndicatorChange?.(indicator.id, directorMode ? { directorEvidence: evidence } : { managerEvidence: evidence })}
                     readonly={readonly}
-                    reviewerLabel={`${reviewerLabel} Review`}
+                    reviewerLabel={reviewerLabel}
+                    managerOnly={managerOnly}
+                    directorMode={directorMode}
+                    showDirectorComparison={showDirectorComparison}
                   />
                 ))}
               </div>

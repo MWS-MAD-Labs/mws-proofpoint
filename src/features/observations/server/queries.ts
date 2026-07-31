@@ -83,9 +83,9 @@ function buildVisibilityClause(actor: ObservationActor, params: unknown[]): stri
   params.push(actor.id);
   const actorParam = `$${params.length}`;
   if (actor.roles.includes("manager")) {
-    return `(o."managerId" = ${actorParam} OR o."staffId" = ${actorParam})`;
+    return `(o."managerId" = ${actorParam} OR (o."staffId" = ${actorParam} AND (${statusExpression}) <> 'draft'))`;
   }
-  return `o."staffId" = ${actorParam}`;
+  return `(o."staffId" = ${actorParam} AND (${statusExpression}) <> 'draft')`;
 }
 
 function actionExpressionNeedsActor(actor: ObservationActor): boolean {
@@ -310,7 +310,7 @@ export async function queryObservationList(
        COUNT(ri.id) FILTER (WHERE ri.is_required) AS required_total,
        COUNT(ri.id) FILTER (
          WHERE ri.is_required AND (
-           (COALESCE(ri.question_type::text, 'SCALE') = 'SCALE' AND oa.score BETWEEN 1 AND 100)
+           (COALESCE(ri.question_type::text, 'SCALE') = 'SCALE' AND oa.score BETWEEN 1 AND 4)
            OR (ri.question_type::text = 'TEXT' AND NULLIF(BTRIM(oa.text_value), '') IS NOT NULL)
            OR (ri.question_type::text = 'CHOICE'
              AND NULLIF(BTRIM(oa.selected_option), '') IS NOT NULL
@@ -324,7 +324,7 @@ export async function queryObservationList(
        COUNT(ri.id) FILTER (WHERE NOT ri.is_required) AS optional_total,
        COUNT(ri.id) FILTER (
          WHERE NOT ri.is_required AND (
-           (COALESCE(ri.question_type::text, 'SCALE') = 'SCALE' AND oa.score BETWEEN 1 AND 100)
+           (COALESCE(ri.question_type::text, 'SCALE') = 'SCALE' AND oa.score BETWEEN 1 AND 4)
            OR (ri.question_type::text = 'TEXT' AND NULLIF(BTRIM(oa.text_value), '') IS NOT NULL)
            OR (ri.question_type::text = 'CHOICE'
              AND NULLIF(BTRIM(oa.selected_option), '') IS NOT NULL

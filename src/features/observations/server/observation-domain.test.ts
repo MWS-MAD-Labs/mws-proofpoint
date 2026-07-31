@@ -58,14 +58,23 @@ test("admin and assigned manager can view and edit draft responses", () => {
   }
 });
 
-test("a manager who is the subject receives subject permissions", () => {
+test("a manager who is the subject cannot view a draft through subject status alone", () => {
   const permissions = getObservationPermissions(
     { id: "staff", roles: ["manager", "staff"] },
     draft,
   );
-  assert.equal(permissions.canViewRecord, true);
+  assert.equal(permissions.canViewRecord, false);
   assert.equal(permissions.canViewResponses, false);
   assert.equal(permissions.canEdit, false);
+});
+
+test("a subject with an independent privileged role retains draft access", () => {
+  for (const actor of [
+    { id: "staff", roles: ["staff", "director"] },
+    { id: "staff", roles: ["staff", "admin"] },
+  ]) {
+    assert.equal(getObservationPermissions(actor, draft).canViewRecord, true);
+  }
 });
 
 test("detail permissions cover the role and lifecycle action matrix", () => {
@@ -94,7 +103,7 @@ test("detail permissions cover the role and lifecycle action matrix", () => {
     { id: "staff", roles: ["staff"] },
     records.draft,
   );
-  assert.equal(staffDraft.canViewRecord, true);
+  assert.equal(staffDraft.canViewRecord, false);
   assert.equal(staffDraft.canViewResponses, false);
   assert.equal(staffDraft.canAcknowledge, false);
   assert.equal(staffDraft.canDelete, false);
@@ -103,8 +112,17 @@ test("detail permissions cover the role and lifecycle action matrix", () => {
     { id: "staff", roles: ["staff"] },
     records.submitted,
   );
+  assert.equal(staffSubmitted.canViewRecord, true);
   assert.equal(staffSubmitted.canViewResponses, true);
   assert.equal(staffSubmitted.canAcknowledge, true);
+
+  const staffAcknowledged = getObservationPermissions(
+    { id: "staff", roles: ["staff"] },
+    records.acknowledged,
+  );
+  assert.equal(staffAcknowledged.canViewRecord, true);
+  assert.equal(staffAcknowledged.canViewResponses, true);
+  assert.equal(staffAcknowledged.canAcknowledge, false);
 
   const directorDraft = getObservationPermissions(
     { id: "director", roles: ["director"] },
