@@ -13,6 +13,7 @@ import {
   WeightedScoreDisplay,
 } from "@/components/assessment";
 import { Accordion } from "@/components/ui/accordion";
+
 import {
   Card,
   CardContent,
@@ -745,7 +746,7 @@ function AssessmentContent() {
                       <div className="absolute top-0 left-0 w-1 h-full bg-success/20 rounded-full" />
                       <div className="pl-6 py-2">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-2">
-                          Director's Comments
+                          Director&apos;s Comments
                         </span>
                         <p className="text-base text-foreground leading-relaxed whitespace-pre-wrap">
                           {directorFeedback || (
@@ -900,7 +901,7 @@ function AssessmentContent() {
                                  So if showComparison is false, we are just showing the user's self assessment.
                                  Which is CORRECT for the "Pending" state - they see what they submitted, but not the result yet.
                              */}
-              <Accordion type="multiple" className="w-full space-y-4">
+              <div className="w-full space-y-4">
                 {domains.map((domain) => (
                   <AssessmentSection
                     key={domain.id}
@@ -908,9 +909,10 @@ function AssessmentContent() {
                     onIndicatorChange={updateKPI}
                     readonly={isReadOnly}
                     evidenceRequiredAtOrAbove={isManagerSelfAssessment ? 3 : 1}
+                    alwaysExpanded
                   />
                 ))}
-              </Accordion>
+              </div>
             </div>
           )}
         </div>
@@ -950,7 +952,7 @@ function AssessmentContent() {
                   <p className="text-xs text-muted-foreground leading-relaxed italic">
                     The Grade is calculated based on domain weights defined in
                     the organizational playbook. KPIs marked as{" "}
-                    <strong>'X'</strong> are excluded from the performance
+                    <strong>&apos;X&apos;</strong> are excluded from the performance
                     calculation for this period.
                   </p>
                 </div>

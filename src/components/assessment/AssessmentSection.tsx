@@ -23,7 +23,7 @@ export interface DomainData {
 
 function hasValidEvidence(evidence: string | EvidenceItem[]): boolean {
   if (Array.isArray(evidence)) {
-    return evidence.some((e) => e.evidence.trim().length > 0);
+    return evidence.some((entry) => entry.evidence.trim().length > 0);
   }
   return typeof evidence === "string" && evidence.trim().length > 0;
 }
@@ -33,19 +33,109 @@ interface AssessmentSectionProps {
   onIndicatorChange: (indicatorId: string, updates: Partial<KPIData>) => void;
   readonly?: boolean;
   evidenceRequiredAtOrAbove?: number;
+  alwaysExpanded?: boolean;
 }
 
 function calculateDomainScore(domain: DomainData): number | null {
-  let allKPIs: KPIData[] = [];
-  domain.standards.forEach((s) => {
-    allKPIs = [...allKPIs, ...s.kpis];
-  });
-
-  const scoredKPIs = allKPIs.filter((k) => k.score !== null && k.score !== "X");
+  const allKPIs = domain.standards.flatMap((standard) => standard.kpis);
+  const scoredKPIs = allKPIs.filter((kpi) => kpi.score !== null && kpi.score !== "X");
   if (scoredKPIs.length === 0) return null;
 
-  const sum = scoredKPIs.reduce((acc, k) => acc + (Number(k.score) || 0), 0);
-  return sum / scoredKPIs.length;
+  return scoredKPIs.reduce((total, kpi) => total + (Number(kpi.score) || 0), 0) / scoredKPIs.length;
+}
+
+function SectionHeader({
+  section,
+  completedKPIs,
+  totalKPIs,
+  progressPercentage,
+  domainScore,
+}: {
+  section: DomainData;
+  completedKPIs: number;
+  totalKPIs: number;
+  progressPercentage: number;
+  domainScore: number | null;
+}) {
+  const isComplete = completedKPIs === totalKPIs;
+
+  return (
+    <div className="flex w-full items-center gap-4 text-left">
+      <div className="flex min-w-[60px] flex-col items-center justify-center rounded-lg border border-primary/20 bg-primary/10 p-2 text-primary">
+        <Percent className="mb-0.5 h-4 w-4" />
+        <span className="font-mono text-sm font-bold">{section.weight}%</span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-3">
+          <h3 className="text-xl font-bold text-foreground">{section.name}</h3>
+          {isComplete && (
+            <span className="rounded-full border border-success/40 bg-success-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-success">
+              Complete
+            </span>
+          )}
+        </div>
+        <div className="mt-1.5 flex items-center gap-4">
+          <div className="flex max-w-[200px] flex-1 items-center gap-2">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn("h-full rounded-full transition-all duration-500", isComplete ? "bg-success" : "bg-primary")}
+                style={{ width: `${progressPercentage}%` }}
+              />
+            </div>
+            <span className="min-w-[35px] font-mono text-xs font-bold text-muted-foreground">{progressPercentage}%</span>
+          </div>
+          <div className="hidden items-center gap-3 text-xs text-muted-foreground sm:flex">
+            <span className="flex items-center gap-1"><Target className="h-3 w-3" />{completedKPIs}/{totalKPIs} KPIs</span>
+            <span className="opacity-20">|</span>
+            <span className="flex items-center gap-1"><Layers className="h-3 w-3" />{section.standards.length} Standards</span>
+          </div>
+        </div>
+      </div>
+      {domainScore !== null && (
+        <div className={cn(
+          "mr-4 hidden text-right sm:block",
+          domainScore < 2 ? "text-destructive" : domainScore < 3 ? "text-warning-foreground" : "text-success",
+        )}>
+          <div className="font-mono text-2xl font-black">{domainScore.toFixed(2)}</div>
+          <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/70">Score</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SectionContent({
+  section,
+  onIndicatorChange,
+  readonly,
+  evidenceRequiredAtOrAbove,
+  alwaysExpanded,
+}: AssessmentSectionProps) {
+  return (
+    <div className="space-y-10 pt-6">
+      {section.standards.map((standard, standardIndex) => (
+        <div key={standard.id} className="space-y-5">
+          <div className="flex items-center gap-3 border-b border-border/50 pb-3">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-xs font-black uppercase text-muted-foreground/70">S{standardIndex + 1}</div>
+            <h4 className="text-base font-bold uppercase tracking-wide text-foreground/90">{standard.name}</h4>
+          </div>
+          <div className="grid gap-4 pl-2 lg:pl-4">
+            {standard.kpis.map((kpi, kpiIndex) => (
+              <AssessmentIndicator
+                key={kpi.id}
+                indicator={kpi}
+                index={kpiIndex}
+                onChange={(updates) => onIndicatorChange(kpi.id, updates)}
+                readonly={readonly}
+                evidenceRequiredAtOrAbove={evidenceRequiredAtOrAbove}
+                alwaysExpanded={alwaysExpanded}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function AssessmentSection({
@@ -53,135 +143,36 @@ export function AssessmentSection({
   onIndicatorChange,
   readonly = false,
   evidenceRequiredAtOrAbove = 1,
+  alwaysExpanded = false,
 }: AssessmentSectionProps) {
   const domainScore = calculateDomainScore(section);
+  const allKPIs = section.standards.flatMap((standard) => standard.kpis);
+  const completedKPIs = allKPIs.filter((kpi) =>
+    kpi.score !== null && (kpi.score === "X" || (typeof kpi.score === "number" && (kpi.score < evidenceRequiredAtOrAbove || hasValidEvidence(kpi.evidence)))),
+  ).length;
+  const totalKPIs = allKPIs.length;
+  const progressPercentage = totalKPIs === 0 ? 0 : Math.round((completedKPIs / totalKPIs) * 100);
+  const contentProps = { section, onIndicatorChange, readonly, evidenceRequiredAtOrAbove, alwaysExpanded };
+  const headerProps = { section, completedKPIs, totalKPIs, progressPercentage, domainScore };
 
-  let totalKPIs = 0;
-  let completedKPIs = 0;
-
-  section.standards.forEach((s) => {
-    s.kpis.forEach((k) => {
-      totalKPIs++;
-      if (
-        k.score !== null &&
-        (k.score === "X" || (typeof k.score === "number" && (k.score < evidenceRequiredAtOrAbove || hasValidEvidence(k.evidence))) )
-      ) {
-        completedKPIs++;
-      }
-    });
-  });
-
-  const progressPercentage = Math.round((completedKPIs / totalKPIs) * 100);
-  const isComplete = completedKPIs === totalKPIs;
+  if (alwaysExpanded) {
+    return (
+      <section className="mb-6 overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="border-b border-border/50 bg-primary/5 px-6 py-5">
+          <SectionHeader {...headerProps} />
+        </div>
+        <div className="px-6 pb-6"><SectionContent {...contentProps} /></div>
+      </section>
+    );
+  }
 
   return (
-    <AccordionItem
-      value={section.id}
-      className="border rounded-xl bg-card shadow-sm overflow-hidden mb-4 data-[state=open]:shadow-md transition-all duration-300"
-    >
-      <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 transition-colors [&[data-state=open]]:bg-primary/5">
-        <div className="flex items-center gap-4 flex-1 text-left w-full">
-          {/* Weight Badge */}
-          <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-primary/10 text-primary border border-primary/20 min-w-[60px]">
-            <Percent className="h-4 w-4 mb-0.5" />
-            <span className="font-mono font-bold text-sm">
-              {section.weight}%
-            </span>
-          </div>
-
-          {/* Title & Stats */}
-          <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <h3 className="text-xl font-bold text-foreground">
-                {section.name}
-              </h3>
-              {isComplete && (
-                <span className="px-2 py-0.5 rounded-full bg-success-soft text-success text-[10px] font-bold uppercase tracking-wider border border-success/40">
-                  Complete
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-4 mt-1.5">
-              {/* Progress Bar */}
-              <div className="flex items-center gap-2 flex-1 max-w-[200px]">
-                <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={cn(
-                      "h-full transition-all duration-500 rounded-full",
-                      isComplete ? "bg-success" : "bg-primary",
-                    )}
-                    style={{ width: `${progressPercentage}%` }}
-                  />
-                </div>
-                <span className="text-xs font-mono font-bold text-muted-foreground min-w-[35px]">
-                  {progressPercentage}%
-                </span>
-              </div>
-
-              <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Target className="h-3 w-3" />
-                  {completedKPIs}/{totalKPIs} KPIs
-                </span>
-                <span className="opacity-20">|</span>
-                <span className="flex items-center gap-1">
-                  <Layers className="h-3 w-3" />
-                  {section.standards.length} Standards
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Score Badge (if available) */}
-          {domainScore !== null && (
-            <div className="text-right mr-4 hidden sm:block">
-              <div
-                className={cn(
-                  "text-2xl font-mono font-black",
-                  domainScore < 2 && "text-destructive",
-                  domainScore >= 2 && domainScore < 3 && "text-warning-foreground",
-                  domainScore >= 3 && "text-success",
-                )}
-              >
-                {domainScore.toFixed(2)}
-              </div>
-              <div className="text-[9px] uppercase font-bold tracking-wider text-muted-foreground/70">
-                Score
-              </div>
-            </div>
-          )}
-        </div>
+    <AccordionItem value={section.id} className="mb-4 overflow-hidden rounded-xl border bg-card shadow-sm transition-all duration-300 data-[state=open]:shadow-md">
+      <AccordionTrigger className="px-6 py-5 transition-colors hover:bg-muted/50 hover:no-underline [&[data-state=open]]:bg-primary/5">
+        <SectionHeader {...headerProps} />
       </AccordionTrigger>
-
-      <AccordionContent className="pt-0 pb-6 px-6 border-t border-border/50">
-        <div className="space-y-10 pt-6">
-          {section.standards.map((standard, stdIdx) => (
-            <div key={standard.id} className="space-y-5">
-              <div className="flex items-center gap-3 pb-3 border-b border-border/50">
-                <div className="w-7 h-7 rounded-md bg-muted flex items-center justify-center text-xs font-black text-muted-foreground/70 uppercase">
-                  S{stdIdx + 1}
-                </div>
-                <h4 className="font-bold text-base text-foreground/90 uppercase tracking-wide">
-                  {standard.name}
-                </h4>
-              </div>
-
-              <div className="grid gap-4 pl-2 lg:pl-4">
-                {standard.kpis.map((kpi, kpiIdx) => (
-                  <AssessmentIndicator
-                    key={kpi.id}
-                    indicator={kpi}
-                    index={kpiIdx}
-                    onChange={(updates) => onIndicatorChange(kpi.id, updates)}
-                    readonly={readonly}
-                    evidenceRequiredAtOrAbove={evidenceRequiredAtOrAbove}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+      <AccordionContent className="border-t border-border/50 px-6 pb-6 pt-0">
+        <SectionContent {...contentProps} />
       </AccordionContent>
     </AccordionItem>
   );

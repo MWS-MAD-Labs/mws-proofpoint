@@ -180,27 +180,3 @@ export async function notifyManagerObservationReopened(
     </div>`,
   });
 }
-
-export async function notifyStaffObservationReopened(
-  staffEmail: string,
-  staffName: string,
-  rubricName: string,
-  reason: string,
-  observationId: string,
-) {
-  return sendEmail({
-    to: staffEmail,
-    subject: `Observation Reopened: ${rubricName}`,
-    html: `<div style="font-family:Nunito Sans,Arial,sans-serif;max-width:600px;color:#241718;background:#FFFFFF;border:1px solid #D8C9C3;border-radius:16px;padding:24px;">
-      <h2>Observation Reopened</h2>
-      <p>Hello <strong>${esc(staffName)}</strong>,</p>
-      <p>An administrator reopened this observation for revision. Any previous acknowledgement has been cleared, and responses will be available again after the manager resubmits the report.</p>
-      <p><strong>Reason:</strong> ${esc(reason)}</p>
-      <a href="${BASE_URL}/observations/${encodeURIComponent(observationId)}"
-         style="display:inline-block;background:#1F2A44;color:white;padding:10px 20px;border-radius:12px;text-decoration:none;font-weight:bold;">
-        View Observation
-      </a>
-      <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification.</p>
-    </div>`,
-  });
-}

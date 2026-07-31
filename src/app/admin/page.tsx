@@ -23,16 +23,16 @@ import {
     Pencil,
     Trash2,
     AlertTriangle,
-    ChevronRight,
+
     FolderTree,
     Plus,
     Clock,
-    ChevronDown,
+
     FileText
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api-client';
-import { cn } from '@/lib/utils';
+
 import { useToast } from '@/hooks/use-toast';
 import {
     DropdownMenu,
@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { UserManagementModal } from '@/components/admin/UserManagementModal';
 import { DepartmentModal } from '@/components/admin/DepartmentModal';
+import { DepartmentStructure } from '@/components/admin/DepartmentStructure';
 import { WorkflowEditor } from '@/components/admin/WorkflowEditor';
 import { AdminAssessmentReview } from '@/components/admin/AdminAssessmentReview';
 import {
@@ -83,7 +84,7 @@ interface User {
 
 interface RoleHolder {
     user_id: string;
-    full_name: string;
+    full_name: string | null;
     email: string;
     role: string;
 }
@@ -118,34 +119,7 @@ function AdminContent() {
     // Delete confirmation
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [itemToDelete, setItemToDelete] = useState<{ type: 'user' | 'department'; item: User | Department; permanent?: boolean } | null>(null);
-    const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set());
 
-    const toggleDept = (id: string) => {
-        setExpandedDepts(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-        });
-    };
-
-    const getDeptColor = (name: string) => {
-        const colors = [
-            'border-border bg-muted/50 text-foreground hover:border-border',
-            'border-border bg-muted/50 text-foreground hover:border-border',
-            'border-border bg-muted/50 text-foreground hover:border-border',
-            'border-info/40 bg-info/50 text-info-foreground hover:border-info/40',
-            'border-primary/40 bg-primary/50 text-primary hover:border-primary/40',
-            'border-warning/40 bg-warning/50 text-warning-foreground hover:border-warning/40',
-            'border-success/40 bg-success/50 text-success hover:border-success/40',
-        ];
-        // Simple hash to pick a consistent color
-        let hash = 0;
-        for (let i = 0; i < name.length; i++) {
-            hash = name.charCodeAt(i) + ((hash << 5) - hash);
-        }
-        return colors[Math.abs(hash) % colors.length];
-    };
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -189,9 +163,6 @@ function AdminContent() {
         u.email?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const filteredDepts = departments.filter(d =>
-        d.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
 
     const handleDeleteConfirm = async () => {
         if (!itemToDelete) return;
@@ -221,7 +192,7 @@ function AdminContent() {
         setItemToDelete(null);
     };
 
-    const getRoleBadge = (roles: any) => {
+    const getRoleBadge = (roles: unknown) => {
         let safeRoles: string[] = [];
 
         if (Array.isArray(roles)) {
@@ -255,8 +226,7 @@ function AdminContent() {
         );
     };
 
-    // Get available roles based on hierarchy level
-    const getAvailableRoles = (): string[] => ['manager', 'staff'];
+
 
     const findRoleAssignment = (departmentId: string | null, role: string) =>
         roleAssignments.find(assignment =>
@@ -277,159 +247,6 @@ function AdminContent() {
         setRoleAssignmentOpen(true);
     };
 
-    const getRoleBadgeStyle = (role: string) => {
-        switch (role) {
-            case 'director': return 'bg-success-soft text-success border-success/40';
-            case 'manager': return 'bg-warning-soft text-warning-foreground border-warning/40';
-            case 'supervisor': return 'bg-primary-soft text-primary border-primary/40';
-            case 'staff': return 'bg-primary-soft text-primary border-primary/40';
-            default: return 'bg-muted text-muted-foreground';
-        }
-    };
-
-    // Build department tree structure
-    const getDeptTree = () => {
-        const rootDepts = departments.filter(d => !d.parent_id);
-        const getChildren = (parentId: string): Department[] =>
-            departments.filter(d => d.parent_id === parentId);
-
-        const renderDept = (dept: Department, level: number = 0): JSX.Element => {
-            const isExpanded = expandedDepts.has(dept.id);
-            const children = getChildren(dept.id);
-            const hasChildren = children.length > 0;
-            const availableRoles = getAvailableRoles();
-            const deptStyle = getDeptColor(dept.name);
-
-            const roleHoldersByRole: Record<string, RoleHolder[]> = {};
-            for (const holder of dept.role_holders) {
-                if (!roleHoldersByRole[holder.role]) roleHoldersByRole[holder.role] = [];
-                roleHoldersByRole[holder.role]?.push(holder);
-            }
-
-            // Stats breakdown
-            const mgrCount = (roleHoldersByRole['manager'] || []).length;
-            const supCount = (roleHoldersByRole['supervisor'] || []).length;
-            const staffCount = (roleHoldersByRole['staff'] || []).length;
-
-            return (
-                <div key={dept.id} className={`${level > 0 ? 'border-l-2 border-muted/50 ml-6' : ''}`}>
-                    <div
-                        className={cn(
-                            "flex items-start gap-3 p-4 rounded-xl border-2 transition-all group mb-2 mx-2",
-                            deptStyle,
-                            isExpanded && "shadow-sm border-opacity-100"
-                        )}
-                    >
-                        <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                                {hasChildren && (
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6 p-0 hover:bg-black/5"
-                                        onClick={() => toggleDept(dept.id)}
-                                    >
-                                        {isExpanded ? (
-                                            <ChevronDown className="h-4 w-4" />
-                                        ) : (
-                                            <ChevronRight className="h-4 w-4" />
-                                        )}
-                                    </Button>
-                                )}
-                                <Building className="h-4 w-4 opacity-70" />
-                                <span className="font-bold text-base">{dept.name}</span>
-                                <Badge variant="outline" className="text-[10px] uppercase font-bold bg-white/50">
-                                    {dept.hierarchy_level}
-                                </Badge>
-
-                                <div className="flex gap-1 ml-2">
-                                    {mgrCount > 0 && <Badge variant="outline" className="text-[9px] bg-warning/50 text-warning-foreground border-warning/40">M: {mgrCount}</Badge>}
-                                    {supCount > 0 && <Badge variant="outline" className="text-[9px] bg-primary/50 text-primary border-primary/40">S: {supCount}</Badge>}
-                                    {staffCount > 0 && <Badge variant="outline" className="text-[9px] bg-primary/50 text-primary border-primary/40">E: {staffCount}</Badge>}
-                                </div>
-                            </div>
-
-
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                                    {availableRoles.map(role => {
-                                        const holders = roleHoldersByRole[role] || [];
-                                        return (
-                                            <div key={role} className="p-3 rounded-lg bg-white/40 border border-black/5 hover:bg-white/60 transition-colors">
-                                                <div className="flex items-center justify-between gap-1 mb-2">
-                                                    <Badge variant="outline" className={`text-[9px] uppercase font-bold ${getRoleBadgeStyle(role)}`}>
-                                                        {role}
-                                                    </Badge>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-6 px-2 text-[10px]"
-                                                        onClick={() => manageRoleAssignment(dept.id, role)}
-                                                    >
-                                                        Manage
-                                                    </Button>
-                                                </div>
-                                                {holders.length > 0 ? (
-                                                    <div className="space-y-1.5">
-                                                        {holders.map(h => (
-                                                            <button
-                                                                key={h.user_id}
-                                                                onClick={() => {
-                                                                    const fullUser = users.find(u => u.id === h.user_id);
-                                                                    if (fullUser) {
-                                                                        setEditingUser(fullUser);
-                                                                        setUserModalOpen(true);
-                                                                    }
-                                                                }}
-                                                                className="flex items-center gap-2 text-xs w-full hover:bg-black/5 p-1 rounded transition-colors text-left"
-                                                            >
-                                                                <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-bold shrink-0">
-                                                                    {h.full_name?.charAt(0) || '?'}
-                                                                </div>
-                                                                <span className="truncate flex-1 font-medium">{h.full_name || h.email}</span>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-[10px] text-muted-foreground italic">No assignee</span>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                        </div>
-
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 shrink-0 pt-0.5">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 hover:bg-black/5"
-                                onClick={() => {
-                                    setEditingDept(dept);
-                                    setDeptModalOpen(true);
-                                }}
-                            >
-                                <Pencil className="h-3 w-3" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/5"
-                                onClick={() => {
-                                    setItemToDelete({ type: 'department', item: dept });
-                                    setDeleteConfirmOpen(true);
-                                }}
-                            >
-                                <Trash2 className="h-3 w-3" />
-                            </Button>
-                        </div>
-                    </div>
-                    {isExpanded && children.map(child => renderDept(child, level + 1))}
-                </div>
-            );
-        };
-
-        return rootDepts.map(dept => renderDept(dept));
-    };
 
     return (
         <div className="max-w-7xl mx-auto py-8">
@@ -676,106 +493,22 @@ function AdminContent() {
                         <CardContent>
                             {loading ? (
                                 <div className="flex flex-col items-center justify-center py-20">
-                                    <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
-                                    <p className="text-muted-foreground font-medium">Loading departments...</p>
-                                </div>
-                            ) : filteredDepts.length === 0 ? (
-                                <div className="text-center py-20 border border-dashed rounded-xl bg-muted/20">
-                                    <Building className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-                                    <h3 className="text-lg font-semibold">No departments</h3>
-                                    <p className="text-muted-foreground">Create your first department to get started.</p>
+                                    <Loader2 className="mb-4 h-10 w-10 animate-spin text-primary" />
+                                    <p className="font-medium text-muted-foreground">Loading departments...</p>
                                 </div>
                             ) : (
-                                <div className="space-y-6">
-                                    {/* Global Level - Director */}
-                                    <div className="p-4 rounded-xl border-2 border-success/30 bg-success/5">
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <ShieldAlert className="h-5 w-5 text-success" />
-                                            <span className="font-bold text-lg">Global Level</span>
-                                            <Badge variant="outline" className="text-[10px] uppercase bg-success-soft text-success border-success/40">
-                                                Organization Wide
-                                            </Badge>
-                                        </div>
-                                        <p className="text-xs text-muted-foreground mb-4">
-                                            Global roles apply across all departments. Director provides final approval, Admin manages system configuration.
-                                        </p>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {/* Director */}
-                                            <div className="p-3 rounded-lg bg-background border">
-                                                <div className="mb-2 flex items-center justify-between gap-2">
-                                                    <Badge variant="outline" className="text-[10px] uppercase bg-success-soft text-success border-success/40">
-                                                        Director
-                                                    </Badge>
-                                                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => manageRoleAssignment(null, 'director')}>
-                                                        Manage
-                                                    </Button>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    {(findRoleAssignment(null, 'director')?.assignees ?? []).map(assignee => (
-                                                        <button
-                                                            key={assignee.user_id}
-                                                            onClick={() => {
-                                                                const user = users.find(candidate => candidate.id === assignee.user_id);
-                                                                if (user) {
-                                                                    setEditingUser(user);
-                                                                    setUserModalOpen(true);
-                                                                }
-                                                            }}
-                                                            className="flex items-center gap-2 text-xs w-full hover:bg-black/5 p-1 rounded transition-colors text-left"
-                                                        >
-                                                            <div className="w-5 h-5 rounded-full bg-success/10 flex items-center justify-center text-success text-[10px] font-bold shrink-0">
-                                                                {assignee.full_name?.charAt(0) || '?'}
-                                                            </div>
-                                                            <span className="truncate flex-1 font-medium">{assignee.full_name || assignee.email}</span>
-                                                        </button>
-                                                    ))}
-                                                    {(findRoleAssignment(null, 'director')?.assignees.length ?? 0) === 0 && (
-                                                        <span className="text-[10px] text-muted-foreground italic">No director assigned</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            {/* Admin */}
-                                            <div className="p-3 rounded-lg bg-background border">
-                                                <div className="mb-2 flex items-center justify-between gap-2">
-                                                    <Badge variant="outline" className="text-[10px] uppercase bg-destructive-soft text-destructive border-destructive/40">
-                                                        Admin
-                                                    </Badge>
-                                                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => manageRoleAssignment(null, 'admin')}>
-                                                        Manage
-                                                    </Button>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    {(findRoleAssignment(null, 'admin')?.assignees ?? []).map(assignee => (
-                                                        <button
-                                                            key={assignee.user_id}
-                                                            onClick={() => {
-                                                                const user = users.find(candidate => candidate.id === assignee.user_id);
-                                                                if (user) {
-                                                                    setEditingUser(user);
-                                                                    setUserModalOpen(true);
-                                                                }
-                                                            }}
-                                                            className="flex items-center gap-2 text-xs w-full hover:bg-black/5 p-1 rounded transition-colors text-left"
-                                                        >
-                                                            <div className="w-5 h-5 rounded-full bg-destructive/10 flex items-center justify-center text-destructive text-[10px] font-bold shrink-0">
-                                                                {assignee.full_name?.charAt(0) || '?'}
-                                                            </div>
-                                                            <span className="truncate flex-1 font-medium">{assignee.full_name || assignee.email}</span>
-                                                        </button>
-                                                    ))}
-                                                    {(findRoleAssignment(null, 'admin')?.assignees.length ?? 0) === 0 && (
-                                                        <span className="text-[10px] text-muted-foreground italic">No admin assigned</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Department Tree */}
-                                    <div className="rounded-md border border-border/50 overflow-hidden">
-                                        {getDeptTree()}
-                                    </div>
-                                </div>
+                                <DepartmentStructure
+                                    departments={departments}
+                                    roleAssignments={roleAssignments}
+                                    onCreateDepartment={() => { setEditingDept(null); setDeptModalOpen(true); }}
+                                    onEditDepartment={(department) => { setEditingDept(department); setDeptModalOpen(true); }}
+                                    onDeleteDepartment={(department) => { setItemToDelete({ type: "department", item: department }); setDeleteConfirmOpen(true); }}
+                                    onManageRole={manageRoleAssignment}
+                                    onEditUser={(userId) => {
+                                        const user = users.find((candidate) => candidate.id === userId);
+                                        if (user) { setEditingUser(user); setUserModalOpen(true); }
+                                    }}
+                                />
                             )}
                         </CardContent>
                     </Card>

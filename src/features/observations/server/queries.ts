@@ -83,9 +83,9 @@ function buildVisibilityClause(actor: ObservationActor, params: unknown[]): stri
   params.push(actor.id);
   const actorParam = `$${params.length}`;
   if (actor.roles.includes("manager")) {
-    return `(o."managerId" = ${actorParam} OR o."staffId" = ${actorParam})`;
+    return `(o."managerId" = ${actorParam} OR (o."staffId" = ${actorParam} AND (${statusExpression}) <> 'draft'))`;
   }
-  return `o."staffId" = ${actorParam}`;
+  return `(o."staffId" = ${actorParam} AND (${statusExpression}) <> 'draft')`;
 }
 
 function actionExpressionNeedsActor(actor: ObservationActor): boolean {

@@ -154,21 +154,21 @@ function NewStaffAppraisal() {
       </Card>
 
       <AlertDialog open={draftDialogOpen} onOpenChange={setDraftDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto rounded-xl p-5 sm:p-6">
           <AlertDialogHeader>
-            <AlertDialogTitle>Active appraisal found</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="text-xl sm:text-2xl">Active appraisal found</AlertDialogTitle>
+            <AlertDialogDescription className="break-words text-sm leading-6 sm:text-base">
               {selectedAssignment?.fullName ?? "This staff member"} already has an active appraisal for {period} using the {selectedAssignment?.templateName} rubric.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button variant="outline" onClick={() => activeAssessment && router.replace(`/manager?id=${activeAssessment.id}`)}>
+          <AlertDialogFooter className="mt-2 gap-2 sm:flex-wrap sm:justify-end sm:space-x-0">
+            <AlertDialogCancel className="mt-0 w-full sm:w-auto">Cancel</AlertDialogCancel>
+            <Button className="w-full sm:w-auto" variant="outline" onClick={() => activeAssessment && router.replace(`/manager?id=${activeAssessment.id}`)}>
               Continue appraisal
             </Button>
             {activeAssessment?.status === "draft" && (
               <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="w-full whitespace-normal bg-destructive text-destructive-foreground hover:bg-destructive/90 sm:w-auto"
                 disabled={saving}
                 onClick={(event) => {
                   event.preventDefault();

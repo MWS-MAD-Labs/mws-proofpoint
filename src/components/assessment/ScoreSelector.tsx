@@ -25,6 +25,7 @@ interface ScoreSelectorProps {
   };
   hideEvidenceRequirement?: boolean;
   hideNotImplemented?: boolean;
+  compact?: boolean;
 }
 
 const getScoreConfig = (score: number | "X") => {
@@ -95,6 +96,7 @@ export function ScoreSelector({
   rubricDescriptions,
   hideEvidenceRequirement,
   hideNotImplemented,
+  compact = false,
 }: ScoreSelectorProps) {
   const allOptions: ScoreOption[] = [
     { score: 1, label: "Beginning", description: rubricDescriptions?.[1] },
@@ -126,6 +128,51 @@ export function ScoreSelector({
     selectedScore < 2 ? "bg-destructive text-white border-destructive/40" :
     selectedScore < 3 ? "bg-warning text-white border-warning/40" :
     selectedScore < 4 ? "bg-success text-white border-success/40" : "bg-primary text-white border-primary/40";
+
+  if (compact) {
+    return (
+      <div className="rounded-xl border bg-card px-4 py-3">
+        <div className="flex items-center gap-4">
+          <input
+            aria-label="Performance rating from 1 to 4"
+            type="range"
+            min={1}
+            max={4}
+            step={0.1}
+            value={selectedScore ?? 1}
+            disabled={disabled}
+            onChange={(event) => onChange(Number(event.target.value))}
+            className={cn("h-2 min-w-0 flex-1 cursor-pointer disabled:cursor-not-allowed", scoreColor)}
+          />
+          <output className="min-w-12 rounded-md bg-primary px-2.5 py-1 text-center font-mono text-base font-bold text-primary-foreground">
+            {selectedScore?.toFixed(1) ?? "—"}
+          </output>
+          {!hideNotImplemented && (
+            <button
+              type="button"
+              onClick={() => onChange("X")}
+              disabled={disabled}
+              className={cn(
+                "rounded-md border px-2.5 py-1 text-xs transition-colors",
+                value === "X" ? "border-border bg-foreground text-white" : "border-border text-muted-foreground hover:bg-muted",
+                disabled && "cursor-not-allowed opacity-50",
+              )}
+            >
+              N/A
+            </button>
+          )}
+        </div>
+        <div className="mt-2 grid grid-cols-4 gap-2 text-[11px] leading-4 text-muted-foreground">
+          {allOptions.slice(0, 4).map((option, index) => (
+            <span key={option.score} className={cn("min-w-0", index === 0 ? "text-left" : index === 3 ? "text-right" : "text-center")}>
+              <span className="font-semibold text-foreground">{option.score}</span>
+              <span className="block">{option.description || option.label}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
