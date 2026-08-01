@@ -315,4 +315,8 @@ ProofPoint follows [Semantic Versioning](https://semver.org/). While the platfor
 
 ## License
 
-Copyright © MAD Labs, Millennia World School. All rights reserved.
+ProofPoint is open source under the [MIT License](./LICENSE).
+
+You may use, copy, modify, merge, publish, distribute, sublicense, and sell copies of the software, provided that the copyright and license notice are included in copies or substantial portions of the software.
+
+Copyright © 2026 MAD Labs, Millennia World School.
