@@ -100,6 +100,6 @@ function OverviewSkeleton() {
 }
 
 function EmptyOverview({ role }: { role: "admin" | "director" | "manager" | "staff" }) {
-  const copy = role === "manager" ? "Nothing needs your attention. Start a new observation when your next review is ready." : role === "staff" ? "You have no pending acknowledgements. New manager-submitted observations will appear here." : "There are no overdue or unassigned observations requiring follow-up.";
+  const copy = role === "manager" ? "Nothing needs your attention. Start a new observation when your next review is ready." : role === "staff" ? "You have no pending acknowledgements. New observer-submitted observations will appear here." : "There are no overdue or unassigned observations requiring follow-up.";
   return <div className="rounded-xl border border-dashed p-8 text-center"><ClipboardCheck className="mx-auto h-9 w-9 text-muted-foreground" /><p className="mt-4 font-medium">You’re all caught up</p><p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{copy}</p>{(role === "admin" || role === "manager") && <Button asChild variant="outline" className="mt-5"><Link href="/observations/new">New observation</Link></Button>}</div>;
 }

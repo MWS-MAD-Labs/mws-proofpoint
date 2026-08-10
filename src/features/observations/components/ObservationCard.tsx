@@ -30,7 +30,7 @@ export function ObservationCard({ item }: { item: ObservationListItem }) {
         <div className="mt-4 grid gap-3 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <UserRound className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 break-words">Manager: {personName(item.manager)}</span>
+            <span className="min-w-0 break-words">Observer: {personName(item.manager)}</span>
           </div>
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 shrink-0" aria-hidden="true" />

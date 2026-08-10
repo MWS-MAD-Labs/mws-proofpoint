@@ -113,7 +113,7 @@ export async function PATCH(
         {
           error:
             observation.status === "draft"
-              ? "Forbidden: only the assigned manager can submit this observation."
+              ? "Forbidden: only the assigned observer can submit this observation."
               : "Only draft observations can be submitted.",
         },
         { status: observation.status === "draft" ? 403 : 400 },

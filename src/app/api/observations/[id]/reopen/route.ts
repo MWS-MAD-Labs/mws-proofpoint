@@ -125,7 +125,7 @@ export async function PATCH(
     const rubricName = observation.rubricName ?? "Observation";
     const staffName = observation.staffName ?? observation.staffEmail ?? "Staff";
     const managerName =
-      observation.managerName ?? observation.managerEmail ?? "Manager";
+      observation.managerName ?? observation.managerEmail ?? "Observer";
     const notifications: Promise<unknown>[] = [];
 
     if (observation.managerEmail) {

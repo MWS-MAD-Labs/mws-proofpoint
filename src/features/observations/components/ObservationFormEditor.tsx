@@ -240,7 +240,7 @@ export function ObservationFormEditor({
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Editing is unavailable</AlertTitle>
         <AlertDescription>
-          Only the assigned manager or an administrator can edit a draft
+          Only the assigned observer or an administrator can edit a draft
           observation.
         </AlertDescription>
       </Alert>

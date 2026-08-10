@@ -819,7 +819,56 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
       createdResponse,
     );
     fixture.observationIds.push(created.observation.id);
-    assert.equal(created.observation.manager.id, fixture.managerA.id);
+    assert.equal(
+      created.observation.manager.id,
+      fixture.managerA.id,
+      "the authenticated creator must be assigned as the observer",
+    );
+
+    const spoofedAssignmentResponse = await createObservationRoute(
+      jsonRequest("http://localhost/api/observations", "POST", {
+        staffId: fixture.staffA.id,
+        rubricId: fixture.rubricAId,
+        workflowId: fixture.workflowAId,
+        managerId: fixture.managerB.id,
+        dueAt,
+        title: `${fixture.prefix}-spoofed-assignment`,
+      }),
+    );
+    assert.equal(spoofedAssignmentResponse.status, 201);
+    const spoofedAssignment = await responseBody<{
+      observation: { id: string; manager: { id: string } };
+    }>(spoofedAssignmentResponse);
+    assert.equal(
+      spoofedAssignment.observation.manager.id,
+      fixture.managerA.id,
+      "a client-supplied managerId must not override the authenticated observer",
+    );
+    await query(`DELETE FROM observations WHERE id = $1`, [spoofedAssignment.observation.id]);
+
+    await query(
+      `INSERT INTO user_roles (id, user_id, role) VALUES ($1, $2, 'staff')`,
+      [randomUUID(), fixture.admin.id],
+    );
+    try {
+      setObservationTestActor(fixture.admin);
+      const adminSelfObservationResponse = await createObservationRoute(
+        jsonRequest("http://localhost/api/observations", "POST", {
+          staffId: fixture.admin.id,
+          rubricId: fixture.rubricAId,
+          workflowId: fixture.workflowAId,
+          dueAt,
+        }),
+      );
+      assert.equal(adminSelfObservationResponse.status, 400);
+      assert.deepEqual(await responseBody(adminSelfObservationResponse), {
+        error: "You cannot create an observation for yourself.",
+      });
+    } finally {
+      await query(`DELETE FROM user_roles WHERE user_id = $1 AND role = 'staff'`, [
+        fixture.admin.id,
+      ]);
+    }
 
     setObservationTestActor(fixture.staffA);
     const privateDraftResponse = await getObservationRoute(
