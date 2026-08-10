@@ -268,7 +268,7 @@ export function ObservationDetailReport({
             />
             <HeaderFact
               icon={UserRound}
-              label="Manager"
+              label="Observer"
               value={personName(observation.manager, "Unassigned")}
             />
             <HeaderFact
@@ -626,7 +626,7 @@ function PrivateDraftShell() {
         <div className="rounded-full bg-muted p-4"><LockKeyhole className="h-7 w-7 text-muted-foreground" /></div>
         <h2 className="mt-4 text-lg font-semibold">Responses are private while this report is a draft</h2>
         <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-          You can view the report metadata and lifecycle now. Scores, notes, and responses will appear after the manager submits the observation.
+          You can view the report metadata and lifecycle now. Scores, notes, and responses will appear after the observer submits the observation.
         </p>
       </CardContent>
     </Card>
@@ -709,7 +709,7 @@ function ObservationActionDialog({
               rows={4}
             />
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Minimum 10 characters. Manager and staff will be notified.</span>
+              <span>Minimum 10 characters. Observer and staff will be notified.</span>
               <span>{trimmedReason.length}/500</span>
             </div>
           </div>

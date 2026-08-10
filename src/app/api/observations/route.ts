@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { getObservationSession } from "@/features/observations/server/auth";
 import { pool, queryOne } from "@/lib/db";
-import { notifyObservationAssigned } from "@/lib/notifications/observation-notifications";
+
 import { parseObservationListQuery } from "@/features/observations/schemas";
 import { queryObservationList } from "@/features/observations/server/queries";
 import type { CreateObservationInput, CreateObservationResponse } from "@/features/observations/types";
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
     const staffId = body.staffId?.trim();
     const rubricId = body.rubricId?.trim();
     const workflowId = body.workflowId?.trim() || null;
-    const managerId = isAdmin ? body.managerId?.trim() || user.id : user.id;
+    const managerId = user.id;
     if (!staffId || !rubricId) {
       return NextResponse.json(
         { error: "staffId and rubricId are required." },
@@ -137,9 +137,9 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    if (!isAdmin && staffId === user.id) {
+    if (staffId === user.id) {
       return NextResponse.json(
-        { error: "Managers cannot create observations for themselves." },
+        { error: "You cannot create an observation for yourself." },
         { status: 400 },
       );
     }
@@ -169,13 +169,7 @@ export async function POST(req: Request) {
     );
     if (!manager || !manager.hasManagerRole) {
       return NextResponse.json(
-        { error: "Assigned manager must be an active manager or administrator." },
-        { status: 400 },
-      );
-    }
-    if (staffId === managerId) {
-      return NextResponse.json(
-        { error: "The assigned manager cannot be the observation subject." },
+        { error: "The observer must be an active manager or administrator." },
         { status: 400 },
       );
     }
@@ -239,19 +233,6 @@ export async function POST(req: Request) {
     } finally {
       client.release();
     }
-
-    if (managerId !== user.id) {
-      await notifyObservationAssigned(
-        manager.email,
-        manager.fullName ?? manager.email,
-        staff.fullName ?? staff.email,
-        assignment.name,
-        observationId,
-      ).catch((error: unknown) =>
-        console.error("Observation assignment notification error:", error),
-      );
-    }
-
     const response: CreateObservationResponse = {
       observation: {
         id: observationId,

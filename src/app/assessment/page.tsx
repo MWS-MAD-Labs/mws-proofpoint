@@ -54,6 +54,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { useEffect } from "react";
 
@@ -70,6 +71,7 @@ function AssessmentContent() {
     loading: assessmentLoading,
     saving,
     autosaveStatus,
+    draftDirty,
     saveDraft,
     submitAssessment,
     updateKPI,
@@ -605,19 +607,30 @@ function AssessmentContent() {
                 {autosaveStatus === "saving" ? "Saving draft…" : autosaveStatus === "saved" ? "All changes saved" : "Autosave failed — save manually"}
               </span>
             )}
-            <Button
-              variant="outline"
-              onClick={() => void saveDraft()}
-              disabled={saving}
-              className="h-12 px-6 rounded-xl border-primary/20 hover:bg-primary/5 transition-all"
-            >
-              {saving ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Save className="h-4 w-4 mr-2" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={autosaveStatus === "saved" && !draftDirty ? 0 : -1}>
+                  <Button
+                    variant="outline"
+                    onClick={() => void saveDraft()}
+                    disabled={saving || (autosaveStatus === "saved" && !draftDirty)}
+                    className="h-12 px-6 rounded-xl border-primary/20 hover:bg-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    Save Draft
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {autosaveStatus === "saved" && !draftDirty && (
+                <TooltipContent>
+                  <p>Already auto-saved</p>
+                </TooltipContent>
               )}
-              Save Draft
-            </Button>
+            </Tooltip>
             <Button
               className="h-12 px-8 rounded-xl font-bold glow-primary transition-all duration-300"
               onClick={submitAssessment}
@@ -981,19 +994,33 @@ function AssessmentContent() {
               </span>
             </div>
             <div className="flex items-center gap-4 w-full md:w-auto">
-              <Button
-                variant="outline"
-                onClick={() => void saveDraft()}
-                disabled={saving}
-                className="flex-1 md:flex-none h-12 px-6 rounded-xl border-primary/20 hover:bg-primary/5 transition-all"
-              >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Save className="h-4 w-4 mr-2" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="flex-1 md:flex-none"
+                    tabIndex={autosaveStatus === "saved" && !draftDirty ? 0 : -1}
+                  >
+                    <Button
+                      variant="outline"
+                      onClick={() => void saveDraft()}
+                      disabled={saving || (autosaveStatus === "saved" && !draftDirty)}
+                      className="w-full h-12 px-6 rounded-xl border-primary/20 hover:bg-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {saving ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-2" />
+                      )}
+                      Save Draft
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {autosaveStatus === "saved" && !draftDirty && (
+                  <TooltipContent>
+                    <p>Already auto-saved</p>
+                  </TooltipContent>
                 )}
-                Save Draft
-              </Button>
+              </Tooltip>
               <Button
                 className="flex-[2] md:flex-none h-12 px-8 rounded-xl font-bold glow-primary transition-all duration-300"
                 onClick={submitAssessment}

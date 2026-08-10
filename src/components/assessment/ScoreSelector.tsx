@@ -132,18 +132,30 @@ export function ScoreSelector({
   if (compact) {
     return (
       <div className="rounded-xl border bg-card px-4 py-3">
-        <div className="flex items-center gap-4">
-          <input
-            aria-label="Performance rating from 1 to 4"
-            type="range"
-            min={1}
-            max={4}
-            step={0.1}
-            value={selectedScore ?? 1}
-            disabled={disabled}
-            onChange={(event) => onChange(Number(event.target.value))}
-            className={cn("h-2 min-w-0 flex-1 cursor-pointer disabled:cursor-not-allowed", scoreColor)}
-          />
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 gap-y-2">
+          <div className="relative h-8 min-w-0">
+            <input
+              aria-label="Performance rating from 1 to 4"
+              type="range"
+              min={1}
+              max={4}
+              step={0.1}
+              value={selectedScore ?? 1}
+              disabled={disabled}
+              onChange={(event) => onChange(Number(event.target.value))}
+              className={cn("absolute inset-x-0 top-1/2 z-10 h-2 w-full -translate-y-1/2 cursor-pointer disabled:cursor-not-allowed", scoreColor)}
+            />
+            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-1/2 z-20 flex -translate-y-1/2 justify-between px-0.5">
+              {[1, 2, 3, 4].map((score) => (
+                <span
+                  key={score}
+                  className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-border bg-card text-[10px] font-bold text-foreground shadow-sm"
+                >
+                  {score}
+                </span>
+              ))}
+            </div>
+          </div>
           <output className="min-w-12 rounded-md bg-primary px-2.5 py-1 text-center font-mono text-base font-bold text-primary-foreground">
             {selectedScore?.toFixed(1) ?? "—"}
           </output>
@@ -161,14 +173,13 @@ export function ScoreSelector({
               N/A
             </button>
           )}
-        </div>
-        <div className="mt-2 grid grid-cols-4 gap-2 text-[11px] leading-4 text-muted-foreground">
-          {allOptions.slice(0, 4).map((option, index) => (
-            <span key={option.score} className={cn("min-w-0", index === 0 ? "text-left" : index === 3 ? "text-right" : "text-center")}>
-              <span className="font-semibold text-foreground">{option.score}</span>
-              <span className="block">{option.description || option.label}</span>
-            </span>
-          ))}
+          <div className="col-start-1 grid grid-cols-4 gap-2 text-[11px] leading-4 text-muted-foreground">
+            {allOptions.slice(0, 4).map((option, index) => (
+              <span key={option.score} className={cn("min-w-0", index === 0 ? "text-left" : index === 3 ? "text-right" : "text-center")}>
+                <span className="block">{option.description || option.label}</span>
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     );

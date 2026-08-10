@@ -52,7 +52,7 @@ export function ObservationReassignmentDialog({
         queryClient.invalidateQueries({ queryKey: observationKeys.lists() }),
         queryClient.invalidateQueries({ queryKey: observationKeys.summary() }),
       ]);
-      toast.success("Observation manager reassigned.");
+      toast.success("Observer reassigned.");
       setOpen(false);
     },
     onError: (error) => toast.error(error.message),
@@ -63,28 +63,28 @@ export function ObservationReassignmentDialog({
       <DialogTrigger asChild>
         <Button variant="outline" className="gap-2">
           <UserRoundCog className="h-4 w-4" />
-          Reassign manager
+          Reassign observer
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Reassign observation manager</DialogTitle>
+          <DialogTitle>Reassign observer</DialogTitle>
           <DialogDescription>
-            Select an active manager or administrator. The previous and new manager will be notified.
+            Select an active manager or administrator as the observer. The previous and new observer will be notified.
           </DialogDescription>
         </DialogHeader>
         <Popover open={chooserOpen} onOpenChange={setChooserOpen}>
           <PopoverTrigger asChild>
-            <Button variant="outline" role="combobox" aria-label="Assigned manager" aria-expanded={chooserOpen} className="w-full justify-between font-normal">
-              {selected ? selected.fullName || selected.email : "Select manager..."}
+            <Button variant="outline" role="combobox" aria-label="Assigned observer" aria-expanded={chooserOpen} className="w-full justify-between font-normal">
+              {selected ? selected.fullName || selected.email : "Select observer..."}
               <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
             <Command>
-              <CommandInput name="reassignment-manager-search" aria-label="Search managers" placeholder="Search managers..." />
+              <CommandInput name="reassignment-observer-search" aria-label="Search observers" placeholder="Search observers..." />
               <CommandList>
-                <CommandEmpty>{managers.isLoading ? "Loading managers..." : "No active manager found."}</CommandEmpty>
+                <CommandEmpty>{managers.isLoading ? "Loading observers..." : "No active observer found."}</CommandEmpty>
                 <CommandGroup>
                   {(managers.data ?? []).map((manager) => (
                     <CommandItem

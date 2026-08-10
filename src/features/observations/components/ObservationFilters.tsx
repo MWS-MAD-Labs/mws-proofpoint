@@ -49,7 +49,7 @@ export function ObservationFilters(props: ObservationFiltersProps) {
     const values: Array<{ key: keyof ObservationListQuery; label: string }> = [];
     if (props.filters.status) values.push({ key: "status", label: props.filters.status });
     if (props.filters.departmentId) values.push({ key: "departmentId", label: "Department" });
-    if (props.filters.managerId) values.push({ key: "managerId", label: props.filters.managerId === "me" ? "My assignments" : "Manager" });
+    if (props.filters.managerId) values.push({ key: "managerId", label: props.filters.managerId === "me" ? "My observations" : "Observer" });
     if (props.filters.rubricId) values.push({ key: "rubricId", label: "Form" });
     if (props.filters.actionRequired === "true") values.push({ key: "actionRequired", label: "Needs action" });
     if (props.filters.overdue === "true") values.push({ key: "overdue", label: "Overdue" });
@@ -122,7 +122,7 @@ function FilterFields({
         <Label htmlFor="observation-search">Search</Label>
         <div className="relative mt-1.5">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <Input id="observation-search" value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Staff, manager, title, form, department" />
+          <Input id="observation-search" value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Staff, observer, title, form, department" />
         </div>
       </div>
       <SelectFilter label="Status" value={filters.status ?? "all"} onValueChange={(value) => onChange({ status: value === "all" ? undefined : value })}>
@@ -141,8 +141,9 @@ function FilterFields({
         </SelectFilter>
       )}
       {showManager && (
-        <SelectFilter label="Manager" value={filters.managerId ?? "all"} onValueChange={(value) => onChange({ managerId: value === "all" ? undefined : value })}>
-          <SelectItem value="all">All managers</SelectItem>
+        <SelectFilter label="Observer" value={filters.managerId ?? "all"} onValueChange={(value) => onChange({ managerId: value === "all" ? undefined : value })}>
+          <SelectItem value="all">All observers</SelectItem>
+          <SelectItem value="me">My observations</SelectItem>
           {options.managers.map((manager) => <SelectItem key={manager.id} value={manager.id}>{manager.fullName || manager.email}</SelectItem>)}
         </SelectFilter>
       )}

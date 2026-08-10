@@ -332,8 +332,10 @@ export function useAssessment(assessmentId?: string) {
         toast({ title: "Error", description: "Failed to save draft", variant: "destructive" });
       }
     } else {
-      if (savedVersion === draftVersionRef.current) setDraftDirty(false);
-      setAutosaveStatus("saved");
+      if (savedVersion === draftVersionRef.current) {
+        setDraftDirty(false);
+        setAutosaveStatus("saved");
+      }
       if (!silent) toast({ title: "Saved", description: "Draft saved successfully" });
     }
   }, [assessment, domains, managerFeedback]);
@@ -615,6 +617,7 @@ export function useAssessment(assessmentId?: string) {
     loading,
     saving,
     autosaveStatus,
+    draftDirty,
     saveDraft,
     submitAssessment,
     submitReview,

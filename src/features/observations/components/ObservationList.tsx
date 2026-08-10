@@ -49,7 +49,7 @@ export function ObservationList({ result }: { result: ObservationListResponse })
             <TableRow className="bg-muted/30 hover:bg-muted/30">
               <TableHead>Staff</TableHead>
               <TableHead>Observation</TableHead>
-              <TableHead>Manager</TableHead>
+              <TableHead>Observer</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Progress</TableHead>
               <TableHead>Observation date</TableHead>

@@ -47,7 +47,6 @@ import {
   createObservation,
   fetchObservationCreationForms,
   fetchObservationCreationStaff,
-  fetchObservationManagers,
 } from "../api/queries";
 import { observationKeys } from "../api/queryKeys";
 import type {
@@ -88,7 +87,6 @@ export function ObservationCreationWizard() {
   const [step, setStep] = useState(0);
   const [staffId, setStaffId] = useState("");
   const [formKey, setFormKey] = useState("");
-  const [managerId, setManagerId] = useState("");
   const [title, setTitle] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
   const [description, setDescription] = useState("");
@@ -108,29 +106,18 @@ export function ObservationCreationWizard() {
     queryFn: () => fetchObservationCreationForms(staffId),
     enabled: canCreate && Boolean(staffId),
   });
-  const managersQuery = useQuery({
-    queryKey: ["observations", "creation-managers"],
-    queryFn: fetchObservationManagers,
-    enabled: canCreate && isAdmin,
-  });
-
-  useEffect(() => {
-    if (!managerId && currentUserId) setManagerId(currentUserId);
-  }, [currentUserId, managerId]);
 
   const selectedStaff = staffQuery.data?.find((staff) => staff.id === staffId) ?? null;
   const selectedForm = formsQuery.data?.find(
     (form) => `${form.id}:${form.workflowId}` === formKey,
   ) ?? null;
-  const selectedManager = isAdmin
-    ? managersQuery.data?.find((manager) => manager.id === managerId) ?? null
-    : currentUserId
-      ? {
-          id: currentUserId,
-          email: session?.user?.email ?? "",
-          fullName: session?.user?.name ?? null,
-        }
-      : null;
+  const observer = currentUserId
+    ? {
+        id: currentUserId,
+        email: session?.user?.email ?? "",
+        fullName: session?.user?.name ?? null,
+      }
+    : null;
 
   const meaningfulInput = Boolean(
     staffId || formKey || title || description || observationDate || dueAt,
@@ -193,9 +180,9 @@ export function ObservationCreationWizard() {
       else if (dueAt < localDateValue()) message = "Due date cannot be in the past.";
       else if (observationDate && dueAt < observationDate) {
         message = "Due date cannot precede the observation date.";
-      } else if (!selectedManager) message = "Select an assigned manager.";
-      else if (selectedManager.id === selectedStaff?.id) {
-        message = "The assigned manager cannot be the observation subject.";
+      } else if (!observer) message = "Unable to identify the observer.";
+      else if (observer.id === selectedStaff?.id) {
+        message = "You cannot create an observation for yourself.";
       }
     }
     setValidationError(message);
@@ -208,12 +195,11 @@ export function ObservationCreationWizard() {
   }
 
   function submit() {
-    if (!selectedStaff || !selectedForm || !selectedManager || !validateCurrentStep()) return;
+    if (!selectedStaff || !selectedForm || !observer || !validateCurrentStep()) return;
     create.mutate({
       staffId: selectedStaff.id,
       rubricId: selectedForm.id,
       workflowId: selectedForm.workflowId,
-      managerId: selectedManager.id,
       title: title.trim() || `${selectedForm.name} — ${personName(selectedStaff)}`,
       description: description.trim() || undefined,
       observationDate: observationDate
@@ -250,7 +236,7 @@ export function ObservationCreationWizard() {
           </Button>
           <h1 className="text-3xl font-semibold tracking-tight">Create observation</h1>
           <p className="mt-2 text-muted-foreground">
-            Set up the staff, form, schedule, and manager before creating the draft.
+            Set up the staff, form, and schedule before creating the draft.
           </p>
         </div>
         <Badge variant="outline">Step {step + 1} of {steps.length}</Badge>
@@ -288,12 +274,6 @@ export function ObservationCreationWizard() {
       )}
       {step === 2 && (
         <DetailsStep
-          isAdmin={isAdmin}
-          managers={managersQuery.data ?? []}
-          managersLoading={managersQuery.isLoading}
-          selectedManager={selectedManager}
-          managerId={managerId}
-          onManagerChange={setManagerId}
           title={title}
           description={description}
           observationDate={observationDate}
@@ -307,16 +287,15 @@ export function ObservationCreationWizard() {
           onDueAtChange={setDueAt}
         />
       )}
-      {step === 3 && selectedStaff && selectedForm && selectedManager && (
+      {step === 3 && selectedStaff && selectedForm && observer && (
         <ReviewStep
           staff={selectedStaff}
           form={selectedForm}
-          manager={selectedManager}
+          observer={observer}
           title={title.trim() || `${selectedForm.name} — ${personName(selectedStaff)}`}
           description={description}
           observationDate={observationDate}
           dueAt={dueAt}
-          notifyManager={selectedManager.id !== currentUserId}
         />
       )}
 
@@ -442,22 +421,21 @@ function FormStep({ forms, selected, loading, error, search, onSearch, onSelect,
   );
 }
 
-function DetailsStep({ isAdmin, managers, managersLoading, selectedManager, managerId, onManagerChange, title, description, observationDate, dueAt, onTitleChange, onDescriptionChange, onObservationDateChange, onDueAtChange }: { isAdmin: boolean; managers: ObservationManagerOption[]; managersLoading: boolean; selectedManager: ObservationManagerOption | null; managerId: string; onManagerChange: (value: string) => void; title: string; description: string; observationDate: string; dueAt: string; onTitleChange: (value: string) => void; onDescriptionChange: (value: string) => void; onObservationDateChange: (value: string) => void; onDueAtChange: (value: string) => void }) {
+function DetailsStep({ title, description, observationDate, dueAt, onTitleChange, onDescriptionChange, onObservationDateChange, onDueAtChange }: { title: string; description: string; observationDate: string; dueAt: string; onTitleChange: (value: string) => void; onDescriptionChange: (value: string) => void; onObservationDateChange: (value: string) => void; onDueAtChange: (value: string) => void }) {
   return (
     <Card>
-      <CardHeader><CardTitle>Details and assignment</CardTitle><CardDescription>Add scheduling context and confirm who will complete the observation.</CardDescription></CardHeader>
+      <CardHeader><CardTitle>Details</CardTitle><CardDescription>Add scheduling context for the observation. You will be assigned automatically as the observer.</CardDescription></CardHeader>
       <CardContent className="grid gap-5 md:grid-cols-2">
         <div className="space-y-2 md:col-span-2"><Label htmlFor="title">Title <span className="text-muted-foreground">(optional)</span></Label><Input id="title" value={title} onChange={(event) => onTitleChange(event.target.value)} maxLength={200} placeholder="Defaults to form name — staff name" /><p className="text-xs text-muted-foreground">{title.length}/200</p></div>
         <div className="space-y-2 md:col-span-2"><Label htmlFor="description">Description or purpose <span className="text-muted-foreground">(optional)</span></Label><Textarea id="description" value={description} onChange={(event) => onDescriptionChange(event.target.value)} maxLength={2000} rows={4} placeholder="Add context, focus areas, or the purpose of this observation..." /><p className="text-xs text-muted-foreground">{description.length}/2000</p></div>
         <div className="space-y-2"><Label htmlFor="observation-date">Observation date <span className="text-muted-foreground">(recommended)</span></Label><Input id="observation-date" type="date" value={observationDate} onChange={(event) => onObservationDateChange(event.target.value)} /></div>
         <div className="space-y-2"><Label htmlFor="due-date">Due date</Label><Input id="due-date" type="date" min={localDateValue()} value={dueAt} onChange={(event) => onDueAtChange(event.target.value)} required /></div>
-        <div className="space-y-2 md:col-span-2"><Label>Assigned manager</Label>{isAdmin ? (managersLoading ? <WizardLoading /> : <SearchCombobox label="Assigned manager" placeholder="Search active managers..." value={selectedManager ? personName(selectedManager) : ""} empty="No active manager found." items={managers.map((manager) => ({ id: manager.id, search: `${manager.fullName ?? ""} ${manager.email}`, content: <div><p className="font-medium">{personName(manager)}</p><p className="text-xs text-muted-foreground">{manager.email}</p></div> }))} onSelect={onManagerChange} />) : <div className="rounded-lg border bg-muted/30 p-3 text-sm"><p className="font-medium">{selectedManager ? personName(selectedManager) : "Current manager"}</p><p className="text-muted-foreground">Managers are assigned to their own observations.</p></div>}{isAdmin && managerId && <p className="text-xs text-muted-foreground">The manager will be notified only when someone other than the creator is assigned.</p>}</div>
       </CardContent>
     </Card>
   );
 }
 
-function ReviewStep({ staff, form, manager, title, description, observationDate, dueAt, notifyManager }: { staff: ObservationCreationStaff; form: ObservationCreationForm; manager: ObservationManagerOption; title: string; description: string; observationDate: string; dueAt: string; notifyManager: boolean }) {
+function ReviewStep({ staff, form, observer, title, description, observationDate, dueAt }: { staff: ObservationCreationStaff; form: ObservationCreationForm; observer: ObservationManagerOption; title: string; description: string; observationDate: string; dueAt: string }) {
   return (
     <Card>
       <CardHeader><CardTitle>Review and create</CardTitle><CardDescription>No server record exists yet. Confirm these details to create the draft.</CardDescription></CardHeader>
@@ -466,12 +444,12 @@ function ReviewStep({ staff, form, manager, title, description, observationDate,
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <ReviewFact icon={UserRound} label="Staff" value={personName(staff)} detail={staff.department?.name ?? "No department"} />
           <ReviewFact icon={FileText} label="Form" value={form.name} detail={form.workflowName} />
-          <ReviewFact icon={UsersRound} label="Manager" value={personName(manager)} detail={manager.email} />
+          <ReviewFact icon={UsersRound} label="Observer" value={personName(observer)} detail={observer.email} />
           <ReviewFact icon={CalendarDays} label="Observation date" value={displayDate(observationDate)} />
           <ReviewFact icon={CalendarDays} label="Due date" value={displayDate(dueAt)} />
-          <ReviewFact icon={ClipboardCheck} label="Notifications" value={notifyManager ? "Assigned manager" : "No draft notification"} detail="Staff is notified only after submission" />
+          <ReviewFact icon={ClipboardCheck} label="Notifications" value="No draft notification" detail="Staff is notified only after submission" />
         </div>
-        <Alert><ClipboardCheck className="h-4 w-4" /><AlertTitle>Draft privacy</AlertTitle><AlertDescription>The staff member will not be notified and cannot see draft responses until the assigned manager submits the observation.</AlertDescription></Alert>
+        <Alert><ClipboardCheck className="h-4 w-4" /><AlertTitle>Draft privacy</AlertTitle><AlertDescription>The staff member will not be notified and cannot see draft responses until the observer submits the observation.</AlertDescription></Alert>
       </CardContent>
     </Card>
   );

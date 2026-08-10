@@ -6,7 +6,7 @@
 //   ✓ Staff can only acknowledge observations where they are the subject.
 //   ✓ Status updates to acknowledged.
 //   ✓ Audit trail records acknowledgement.
-//   ✓ Manager and admin are notified.
+//   ✓ Observer and admin are notified.
 
 import { type NextRequest, NextResponse } from "next/server";
 import { getObservationSession } from "@/features/observations/server/auth";
@@ -191,12 +191,12 @@ export async function PATCH(
       client.release();
     }
 
-    // AC: Notify the assigned manager
+    // AC: Notify the assigned observer
     if (observation.managerEmail) {
       await notifyManagerObservationAcknowledged(
         observation.managerEmail,
         observation.staffName ?? observation.staffEmail ?? "Staff",
-        observation.managerName ?? observation.managerEmail ?? "Manager",
+        observation.managerName ?? observation.managerEmail ?? "Observer",
         observation.rubricName ?? "Observation",
         id,
       ).catch((err: unknown) =>
@@ -217,7 +217,7 @@ export async function PATCH(
         await notifyObservationAcknowledged(
           adminUser.email,
           observation.staffName ?? observation.staffEmail ?? "Staff",
-          observation.managerName ?? observation.managerEmail ?? "Manager",
+          observation.managerName ?? observation.managerEmail ?? "Observer",
           observation.rubricName ?? "Observation",
           id,
         ).catch((err: unknown) =>

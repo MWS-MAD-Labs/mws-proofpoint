@@ -178,7 +178,7 @@ export async function PATCH(
       return NextResponse.json({ error: "No supported fields were provided." }, { status: 400 });
     }
     if (body.managerId !== undefined && !isAdmin) {
-      return NextResponse.json({ error: "Only administrators can reassign managers." }, { status: 403 });
+      return NextResponse.json({ error: "Only administrators can reassign observers." }, { status: 403 });
     }
 
     const observation = await queryOne<ObservationPatchRow>(
@@ -202,7 +202,7 @@ export async function PATCH(
     }
     if (!isAdmin && observation.managerId !== session.user.id) {
       return NextResponse.json(
-        { error: "Only the assigned manager can edit this observation." },
+        { error: "Only the assigned observer can edit this observation." },
         { status: 403 },
       );
     }
@@ -244,7 +244,7 @@ export async function PATCH(
       }
       if (managerId === observation.staffId) {
         return NextResponse.json(
-          { error: "The assigned manager cannot be the observation subject." },
+          { error: "The assigned observer cannot be the observation subject." },
           { status: 400 },
         );
       }
@@ -261,7 +261,7 @@ export async function PATCH(
       );
       if (!newManager?.eligible) {
         return NextResponse.json(
-          { error: "Assigned manager must be an active manager or administrator." },
+          { error: "The observer must be an active manager or administrator." },
           { status: 400 },
         );
       }
@@ -288,7 +288,7 @@ export async function PATCH(
             id,
             session.user.id,
             normalizeObservationStatus(observation.status),
-            `Manager reassigned from ${observation.managerName ?? observation.managerEmail ?? "Unassigned"} to ${newManager?.fullName ?? newManager?.email ?? "Unassigned"}`,
+            `Observer reassigned from ${observation.managerName ?? observation.managerEmail ?? "Unassigned"} to ${newManager?.fullName ?? newManager?.email ?? "Unassigned"}`,
           ],
         );
       }
@@ -371,7 +371,7 @@ export async function DELETE(
     }
     if (!isAdmin && observation.managerId !== session.user.id) {
       return NextResponse.json(
-        { error: "Only an administrator or the assigned manager can delete this observation." },
+        { error: "Only an administrator or the assigned observer can delete this observation." },
         { status: 403 },
       );
     }

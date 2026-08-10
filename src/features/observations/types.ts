@@ -267,7 +267,6 @@ export interface CreateObservationInput {
   staffId: string;
   rubricId: string;
   workflowId?: string;
-  managerId?: string;
   title?: string;
   description?: string;
   observationDate?: string;

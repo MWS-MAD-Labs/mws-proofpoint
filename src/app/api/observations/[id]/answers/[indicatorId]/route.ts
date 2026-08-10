@@ -99,7 +99,7 @@ export async function PUT(
         {
           error:
             observation.status === "draft"
-              ? "Only the assigned manager or an administrator can edit this observation."
+              ? "Only the assigned observer or an administrator can edit this observation."
               : "Only draft observations can be edited.",
         },
         { status: observation.status === "draft" ? 403 : 409 },
@@ -158,7 +158,7 @@ export async function PUT(
       });
       if (!lockedPermissions.canEdit) {
         const error = new Error(
-          "Only the assigned manager or an administrator can edit this observation.",
+          "Only the assigned observer or an administrator can edit this observation.",
         );
         error.name = "OBSERVATION_NOT_EDITABLE";
         throw error;

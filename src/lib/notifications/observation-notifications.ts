@@ -55,7 +55,7 @@ export async function notifyObservationReassigned(
       <p>Hello <strong>${esc(recipientName)}</strong>,</p>
       <p>${assigned
         ? `You are now responsible for the observation of <strong>${esc(staffName)}</strong>.`
-        : `The observation of <strong>${esc(staffName)}</strong> has been assigned to another manager.`}</p>
+        : `The observation of <strong>${esc(staffName)}</strong> has been assigned to another observer.`}</p>
       <p><strong>Form:</strong> ${esc(rubricName)}</p>
       <a href="${BASE_URL}/observations/${encodeURIComponent(observationId)}${assigned ? "/edit" : ""}"
          style="display:inline-block;background:#1F2A44;color:white;padding:10px 20px;border-radius:12px;text-decoration:none;font-weight:bold;">
@@ -66,7 +66,7 @@ export async function notifyObservationReassigned(
   });
 }
 
-// ── Notify staff when manager submits (staff needs to acknowledge) ───────────
+// ── Notify staff when observer submits (staff needs to acknowledge) ──────────
 export async function notifyObservationSubmitted(
   staffEmail:     string,
   staffName:      string,
@@ -79,7 +79,7 @@ export async function notifyObservationSubmitted(
     html: `<div style="font-family:Nunito Sans,Arial,sans-serif;max-width:600px;color:#241718;background:#FFFFFF;border:1px solid #D8C9C3;border-radius:16px;padding:24px;">
       <h2>Observation Results Ready for Review</h2>
       <p>Hello <strong>${esc(staffName)}</strong>,</p>
-      <p>Your manager has completed the observation. Please review the results and acknowledge them.</p>
+      <p>Your observer has completed the observation. Please review the results and acknowledge them.</p>
       <table style="border-collapse:collapse;width:100%;margin:12px 0;">
         <tr><td style="padding:6px 0;color:#5D4B4C;width:120px;">Rubric</td>
             <td style="font-weight:bold;">${esc(rubricName)}</td></tr>
@@ -142,7 +142,7 @@ export async function notifyObservationAcknowledged(
       <table style="border-collapse:collapse;width:100%;margin:12px 0;">
         <tr><td style="padding:6px 0;color:#5D4B4C;width:120px;">Staff</td>
             <td style="font-weight:bold;">${esc(staffName)}</td></tr>
-        <tr><td style="padding:6px 0;color:#5D4B4C;">Manager</td>
+        <tr><td style="padding:6px 0;color:#5D4B4C;">Observer</td>
             <td style="font-weight:bold;">${esc(managerName)}</td></tr>
         <tr><td style="padding:6px 0;color:#5D4B4C;">Rubric</td>
             <td style="font-weight:bold;">${esc(rubricName)}</td></tr>
