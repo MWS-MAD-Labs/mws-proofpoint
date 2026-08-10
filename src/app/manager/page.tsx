@@ -53,6 +53,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -81,6 +82,7 @@ function ManagerContent() {
     submitReview,
     saving,
     autosaveStatus,
+    draftDirty,
     managerFeedback,
     setManagerFeedback,
     directorFeedback,
@@ -279,19 +281,30 @@ function ManagerContent() {
                 {autosaveStatus === "saving" ? "Saving draft…" : autosaveStatus === "saved" ? "All changes saved" : "Autosave failed — save manually"}
               </span>
             )}
-            <Button
-              variant="outline"
-              onClick={() => void saveDraft()}
-              disabled={saving}
-              className="h-12 px-6 rounded-xl border-primary/20 hover:bg-primary/5 transition-all"
-            >
-              {saving ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Save className="h-4 w-4 mr-2" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={autosaveStatus === "saved" && !draftDirty ? 0 : -1}>
+                  <Button
+                    variant="outline"
+                    onClick={() => void saveDraft()}
+                    disabled={saving || (autosaveStatus === "saved" && !draftDirty)}
+                    className="h-12 px-6 rounded-xl border-primary/20 hover:bg-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    Save Draft
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {autosaveStatus === "saved" && !draftDirty && (
+                <TooltipContent>
+                  <p>Already auto-saved</p>
+                </TooltipContent>
               )}
-              Save Draft
-            </Button>
+            </Tooltip>
 
             {/* Return for Revision Dialog */}
             <AlertDialog
@@ -421,15 +434,26 @@ function ManagerContent() {
                     ? "Autosave failed — save manually"
                     : "Changes save automatically after you pause typing."}
             </p>
-            <Button
-              variant="outline"
-              onClick={() => void saveDraft()}
-              disabled={saving}
-              className="h-12 min-w-40 rounded-xl border-primary/20 hover:bg-primary/5"
-            >
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Save Draft
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={autosaveStatus === "saved" && !draftDirty ? 0 : -1}>
+                  <Button
+                    variant="outline"
+                    onClick={() => void saveDraft()}
+                    disabled={saving || (autosaveStatus === "saved" && !draftDirty)}
+                    className="h-12 min-w-40 rounded-xl border-primary/20 hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Save Draft
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {autosaveStatus === "saved" && !draftDirty && (
+                <TooltipContent>
+                  <p>Already auto-saved</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
             <Button
               className="h-12 min-w-44 rounded-xl font-bold glow-primary"
               onClick={submitReview}
