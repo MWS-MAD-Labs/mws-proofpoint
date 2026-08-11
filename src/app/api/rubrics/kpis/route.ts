@@ -58,13 +58,21 @@ export async function POST(request: Request) {
     }
     const next = await queryOne<{ next_order: string; next_code: string }>(
       `SELECT
-                COALESCE(MAX(sort_order) FILTER (WHERE standard_id = $1), 0) + 1 AS next_order,
-                COUNT(*) + 1 AS next_code
-             FROM kpis
-             WHERE template_id = $2`,
+          COALESCE(MAX(sort_order) FILTER (WHERE standard_id = $1), 0) + 1 AS next_order,
+          COALESCE(
+            MAX(
+              CASE
+                WHEN code ~ '^K[0-9]+$' THEN substring(code FROM 2)::integer
+                ELSE 0
+              END
+            ),
+            0
+          ) + 1 AS next_code
+       FROM kpis
+       WHERE template_id = $2`,
       [standard_id, standard.template_id],
     );
-    const order = sort_order || Number(next?.next_order ?? 1);
+    const order = sort_order ?? Number(next?.next_order ?? 1);
     const newKPI = await queryOne(
       `INSERT INTO kpis (standard_id, template_id, name, description, evidence_guidance, trainings, sort_order, code, rubric_4, rubric_3, rubric_2, rubric_1, performance_weight)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)

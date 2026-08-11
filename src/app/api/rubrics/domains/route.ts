@@ -20,16 +20,28 @@ export async function POST(request: Request) {
       );
     }
 
-    const next = await queryOne<{ next_order: string }>(
-      `SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM kpi_domains WHERE template_id = $1`,
+    const next = await queryOne<{ next_order: string; next_code: string }>(
+      `SELECT
+          COALESCE(MAX(sort_order), 0) + 1 AS next_order,
+          COALESCE(
+            MAX(
+              CASE
+                WHEN code ~ '^D[0-9]+$' THEN substring(code FROM 2)::integer
+                ELSE 0
+              END
+            ),
+            0
+          ) + 1 AS next_code
+       FROM kpi_domains
+       WHERE template_id = $1`,
       [template_id],
     );
-    const order = sort_order || Number(next?.next_order ?? 1);
+    const order = sort_order ?? Number(next?.next_order ?? 1);
     const newDomain = await queryOne(
       `INSERT INTO kpi_domains (template_id, name, sort_order, code)
              VALUES ($1, $2, $3, $4)
              RETURNING *`,
-      [template_id, name, order, `D${order}`],
+      [template_id, name, order, `D${Number(next?.next_code ?? 1)}`],
     );
 
     return NextResponse.json({ data: newDomain }, { status: 201 });
