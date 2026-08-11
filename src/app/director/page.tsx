@@ -113,15 +113,18 @@ function DirectorContent() {
   const [showStickyBar, setShowStickyBar] = useState(false);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnFeedbackInput, setReturnFeedbackInput] = useState("");
+  const isLegacyManagerSelfAppraisal =
+    !assessment?.permissions?.isManagerLed &&
+    assessment?.staff_roles?.some((role) => role.toLowerCase() === "manager");
 
   const directorChanges = domains.flatMap((domain) =>
     domain.standards.flatMap((standard) =>
-      standard.kpis.filter(
-        (kpi) =>
-          kpi.directorScore !== null &&
+      standard.kpis.filter((kpi) => {
+        const submittedManagerScore = isLegacyManagerSelfAppraisal ? kpi.score : kpi.managerScore;
+        return kpi.directorScore !== null &&
           kpi.directorScore !== undefined &&
-          kpi.directorScore !== kpi.managerScore,
-      ),
+          kpi.directorScore !== submittedManagerScore;
+      }),
     ),
   );
   const directorChangesHaveFeedback = directorChanges.every(
@@ -481,14 +484,14 @@ function DirectorContent() {
 
     const managerScore = usesDirectItemPercentages
       ? calculateStaffAppraisalScore(domains, "manager")
-      : calculateWeightedScore(domains, "manager");
+      : calculateWeightedScore(domains, isLegacyManagerSelfAppraisal ? "staff" : "manager");
     const directorDomains = domains.map((domain) => ({
       ...domain,
       standards: domain.standards.map((standard) => ({
         ...standard,
         kpis: standard.kpis.map((kpi) => ({
           ...kpi,
-          managerScore: kpi.directorScore ?? kpi.managerScore,
+          managerScore: kpi.directorScore ?? (isLegacyManagerSelfAppraisal ? kpi.score : kpi.managerScore),
         })),
       })),
     }));
@@ -503,9 +506,6 @@ function DirectorContent() {
     // 1. status is 'manager_reviewed' (manager already reviewed, director just approves) - approval only
     // 2. status is 'self_submitted' AND workflow is 'review_and_approval' (director does both review and approval)
     const isPendingDirectorReview = assessment?.status === "manager_reviewed" || assessment?.status === "pending_director_review";
-    const isLegacyManagerSelfAppraisal =
-      !assessment?.permissions?.isManagerLed &&
-      assessment?.staff_roles?.some((role) => role.toLowerCase() === "manager");
     const isDirectorReviewMode =
       assessment?.status === "self_submitted" &&
       (isDirectorReviewAndApproval || isLegacyManagerSelfAppraisal);
@@ -712,8 +712,8 @@ function DirectorContent() {
                   index={index}
                   onIndicatorChange={isReadOnly ? undefined : updateKPI}
                   readonly={isReadOnly}
-                  managerOnly={Boolean(assessment?.permissions?.isManagerLed)}
-                  directorMode={Boolean(assessment?.permissions?.isManagerLed)}
+                  managerOnly={Boolean(assessment?.permissions?.isManagerLed || isLegacyManagerSelfAppraisal)}
+                  directorMode={true}
                   reviewerLabel="Director"
                   assessmentId={assessment?.id}
                   section={{
@@ -724,9 +724,9 @@ function DirectorContent() {
                         ...i,
                         description: i.description || "",
                         staffScore: i.score,
-                        staffEvidence: i.evidence,
-                        managerScore: i.managerScore ?? null,
-                        managerEvidence: i.managerEvidence ?? "",
+                        staffEvidence: isLegacyManagerSelfAppraisal ? "" : i.evidence,
+                        managerScore: isLegacyManagerSelfAppraisal ? i.score : (i.managerScore ?? null),
+                        managerEvidence: isLegacyManagerSelfAppraisal ? i.evidence : (i.managerEvidence ?? ""),
                         directorScore: i.directorScore ?? null,
                         directorEvidence: i.directorEvidence ?? "",
                       })),

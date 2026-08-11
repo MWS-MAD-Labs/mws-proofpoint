@@ -462,8 +462,13 @@ export function useAssessment(assessmentId?: string) {
     }
 
     setSaving(true);
-    const managerScores:   Record<string, number | 'X'>         = {};
+    const managerScores: Record<string, number | 'X'> = {};
     const managerEvidence: Record<string, string | EvidenceItem[]> = {};
+    const directorScores: Record<string, number | 'X'> = {};
+    const directorEvidence: Record<string, string | EvidenceItem[]> = {};
+    const isLegacyManagerSelfAppraisal =
+      !assessment.permissions?.isManagerLed &&
+      assessment.staff_roles?.some((role) => role.toLowerCase() === "manager");
 
     domains.forEach(domain => {
       domain.standards.forEach(standard => {
@@ -474,20 +479,41 @@ export function useAssessment(assessmentId?: string) {
           if (kpi.managerEvidence) {
             managerEvidence[kpi.id] = kpi.managerEvidence;
           }
+          if (kpi.directorScore !== null && kpi.directorScore !== undefined) {
+            directorScores[kpi.id] = kpi.directorScore;
+          }
+          if (kpi.directorEvidence) {
+            directorEvidence[kpi.id] = kpi.directorEvidence;
+          }
         });
       });
     });
 
+    const directorDomains = isLegacyManagerSelfAppraisal
+      ? domains.map((domain) => ({
+          ...domain,
+          standards: domain.standards.map((standard) => ({
+            ...standard,
+            kpis: standard.kpis.map((kpi) => ({
+              ...kpi,
+              managerScore: kpi.directorScore ?? kpi.score,
+            })),
+          })),
+        }))
+      : domains;
     const finalScore = assessment.permissions?.isManagerLed
       ? calculateStaffAppraisalScore(domains, "manager")
-      : calculateWeightedScore(domains, "manager");
+      : calculateWeightedScore(directorDomains, "manager");
     const finalGrade = finalScore !== null ? getGradeFromScore(finalScore) : null;
 
     const { error } = assessment.permissions?.isManagerLed
       ? await api.performAssessmentAction(assessment.id, { action: "director_review", directorComments: directorFeedback })
       : await api.updateAssessment(assessment.id, {
           status: 'director_approved', director_comments: directorFeedback, director_approved_at: new Date().toISOString(),
-          final_score: finalScore, final_grade: finalGrade, manager_scores: managerScores, manager_evidence: managerEvidence,
+          final_score: finalScore, final_grade: finalGrade,
+          ...(isLegacyManagerSelfAppraisal
+            ? { director_scores: directorScores, director_evidence: directorEvidence }
+            : { manager_scores: managerScores, manager_evidence: managerEvidence }),
         });
 
     setSaving(false);
