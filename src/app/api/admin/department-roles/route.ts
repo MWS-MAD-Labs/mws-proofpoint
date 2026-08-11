@@ -86,6 +86,7 @@ export async function POST(request: Request) {
 
         // department_id can be null for global roles
         const finalDeptId = (department_id === "" || department_id === "none") ? null : department_id;
+        const normalizedName = typeof name === "string" && name.trim() ? name.trim() : null;
 
         const newRole = await queryOne(
             `WITH inserted AS (
@@ -97,7 +98,7 @@ export async function POST(request: Request) {
              FROM inserted i
              LEFT JOIN departments d ON i.department_id = d.id
              LEFT JOIN rubric_templates rt ON i.default_template_id = rt.id`,
-            [finalDeptId, role, default_template_id ?? null, name ?? null]
+            [finalDeptId, role, default_template_id ?? null, normalizedName]
         );
 
         return NextResponse.json({ data: newRole }, { status: 201 });
@@ -122,14 +123,15 @@ export async function PUT(request: Request) {
             return NextResponse.json({ error: "Department role ID required" }, { status: 400 });
         }
 
+        const normalizedName = typeof name === "string" ? (name.trim() || null) : undefined;
         const updated = await queryOne(
             `UPDATE department_roles 
              SET default_template_id = COALESCE($1, default_template_id), 
-                 name = COALESCE($2, name),
+                 name = CASE WHEN $2::boolean THEN $3 ELSE name END,
                  updated_at = now()
-             WHERE id = $3
+             WHERE id = $4
              RETURNING *`,
-            [default_template_id ?? null, name ?? null, id]
+            [default_template_id ?? null, name !== undefined, normalizedName ?? null, id]
         );
 
         if (!updated) {

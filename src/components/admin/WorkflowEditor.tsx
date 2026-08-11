@@ -193,6 +193,11 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
     WORKFLOW_TYPES.find(t => t.value === type) ?? WORKFLOW_TYPES[2]!;
 
   const selectedDeptRole = departmentRoles.find(dr => dr.id === selectedDeptRoleId);
+  const getDepartmentRoleLabel = (departmentRole?: DepartmentRole) => {
+    if (!departmentRole) return 'Unknown role';
+    return departmentRole.name?.trim()
+      || `${departmentRole.department_name ?? 'Global'} — ${departmentRole.role}`;
+  };
 
   // ── Dept Role CRUD ──
   const handleCreateDeptRole = async (departmentId: string, role: string) => {
@@ -394,7 +399,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                 <SelectContent className="glass-panel-strong">
                   {departmentRoles.map(dr => (
                     <SelectItem key={dr.id} value={dr.id}>
-                      {dr.name ?? `${dr.department_name ?? 'Global'} — ${dr.role}`}
+                      {getDepartmentRoleLabel(dr)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -450,7 +455,7 @@ export function WorkflowEditor({ departments }: WorkflowEditorProps) {
                 <CardTitle className="text-lg">
                   Workflows for{' '}
                   <Badge variant="secondary" className="ml-1 capitalize">
-                    {selectedDeptRole?.name ?? `${selectedDeptRole?.department_name ?? 'Global'} — ${selectedDeptRole?.role}`}
+                    {getDepartmentRoleLabel(selectedDeptRole)}
                   </Badge>
                 </CardTitle>
                 {/* ✅ Milestone 2: multiple workflows per role are supported */}
