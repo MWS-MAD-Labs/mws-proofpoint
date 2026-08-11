@@ -50,7 +50,12 @@ export async function GET(request: Request) {
                 mp.full_name as manager_name,
                 mp.job_title as manager_job_title,
                 dp.full_name as director_name,
-                dp.job_title as director_job_title
+                dp.job_title as director_job_title,
+                (
+                  SELECT array_agg(role::text ORDER BY role::text)
+                  FROM user_roles
+                  WHERE user_id = a.staff_id
+                ) as staff_roles
          FROM assessments a
          LEFT JOIN rubric_templates rt ON a.template_id = rt.id
          LEFT JOIN profiles sp ON a.staff_id = sp.user_id

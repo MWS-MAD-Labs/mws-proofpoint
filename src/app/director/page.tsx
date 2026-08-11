@@ -503,8 +503,12 @@ function DirectorContent() {
     // 1. status is 'manager_reviewed' (manager already reviewed, director just approves) - approval only
     // 2. status is 'self_submitted' AND workflow is 'review_and_approval' (director does both review and approval)
     const isPendingDirectorReview = assessment?.status === "manager_reviewed" || assessment?.status === "pending_director_review";
+    const isLegacyManagerSelfAppraisal =
+      !assessment?.permissions?.isManagerLed &&
+      assessment?.staff_roles?.some((role) => role.toLowerCase() === "manager");
     const isDirectorReviewMode =
-      assessment?.status === "self_submitted" && isDirectorReviewAndApproval;
+      assessment?.status === "self_submitted" &&
+      (isDirectorReviewAndApproval || isLegacyManagerSelfAppraisal);
     const canEdit = isPendingDirectorReview || isDirectorReviewMode || Boolean(assessment?.permissions?.canDirectorReview);
     const isReadOnly = !canEdit;
 
