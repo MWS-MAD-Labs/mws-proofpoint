@@ -715,6 +715,7 @@ function DirectorContent() {
                   managerOnly={Boolean(assessment?.permissions?.isManagerLed)}
                   directorMode={Boolean(assessment?.permissions?.isManagerLed)}
                   reviewerLabel="Director"
+                  assessmentId={assessment?.id}
                   section={{
                     ...domain,
                     standards: domain.standards.map((s: StandardData) => ({

@@ -33,9 +33,10 @@ interface ReviewComparisonSectionProps {
   managerOnly?: boolean;
   directorMode?: boolean;
   showDirectorComparison?: boolean;
+  assessmentId?: string;
 }
 
-export function ReviewComparisonSection({ section, onIndicatorChange, readonly, reviewerLabel = "Manager", index, managerOnly = false, directorMode = false, showDirectorComparison = false }: ReviewComparisonSectionProps) {
+export function ReviewComparisonSection({ section, onIndicatorChange, readonly, reviewerLabel = "Manager", index, managerOnly = false, directorMode = false, showDirectorComparison = false, assessmentId }: ReviewComparisonSectionProps) {
   const managerScore = average(section, "manager");
   const directorScore = average(section, "director");
   const totalKPIs = section.standards.reduce((total, standard) => total + standard.kpis.length, 0);
@@ -76,6 +77,7 @@ export function ReviewComparisonSection({ section, onIndicatorChange, readonly, 
                     managerOnly={managerOnly}
                     directorMode={directorMode}
                     showDirectorComparison={showDirectorComparison}
+                    assessmentId={assessmentId}
                   />
                 ))}
               </div>

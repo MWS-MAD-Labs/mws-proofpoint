@@ -496,6 +496,7 @@ function ManagerContent() {
                 readonly={isReadOnly}
                 managerOnly={Boolean(assessment?.permissions?.isManagerLed)}
                 showDirectorComparison={Boolean(assessment?.permissions?.isManagerLed && assessment?.director_scores && Object.keys(assessment.director_scores).length > 0)}
+                assessmentId={assessment?.id}
                 section={{
                   ...domain,
                   standards: domain.standards.map((s: StandardData) => ({

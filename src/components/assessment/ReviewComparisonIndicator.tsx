@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { MessageSquarePlus, UserCheck } from "lucide-react";
+import { ExternalLink, FileText, Link, MessageSquare, MessageSquarePlus, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import type { EvidenceItem } from "./EvidenceInput";
 
 
 export interface ReviewIndicatorData {
@@ -33,6 +34,7 @@ interface ReviewComparisonIndicatorProps {
   managerOnly?: boolean;
   directorMode?: boolean;
   showDirectorComparison?: boolean;
+  assessmentId?: string;
 }
 
 const scoreStyles: Record<number, string> = {
@@ -52,6 +54,71 @@ function ScoreBadge({ label, score, changed = false }: { label: string; score: n
   );
 }
 
+function parseEvidence(value: string | unknown[]): EvidenceItem[] {
+  if (typeof value === "string") {
+    return value.trim()
+      ? [{ evidence: value.trim(), name: "Supporting evidence", notes: "", type: "link" }]
+      : [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const item = entry as Partial<EvidenceItem>;
+    const evidence = typeof item.evidence === "string" ? item.evidence.trim() : "";
+    const notes = typeof item.notes === "string" ? item.notes.trim() : "";
+    if (!evidence && !notes) return [];
+
+    return [{
+      evidence,
+      notes,
+      name: typeof item.name === "string" ? item.name.trim() : "",
+      fileName: typeof item.fileName === "string" ? item.fileName.trim() : undefined,
+      type: item.type === "file" ? "file" as const : "link" as const,
+    }];
+  });
+}
+
+function EvidenceList({ label, value, assessmentId }: { label: string; value: string | unknown[]; assessmentId?: string }) {
+  const items = parseEvidence(value);
+  if (items.length === 0) return null;
+
+  return (
+    <div className="space-y-2 rounded-md border bg-background/70 p-3">
+      <p className="text-xs font-semibold text-muted-foreground">{label}</p>
+      <div className="space-y-2">
+        {items.map((item, itemIndex) => {
+          const title = item.name || item.fileName || (item.type === "file" ? "Uploaded file" : "Evidence link");
+          const href = item.type === "file" && assessmentId
+            ? `/api/assessments/${assessmentId}/evidence?url=${encodeURIComponent(item.evidence)}`
+            : item.evidence;
+          return (
+            <div key={`${item.evidence}-${itemIndex}`} className="rounded-md border bg-muted/20 p-2.5">
+              {item.evidence && (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+                >
+                  {item.type === "file" ? <FileText className="h-4 w-4 shrink-0" /> : <Link className="h-4 w-4 shrink-0" />}
+                  <span className="min-w-0 flex-1 truncate">{title}</span>
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                </a>
+              )}
+              {item.notes && (
+                <div className={cn("flex items-start gap-2 text-sm text-muted-foreground", item.evidence && "mt-2 border-t pt-2")}>
+                  <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <p className="whitespace-pre-wrap">{item.notes}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function ReviewComparisonIndicator({
   indicator,
   index,
@@ -62,14 +129,19 @@ export function ReviewComparisonIndicator({
   managerOnly = false,
   directorMode = false,
   showDirectorComparison = false,
+  assessmentId,
 }: ReviewComparisonIndicatorProps) {
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showEvidence, setShowEvidence] = useState(false);
   const activeScore = directorMode ? (indicator.directorScore ?? indicator.managerScore) : indicator.managerScore;
   const hasDirectorProposal = indicator.directorScore !== null && indicator.directorScore !== undefined;
   const scoreChanged = directorMode && hasDirectorProposal && indicator.directorScore !== indicator.managerScore;
   const feedback = directorMode ? indicator.directorEvidence : indicator.managerEvidence;
   const feedbackText = typeof feedback === "string" ? feedback : "";
   const feedbackRequired = directorMode && scoreChanged;
+  const hasStaffEvidence = parseEvidence(indicator.staffEvidence).length > 0;
+  const hasManagerEvidence = parseEvidence(indicator.managerEvidence).length > 0;
+  const hasSupportingEvidence = hasStaffEvidence || hasManagerEvidence;
   const selectedRubricScore = typeof activeScore === "number" ? Math.round(activeScore) : null;
   const selectedRubricDescription = selectedRubricScore
     ? indicator[`rubric_${selectedRubricScore}` as "rubric_1" | "rubric_2" | "rubric_3" | "rubric_4"]
@@ -131,6 +203,12 @@ export function ReviewComparisonIndicator({
       )}
 
       <div className="ml-9 flex flex-wrap items-center gap-2">
+        {hasSupportingEvidence && (
+          <Button type="button" variant="ghost" size="sm" onClick={() => setShowEvidence((value) => !value)} className="h-8 gap-1 px-2 text-xs">
+            <FileText className="h-3.5 w-3.5" />
+            {showEvidence ? "Hide evidence" : "View evidence"}
+          </Button>
+        )}
         {(!directorMode || scoreChanged || feedbackText) && (!readonly || feedbackText) && (
           <Button type="button" variant="ghost" size="sm" onClick={() => setShowFeedback((value) => !value)} className="h-8 gap-1 px-2 text-xs">
             <MessageSquarePlus className="h-3.5 w-3.5" />
@@ -138,6 +216,13 @@ export function ReviewComparisonIndicator({
           </Button>
         )}
       </div>
+
+      {showEvidence && (
+        <div className="ml-9 space-y-2 border-t pt-3">
+          <EvidenceList label="Self-assessment evidence" value={indicator.staffEvidence} assessmentId={assessmentId} />
+          <EvidenceList label="Manager evidence" value={indicator.managerEvidence} assessmentId={assessmentId} />
+        </div>
+      )}
 
       {showFeedback && (
         <div className="w-full border-t pt-3 sm:basis-full">
