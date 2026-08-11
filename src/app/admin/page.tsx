@@ -236,9 +236,12 @@ function AdminContent() {
     const manageRoleAssignment = (departmentId: string | null, role: string) => {
         const assignment = findRoleAssignment(departmentId, role);
         if (!assignment) {
+            const departmentName = departmentId
+                ? departments.find(department => department.id === departmentId)?.name ?? 'this department'
+                : 'the global level';
             toast({
                 title: 'Role configuration unavailable',
-                description: 'Refresh the page and try again.',
+                description: `The ${role} role configuration is missing for ${departmentName}. Apply the latest database migrations, then refresh the page.`,
                 variant: 'destructive',
             });
             return;
