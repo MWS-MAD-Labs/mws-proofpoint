@@ -166,8 +166,8 @@ export async function POST(request: Request) {
 
     const wfId = randomUUID();
     await queryOne(
-      `INSERT INTO workflow_definitions (id, name, type, description, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+      `INSERT INTO workflow_definitions (id, name, type, description)
+       VALUES ($1, $2, $3, $4)`,
       [wfId, name.trim(), type, description?.trim() || null],
     );
 
@@ -177,8 +177,8 @@ export async function POST(request: Request) {
       const s = validatedSteps[i];
       const stepId = randomUUID();
       await queryOne(
-        `INSERT INTO workflow_steps (id, workflow_id, step_order, actor_role, action_type, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
+        `INSERT INTO workflow_steps (id, workflow_id, step_order, actor_role, action_type, description)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           stepId,
           wfId,
@@ -246,7 +246,7 @@ export async function PUT(request: Request) {
 
     await queryOne(
       `UPDATE workflow_definitions
-       SET name = $1, description = $2, updated_at = NOW()
+       SET name = $1, description = $2
        WHERE id = $3`,
       [
         name?.trim() || existing.name,
@@ -273,8 +273,8 @@ export async function PUT(request: Request) {
         const s = validatedSteps[i];
         const stepId = randomUUID();
         await queryOne(
-          `INSERT INTO workflow_steps (id, workflow_id, step_order, actor_role, action_type, description, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
+          `INSERT INTO workflow_steps (id, workflow_id, step_order, actor_role, action_type, description)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             stepId,
             id,
