@@ -10,6 +10,7 @@ export interface UserNotificationPreference {
   adminReleased: boolean;
   assessmentReturned: boolean;
   assessmentAcknowledged: boolean;
+  observationUpdates: boolean;
 }
 
 type PreferenceKey = keyof Omit<UserNotificationPreference, 'userId'>;
@@ -22,6 +23,7 @@ const COLUMN_MAP: Record<PreferenceKey, string> = {
   adminReleased: 'admin_released',
   assessmentReturned: 'assessment_returned',
   assessmentAcknowledged: 'assessment_acknowledged',
+  observationUpdates: 'observation_updates',
 };
 
 const DEFAULT_PREFERENCES: Omit<UserNotificationPreference, 'userId'> = {
@@ -32,6 +34,7 @@ const DEFAULT_PREFERENCES: Omit<UserNotificationPreference, 'userId'> = {
   adminReleased: true,
   assessmentReturned: true,
   assessmentAcknowledged: true,
+  observationUpdates: true,
 };
 
 export async function getUserNotificationPreference(
@@ -46,7 +49,8 @@ export async function getUserNotificationPreference(
       COALESCE(director_approved, true) AS "directorApproved",
       COALESCE(admin_released, true) AS "adminReleased",
       COALESCE(assessment_returned, true) AS "assessmentReturned",
-      COALESCE(assessment_acknowledged, true) AS "assessmentAcknowledged"
+      COALESCE(assessment_acknowledged, true) AS "assessmentAcknowledged",
+      COALESCE(observation_updates, true) AS "observationUpdates"
      FROM notification_preferences
      WHERE user_id = $1`,
     [userId],
@@ -57,6 +61,13 @@ export async function getUserNotificationPreference(
   }
 
   return pref;
+}
+
+export async function isObservationNotificationEnabled(
+  userId: string,
+): Promise<boolean> {
+  const pref = await getUserNotificationPreference(userId);
+  return pref.emailEnabled && pref.observationUpdates;
 }
 
 export async function isNotificationEnabled(

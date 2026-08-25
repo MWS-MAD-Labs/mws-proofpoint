@@ -93,6 +93,9 @@ export async function PATCH(
              submitted_at = NULL,
              acknowledged_at = NULL,
              acknowledgement_response = NULL,
+             acknowledgement_method = NULL,
+             acknowledgement_note = NULL,
+             acknowledgement_automation_started_at = NULL,
              updated_at = NOW()
          WHERE id = $1 AND status = $2
          RETURNING id`,
@@ -131,6 +134,7 @@ export async function PATCH(
     if (observation.managerEmail) {
       notifications.push(
         notifyManagerObservationReopened(
+          observation.managerId!,
           observation.managerEmail,
           managerName,
           staffName,

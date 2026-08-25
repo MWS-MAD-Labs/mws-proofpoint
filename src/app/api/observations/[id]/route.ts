@@ -37,6 +37,8 @@ interface ObservationRow {
   submittedAt: Date | string | null;
   acknowledgedAt: Date | string | null;
   acknowledgementResponse: string | null;
+  acknowledgementMethod: "personal" | "automatic" | null;
+  acknowledgementNote: string | null;
   staffEmail: string | null;
   staffName: string | null;
   staffDepartmentId: string | null;
@@ -305,6 +307,7 @@ export async function PATCH(
       await Promise.all([
         observation.managerEmail
           ? notifyObservationReassigned(
+              observation.managerId!,
               observation.managerEmail,
               observation.managerName ?? observation.managerEmail,
               staffName,
@@ -314,6 +317,7 @@ export async function PATCH(
             ).catch((error: unknown) => console.error("Old manager notification error:", error))
           : Promise.resolve(),
         notifyObservationReassigned(
+          newManager.id,
           newManager.email,
           newManager.fullName ?? newManager.email,
           staffName,
@@ -432,6 +436,8 @@ export async function GET(
          o.submitted_at    AS "submittedAt",
          o.acknowledged_at AS "acknowledgedAt",
          o.acknowledgement_response AS "acknowledgementResponse",
+         o.acknowledgement_method AS "acknowledgementMethod",
+         o.acknowledgement_note AS "acknowledgementNote",
          su.email          AS "staffEmail",
          sp.full_name      AS "staffName",
          sp.department_id  AS "staffDepartmentId",
@@ -644,6 +650,8 @@ export async function GET(
       submittedAt: serializeNullableDate(observation.submittedAt),
       acknowledgedAt: serializeNullableDate(observation.acknowledgedAt),
       acknowledgementResponse: observation.acknowledgementResponse,
+      acknowledgementMethod: observation.acknowledgementMethod,
+      acknowledgementNote: observation.acknowledgementNote,
       staff: {
         id: observation.staffId,
         email: observation.staffEmail ?? "",

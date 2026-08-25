@@ -9,6 +9,10 @@ import {
 } from "./validation";
 import type { ObservationIndicatorForProgress } from "../types";
 import {
+  getObservationReminderPeriod,
+  isAutomaticAcknowledgementDue,
+} from "./acknowledgementAutomationConfig";
+import {
   observationReopenSchema,
   parseObservationListQuery,
 } from "../schemas";
@@ -31,6 +35,45 @@ import {
 } from "../api/queries";
 
 const draft = { status: "draft" as const, staffId: "staff", managerId: "manager" };
+
+test("acknowledgement automation uses the configured reminder cadence", () => {
+  const submitted = new Date("2026-08-01T00:00:00.000Z");
+  assert.equal(
+    getObservationReminderPeriod(
+      submitted,
+      new Date("2026-08-03T23:59:59.999Z"),
+    ),
+    null,
+  );
+  assert.equal(
+    getObservationReminderPeriod(
+      submitted,
+      new Date("2026-08-04T00:00:00.000Z"),
+    ),
+    0,
+  );
+  assert.equal(
+    getObservationReminderPeriod(
+      submitted,
+      new Date("2026-08-06T00:00:00.000Z"),
+    ),
+    1,
+  );
+  assert.equal(
+    isAutomaticAcknowledgementDue(
+      submitted,
+      new Date("2026-08-30T23:59:59.999Z"),
+    ),
+    false,
+  );
+  assert.equal(
+    isAutomaticAcknowledgementDue(
+      submitted,
+      new Date("2026-08-31T00:00:00.000Z"),
+    ),
+    true,
+  );
+});
 
 test("draft responses are hidden from staff and directors", () => {
   assert.equal(

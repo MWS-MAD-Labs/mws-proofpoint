@@ -46,6 +46,11 @@ services:
       SMTP_SECURE: ${SMTP_SECURE:-true}
       SMTP_USER: ${SMTP_USER}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
+      # Observation acknowledgement automation
+      CRON_SECRET: ${CRON_SECRET:?CRON_SECRET is required}
+      OBSERVATION_ACK_FIRST_REMINDER_DAYS: ${OBSERVATION_ACK_FIRST_REMINDER_DAYS:-3}
+      OBSERVATION_ACK_REMINDER_INTERVAL_DAYS: ${OBSERVATION_ACK_REMINDER_INTERVAL_DAYS:-2}
+      OBSERVATION_AUTO_ACK_DAYS: ${OBSERVATION_AUTO_ACK_DAYS:-30}
     ports:
       - "3060:3000"
     healthcheck:
@@ -60,6 +65,24 @@ services:
       timeout: 10s
       start_period: 40s
       retries: 3
+
+  # ============================================
+  # Observation acknowledgement scheduler
+  # ============================================
+  observation-automation:
+    image: curlimages/curl:8.12.1
+    container_name: proofpoint-observation-automation
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?CRON_SECRET is required}
+    command: >-
+      /bin/sh -c 'while true; do curl --fail --silent --show-error -X POST
+      -H "Authorization: Bearer $${CRON_SECRET}"
+      http://app:3000/api/cron/observation-acknowledgements;
+      sleep 3600; done'
 
   # ============================================
   # PostgreSQL Database

@@ -334,7 +334,11 @@ export function ObservationDetailReport({
               />
               <Metadata
                 label="Acknowledged"
-                value={observation.acknowledgedAt ? formatExactDate(observation.acknowledgedAt) : "Not acknowledged"}
+                value={
+                  observation.acknowledgedAt
+                    ? `${formatExactDate(observation.acknowledgedAt)} (${observation.acknowledgementMethod === "automatic" ? "automatic" : "personal"})`
+                    : "Not acknowledged"
+                }
               />
               <Metadata
                 label="Last reopened"
@@ -342,6 +346,23 @@ export function ObservationDetailReport({
               />
             </CardContent>
           </Card>
+
+          {observation.acknowledgementMethod === "automatic" && (
+            <Card className="border-warning/40 bg-warning-soft/40">
+              <CardHeader>
+                <CardTitle>Automatic acknowledgement</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm leading-6">
+                <p className="font-medium">
+                  The staff member did not personally acknowledge this observation.
+                </p>
+                <p>
+                  {observation.acknowledgementNote ??
+                    "This observation was automatically acknowledged because the response deadline passed."}
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {observation.acknowledgementResponse && (
             <Card>
@@ -353,7 +374,7 @@ export function ObservationDetailReport({
                   {observation.acknowledgementResponse}
                 </p>
                 <p className="mt-3 text-xs text-muted-foreground">
-                  By {personName(observation.staff, "Unknown staff")}
+                  Personally acknowledged by {personName(observation.staff, "Unknown staff")}
                 </p>
               </CardContent>
             </Card>
@@ -759,7 +780,8 @@ function personName(person: { email: string; profile: { fullName: string | null 
 function activityTitle(eventType: string, status: ObservationStatus): string {
   if (eventType === "created") return "Observation created";
   if (eventType === "submitted") return "Observation submitted";
-  if (eventType === "acknowledged") return "Observation acknowledged";
+  if (eventType === "acknowledged") return "Observation personally acknowledged";
+  if (eventType === "automatic_acknowledged") return "Observation automatically acknowledged";
   if (eventType === "reopened") return "Observation reopened";
   return `Status changed to ${OBSERVATION_STATUS[status].label.toLowerCase()}`;
 }

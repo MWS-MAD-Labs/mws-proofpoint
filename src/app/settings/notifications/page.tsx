@@ -20,6 +20,7 @@ interface NotificationPreferences {
   adminReleased: boolean;
   assessmentReturned: boolean;
   assessmentAcknowledged: boolean;
+  observationUpdates: boolean;
 }
 
 export default function NotificationPreferencesPage() {
@@ -32,6 +33,7 @@ export default function NotificationPreferencesPage() {
     adminReleased: true,
     assessmentReturned: true,
     assessmentAcknowledged: true,
+    observationUpdates: true,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -182,6 +184,16 @@ export default function NotificationPreferencesPage() {
               checked={preferences.assessmentAcknowledged}
               onChange={(checked) =>
                 updatePreference("assessmentAcknowledged", checked)
+              }
+              disabled={!preferences.emailEnabled}
+            />
+
+            <PreferenceRow
+              label="Observation Updates"
+              description="Observation assignments, submissions, reminders, reopenings, and acknowledgements"
+              checked={preferences.observationUpdates}
+              onChange={(checked) =>
+                updatePreference("observationUpdates", checked)
               }
               disabled={!preferences.emailEnabled}
             />

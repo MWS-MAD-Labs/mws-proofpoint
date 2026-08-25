@@ -24,7 +24,10 @@ interface SubmitObservationRow {
   status: ObservationStatus;
   staffEmail: string;
   staffName: string | null;
+  managerName: string | null;
+  managerEmail: string | null;
   rubricName: string | null;
+  title: string | null;
 }
 
 interface SubmitIndicatorRow {
@@ -87,10 +90,15 @@ export async function PATCH(
          o.status,
          su.email AS "staffEmail",
          sp.full_name AS "staffName",
-         rt.name AS "rubricName"
+         mu.email AS "managerEmail",
+         mp.full_name AS "managerName",
+         rt.name AS "rubricName",
+         o.title
        FROM observations o
        JOIN users su ON su.id = o."staffId"
        LEFT JOIN profiles sp ON sp.user_id = su.id
+       LEFT JOIN users mu ON mu.id = o."managerId"
+       LEFT JOIN profiles mp ON mp.user_id = mu.id
        LEFT JOIN rubric_templates rt ON rt.id = o.template_id
        WHERE o.id = $1`,
       [id],
@@ -181,6 +189,9 @@ export async function PATCH(
              submitted_at = NOW(),
              acknowledged_at = NULL,
              acknowledgement_response = NULL,
+             acknowledgement_method = NULL,
+             acknowledgement_note = NULL,
+             acknowledgement_automation_started_at = NOW(),
              updated_at = NOW()
          WHERE id = $1 AND status = 'draft'
          RETURNING
@@ -215,9 +226,11 @@ export async function PATCH(
 
     // Notify staff
     await notifyObservationSubmitted(
+      observation.staffId,
       observation.staffEmail,
       observation.staffName ?? observation.staffEmail,
-      observation.rubricName ?? "Observation",
+      observation.managerName ?? observation.managerEmail ?? "Observer",
+      observation.title?.trim() || observation.rubricName || "Observation",
       id,
     ).catch((err: unknown) => console.error("Submit notification error:", err));
 

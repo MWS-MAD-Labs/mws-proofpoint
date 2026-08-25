@@ -32,6 +32,14 @@ interface AcknowledgeObservationRow {
   managerEmail: string | null;
   managerName: string | null;
   rubricName: string | null;
+  title: string | null;
+  acknowledgementMethod: "personal" | "automatic" | null;
+  acknowledgementNote: string | null;
+}
+
+interface LockedAcknowledgementRow {
+  status: ObservationStatus;
+  acknowledgementMethod: "personal" | "automatic" | null;
 }
 
 interface AcknowledgedObservationRow {
@@ -43,6 +51,7 @@ interface AcknowledgedObservationRow {
 }
 
 interface AdminEmailRow {
+  id: string;
   email: string;
 }
 
@@ -76,11 +85,14 @@ export async function PATCH(
          o.status,
          o.acknowledged_at AS "acknowledgedAt",
          o.acknowledgement_response AS "acknowledgementResponse",
+         o.acknowledgement_method AS "acknowledgementMethod",
+         o.acknowledgement_note AS "acknowledgementNote",
          su.email AS "staffEmail",
          sp.full_name AS "staffName",
          mu.email AS "managerEmail",
          mp.full_name AS "managerName",
-         rt.name AS "rubricName"
+         rt.name AS "rubricName",
+         o.title
        FROM observations o
        JOIN users su ON su.id = o."staffId"
        LEFT JOIN profiles sp ON sp.user_id = su.id
@@ -109,6 +121,7 @@ export async function PATCH(
 
     if (
       observation.status === "acknowledged" &&
+      observation.acknowledgementMethod !== "automatic" &&
       String(observation.staffId) === String(userId)
     ) {
       return NextResponse.json({
@@ -120,10 +133,17 @@ export async function PATCH(
         staffId: observation.staffId,
         managerId: observation.managerId,
         acknowledgementResponse: observation.acknowledgementResponse,
+        acknowledgementMethod: observation.acknowledgementMethod,
+        acknowledgementNote: observation.acknowledgementNote,
       });
     }
 
-    if (!permissions.canAcknowledge)
+    const canReplaceAutomaticAcknowledgement =
+      observation.status === "acknowledged" &&
+      observation.acknowledgementMethod === "automatic" &&
+      String(observation.staffId) === String(userId);
+
+    if (!permissions.canAcknowledge && !canReplaceAutomaticAcknowledgement)
       return NextResponse.json(
         {
           error:
@@ -147,19 +167,41 @@ export async function PATCH(
       );
     }
 
-    assertObservationTransition("submitted", "acknowledged");
+    if (observation.status === "submitted") {
+      assertObservationTransition("submitted", "acknowledged");
+    }
 
     const client = await pool.connect();
     let updated: AcknowledgedObservationRow;
     try {
       await client.query("BEGIN");
+      const lockResult = await client.query<LockedAcknowledgementRow>(
+        `SELECT
+           status,
+           acknowledgement_method AS "acknowledgementMethod"
+         FROM observations
+         WHERE id = $1
+         FOR UPDATE`,
+        [id],
+      );
+      const locked = lockResult.rows[0];
+      const canPersonallyAcknowledge =
+        locked?.status === "submitted" ||
+        (locked?.status === "acknowledged" &&
+          locked.acknowledgementMethod === "automatic");
+      if (!canPersonallyAcknowledge) {
+        throw new Error("Observation status changed before acknowledgement.");
+      }
+
       const updateResult = await client.query<AcknowledgedObservationRow>(
         `UPDATE observations
          SET status = 'acknowledged',
              acknowledged_at = NOW(),
              acknowledgement_response = $2,
+             acknowledgement_method = 'personal',
+             acknowledgement_note = NULL,
              updated_at = NOW()
-         WHERE id = $1 AND status = 'submitted'
+         WHERE id = $1
          RETURNING
            id,
            status,
@@ -175,11 +217,12 @@ export async function PATCH(
       await client.query(
         `INSERT INTO observation_updates
            (id, observation_id, updated_by_id, status_from, status_to, event_type, notes, created_at)
-         VALUES ($1, $2, $3, 'submitted', 'acknowledged', 'acknowledged', $4, NOW())`,
+         VALUES ($1, $2, $3, $4, 'acknowledged', 'acknowledged', $5, NOW())`,
         [
           randomUUID(),
           id,
           userId,
+          locked.status,
           acknowledgementResponse,
         ],
       );
@@ -194,10 +237,11 @@ export async function PATCH(
     // AC: Notify the assigned observer
     if (observation.managerEmail) {
       await notifyManagerObservationAcknowledged(
+        observation.managerId!,
         observation.managerEmail,
         observation.staffName ?? observation.staffEmail ?? "Staff",
         observation.managerName ?? observation.managerEmail ?? "Observer",
-        observation.rubricName ?? "Observation",
+        observation.title?.trim() || observation.rubricName || "Observation",
         id,
       ).catch((err: unknown) =>
         console.error("[acknowledge] manager notify error:", err),
@@ -206,7 +250,7 @@ export async function PATCH(
 
     // Also notify admins (skip if manager is also admin to avoid duplicate)
     const adminUsers = await query<AdminEmailRow>(
-      `SELECT u.email FROM users u
+      `SELECT u.id, u.email FROM users u
        JOIN user_roles ur ON ur.user_id = u.id
        WHERE ur.role = 'admin' AND u.status = 'active'
        LIMIT 3`,
@@ -215,10 +259,11 @@ export async function PATCH(
     for (const adminUser of adminUsers) {
       if (adminUser.email && adminUser.email !== observation.managerEmail) {
         await notifyObservationAcknowledged(
+          adminUser.id,
           adminUser.email,
           observation.staffName ?? observation.staffEmail ?? "Staff",
           observation.managerName ?? observation.managerEmail ?? "Observer",
-          observation.rubricName ?? "Observation",
+          observation.title?.trim() || observation.rubricName || "Observation",
           id,
         ).catch((err: unknown) =>
           console.error("[acknowledge] admin notify error:", err),
@@ -233,6 +278,8 @@ export async function PATCH(
       staffId: updated.staffId,
       managerId: updated.managerId,
       acknowledgementResponse,
+      acknowledgementMethod: "personal",
+      acknowledgementNote: null,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

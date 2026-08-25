@@ -16,6 +16,7 @@ const PREFERENCE_KEYS: Array<keyof PreferenceUpdates> = [
   "adminReleased",
   "assessmentReturned",
   "assessmentAcknowledged",
+  "observationUpdates",
 ];
 
 function toApiShape(
@@ -29,6 +30,7 @@ function toApiShape(
     adminReleased: preferences.adminReleased,
     assessmentReturned: preferences.assessmentReturned,
     assessmentAcknowledged: preferences.assessmentAcknowledged,
+    observationUpdates: preferences.observationUpdates,
   };
 }
 

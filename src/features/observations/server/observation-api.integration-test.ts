@@ -29,6 +29,7 @@ import {
   queryObservationList,
   queryObservationSummary,
 } from "./queries";
+import { processObservationAcknowledgementAutomation } from "./processAcknowledgementAutomation";
 
 interface Fixture {
   prefix: string;
@@ -271,6 +272,39 @@ async function cleanupFixture(fixture: Fixture): Promise<void> {
   await query(`DELETE FROM departments WHERE id::text = ANY($1::text[])`, [
     [fixture.departmentAId, fixture.departmentBId],
   ]);
+}
+
+async function insertAutomationObservation(
+  fixture: Fixture,
+  input: {
+    submittedAt: Date;
+    automationStartedAt?: Date;
+    status?: "draft" | "submitted" | "acknowledged";
+    acknowledgedAt?: Date | null;
+  },
+): Promise<string> {
+  const id = randomUUID();
+  fixture.observationIds.push(id);
+  await query(
+    `INSERT INTO observations
+       (id, "staffId", "managerId", template_id, status, type, title, description,
+        created_at, updated_at, submitted_at, acknowledged_at,
+        acknowledgement_automation_started_at)
+     VALUES ($1, $2, $3, $4, $5, 'MANAGER', $6, 'Automation integration fixture',
+             NOW(), NOW(), $7, $8, $9)`,
+    [
+      id,
+      fixture.staffA.id,
+      fixture.managerA.id,
+      fixture.rubricId,
+      input.status ?? "submitted",
+      `${fixture.prefix}-automation-${id}`,
+      input.submittedAt,
+      input.acknowledgedAt ?? null,
+      input.automationStartedAt ?? input.submittedAt,
+    ],
+  );
+  return id;
 }
 
 function assertCountDelta(
@@ -1140,6 +1174,233 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
   } finally {
     setObservationTestActor(null);
     if (fixture) await cleanupWorkflowFixture(fixture);
+  }
+});
+
+test("acknowledgement automation is idempotent, retryable, and guarded by submission state", async () => {
+  let fixture: Fixture | null = null;
+  try {
+    fixture = await insertFixture();
+    const now = new Date("2026-08-10T12:00:00.000Z");
+    const reminderStartedAt = new Date("2026-08-06T12:00:00.000Z");
+
+    const reminderId = await insertAutomationObservation(fixture, {
+      submittedAt: reminderStartedAt,
+    });
+    let reminderDeliveries = 0;
+    const sendReminder = async () => {
+      reminderDeliveries += 1;
+      return { success: true };
+    };
+    const firstRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [reminderId],
+      sendReminder,
+    });
+    const duplicateRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [reminderId],
+      sendReminder,
+    });
+    assert.equal(firstRun.remindersSent, 1);
+    assert.equal(duplicateRun.remindersSkipped, 1);
+    assert.equal(reminderDeliveries, 1);
+    assert.equal(
+      await queryOne<{ count: number }>(
+        `SELECT COUNT(*)::int AS count
+         FROM observation_acknowledgement_reminders
+         WHERE observation_id = $1 AND status = 'sent'`,
+        [reminderId],
+      ).then((row) => row?.count),
+      1,
+    );
+
+    const retryId = await insertAutomationObservation(fixture, {
+      submittedAt: reminderStartedAt,
+    });
+    let retryAttempts = 0;
+    const retryNotifier = async () => {
+      retryAttempts += 1;
+      return retryAttempts === 1
+        ? { success: false, error: "temporary SMTP failure" }
+        : { success: true };
+    };
+    const failedRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [retryId],
+      sendReminder: retryNotifier,
+    });
+    const retryRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [retryId],
+      sendReminder: retryNotifier,
+    });
+    assert.equal(failedRun.errors, 1);
+    assert.equal(retryRun.remindersSent, 1);
+    assert.equal(retryAttempts, 2);
+    assert.equal(
+      await queryOne<{ status: string; error: string | null }>(
+        `SELECT status, error
+         FROM observation_acknowledgement_reminders
+         WHERE observation_id = $1`,
+        [retryId],
+      ).then((row) => row?.status),
+      "sent",
+    );
+
+    const resubmittedId = await insertAutomationObservation(fixture, {
+      submittedAt: reminderStartedAt,
+    });
+    let staleDeliveryAttempted = false;
+    const resubmittedRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [resubmittedId],
+      afterReminderClaim: async (observationId) => {
+        await query(
+          `UPDATE observations
+           SET submitted_at = $2, acknowledgement_automation_started_at = $2
+           WHERE id = $1`,
+          [observationId, now],
+        );
+      },
+      sendReminder: async () => {
+        staleDeliveryAttempted = true;
+        return { success: true };
+      },
+    });
+    assert.equal(resubmittedRun.remindersSkipped, 1);
+    assert.equal(staleDeliveryAttempted, false);
+    assert.equal(
+      await queryOne<{ status: string }>(
+        `SELECT status
+         FROM observation_acknowledgement_reminders
+         WHERE observation_id = $1`,
+        [resubmittedId],
+      ).then((row) => row?.status),
+      "skipped",
+    );
+
+    const acknowledgedId = await insertAutomationObservation(fixture, {
+      submittedAt: reminderStartedAt,
+    });
+    let postAcknowledgementDelivery = false;
+    const acknowledgedRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [acknowledgedId],
+      afterReminderClaim: async (observationId) => {
+        await query(
+          `UPDATE observations
+           SET status = 'acknowledged', acknowledged_at = $2,
+               acknowledgement_method = 'personal'
+           WHERE id = $1`,
+          [observationId, now],
+        );
+      },
+      sendReminder: async () => {
+        postAcknowledgementDelivery = true;
+        return { success: true };
+      },
+    });
+    assert.equal(acknowledgedRun.remindersSkipped, 1);
+    assert.equal(postAcknowledgementDelivery, false);
+  } finally {
+    if (fixture) await cleanupFixture(fixture);
+  }
+});
+
+test("acknowledgement automation auto-acknowledges once and respects suppressed observation email preferences", async () => {
+  let fixture: Fixture | null = null;
+  try {
+    fixture = await insertFixture();
+    const now = new Date("2026-09-15T12:00:00.000Z");
+    const overdueSubmission = new Date("2026-08-15T12:00:00.000Z");
+    const automaticId = await insertAutomationObservation(fixture, {
+      submittedAt: overdueSubmission,
+    });
+    let automaticNotifications = 0;
+    const automaticNotifier = async () => {
+      automaticNotifications += 1;
+      return { success: true };
+    };
+    const firstRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [automaticId],
+      sendAutomaticAcknowledgement: automaticNotifier,
+    });
+    const secondRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [automaticId],
+      sendAutomaticAcknowledgement: automaticNotifier,
+    });
+    assert.equal(firstRun.automaticallyAcknowledged, 1);
+    assert.equal(secondRun.checked, 0);
+    assert.equal(automaticNotifications, 2);
+    const automaticObservation = await queryOne<{
+      status: string;
+      method: string | null;
+      acknowledgedAt: Date | null;
+    }>(
+      `SELECT status, acknowledgement_method AS method,
+              acknowledged_at AS "acknowledgedAt"
+       FROM observations WHERE id = $1`,
+      [automaticId],
+    );
+    assert.equal(automaticObservation?.status, "acknowledged");
+    assert.equal(automaticObservation?.method, "automatic");
+    assert.ok(automaticObservation?.acknowledgedAt);
+    assert.equal(
+      await queryOne<{ count: number }>(
+        `SELECT COUNT(*)::int AS count FROM observation_updates
+         WHERE observation_id = $1 AND event_type = 'automatic_acknowledged'`,
+        [automaticId],
+      ).then((row) => row?.count),
+      1,
+    );
+
+    const ineligibleAutomaticId = await insertAutomationObservation(fixture, {
+      submittedAt: overdueSubmission,
+    });
+    let ineligibleNotificationAttempted = false;
+    const ineligibleRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [ineligibleAutomaticId],
+      beforeAutomaticAcknowledgement: async (observationId) => {
+        await query(
+          `UPDATE observations
+           SET status = 'draft', acknowledgement_automation_started_at = NULL
+           WHERE id = $1`,
+          [observationId],
+        );
+      },
+      sendAutomaticAcknowledgement: async () => {
+        ineligibleNotificationAttempted = true;
+        return { success: true };
+      },
+    });
+    assert.equal(ineligibleRun.automaticAcknowledgementsSkipped, 1);
+    assert.equal(ineligibleNotificationAttempted, false);
+    assert.equal(
+      await queryOne<{ status: string }>(
+        `SELECT status FROM observations WHERE id = $1`,
+        [ineligibleAutomaticId],
+      ).then((row) => row?.status),
+      "draft",
+    );
+
+    const preferenceId = await insertAutomationObservation(fixture, {
+      submittedAt: new Date("2026-09-11T12:00:00.000Z"),
+    });
+    await query(
+      `INSERT INTO notification_preferences (user_id, email_enabled, observation_updates)
+       VALUES ($1, true, false)
+       ON CONFLICT (user_id) DO UPDATE SET observation_updates = false`,
+      [fixture.staffA.id],
+    );
+    const preferenceRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [preferenceId],
+    });
+    assert.equal(preferenceRun.remindersSent, 1);
+    assert.equal(
+      await queryOne<{ status: string }>(
+        `SELECT status FROM observation_acknowledgement_reminders
+         WHERE observation_id = $1`,
+        [preferenceId],
+      ).then((row) => row?.status),
+      "sent",
+    );
+  } finally {
+    if (fixture) await cleanupFixture(fixture);
   }
 });
 

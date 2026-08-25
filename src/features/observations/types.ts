@@ -207,6 +207,8 @@ export interface ObservationDetail {
   submittedAt: string | null;
   acknowledgedAt: string | null;
   acknowledgementResponse: string | null;
+  acknowledgementMethod: "personal" | "automatic" | null;
+  acknowledgementNote: string | null;
   staff: ObservationDetailPerson | null;
   manager: ObservationDetailPerson | null;
   rubric: {

@@ -58,6 +58,8 @@ See the [v0.2.0 release notes](https://github.com/MWS-MAD-Labs/mws-proofpoint/re
 - Reopen, reassignment, submission, and acknowledgement lifecycle controls.
 - Role-scoped lists, search, summary counts, filters, and pagination.
 - Notification support for observation lifecycle events.
+- Configurable acknowledgement reminders after 3 days and every 2 days thereafter.
+- Automatic acknowledgement after 30 days, with explicit personal-versus-automatic history and notifications.
 
 ### Organization and administration
 
@@ -177,6 +179,15 @@ Important authorization rules include:
    POSTGRES_PASSWORD
    MINIO_ACCESS_KEY
    MINIO_SECRET_KEY
+   CRON_SECRET
+   ```
+
+   Observation acknowledgement timing can optionally be changed with:
+
+   ```text
+   OBSERVATION_ACK_FIRST_REMINDER_DAYS
+   OBSERVATION_ACK_REMINDER_INTERVAL_DAYS
+   OBSERVATION_AUTO_ACK_DAYS
    ```
 
    Google authentication additionally requires:
@@ -261,6 +272,8 @@ flowchart TD
 
 The application container runs `prisma migrate deploy` before starting Next.js. If migrations fail, application startup stops instead of serving code against an incompatible schema.
 
+The Compose deployment also runs an hourly observation acknowledgement scheduler. It calls the protected `/api/cron/observation-acknowledgements` endpoint using `CRON_SECRET`. Deployments that do not use the provided Compose configuration must configure an equivalent hourly scheduled request. See the [observation acknowledgement automation runbook](./docs/operations/observation-acknowledgement-automation.md).
+
 ### Deployment verification
 
 After deployment, verify:
@@ -304,6 +317,7 @@ At `v0.2.0` release time:
 - [UX task and validation record](./docs/specs/appraisal-observation-and-department-ux-tasks.md)
 - [Strategic planning specification](./docs/specs/strategic-planning.md)
 - [Production data migration runbook](./docs/operations/production-data-migration.md)
+- [Observation acknowledgement automation runbook](./docs/operations/observation-acknowledgement-automation.md)
 
 ## Release versioning
 
