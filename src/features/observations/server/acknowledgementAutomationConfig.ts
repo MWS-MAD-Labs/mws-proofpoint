@@ -1,4 +1,4 @@
-function positiveInteger(value: string | undefined, fallback: number): number {
+export function positiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }

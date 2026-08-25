@@ -11,7 +11,9 @@ import type { ObservationIndicatorForProgress } from "../types";
 import {
   getObservationReminderPeriod,
   isAutomaticAcknowledgementDue,
+  positiveInteger,
 } from "./acknowledgementAutomationConfig";
+import { getObservationSchedulerConfig } from "./observationAcknowledgementScheduler";
 import {
   observationReopenSchema,
   parseObservationListQuery,
@@ -35,6 +37,31 @@ import {
 } from "../api/queries";
 
 const draft = { status: "draft" as const, staffId: "staff", managerId: "manager" };
+
+test("scheduler configuration uses safe defaults and positive overrides", () => {
+  assert.equal(positiveInteger(undefined, 7), 7);
+  assert.equal(positiveInteger("0", 7), 7);
+  assert.equal(positiveInteger("invalid", 7), 7);
+  assert.equal(positiveInteger("12", 7), 12);
+
+  assert.deepEqual(getObservationSchedulerConfig({}), {
+    enabled: true,
+    intervalMs: 60 * 60 * 1000,
+    initialDelayMs: 30 * 1000,
+  });
+  assert.deepEqual(
+    getObservationSchedulerConfig({
+      OBSERVATION_ACK_SCHEDULER_ENABLED: "false",
+      OBSERVATION_ACK_SCHEDULER_INTERVAL_MINUTES: "15",
+      OBSERVATION_ACK_SCHEDULER_INITIAL_DELAY_SECONDS: "5",
+    }),
+    {
+      enabled: false,
+      intervalMs: 15 * 60 * 1000,
+      initialDelayMs: 5 * 1000,
+    },
+  );
+});
 
 test("acknowledgement automation uses the configured reminder cadence", () => {
   const submitted = new Date("2026-08-01T00:00:00.000Z");

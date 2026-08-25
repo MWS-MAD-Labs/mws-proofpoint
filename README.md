@@ -179,12 +179,14 @@ Important authorization rules include:
    POSTGRES_PASSWORD
    MINIO_ACCESS_KEY
    MINIO_SECRET_KEY
-   CRON_SECRET
    ```
 
    Observation acknowledgement timing can optionally be changed with:
 
    ```text
+   OBSERVATION_ACK_SCHEDULER_ENABLED
+   OBSERVATION_ACK_SCHEDULER_INTERVAL_MINUTES
+   OBSERVATION_ACK_SCHEDULER_INITIAL_DELAY_SECONDS
    OBSERVATION_ACK_FIRST_REMINDER_DAYS
    OBSERVATION_ACK_REMINDER_INTERVAL_DAYS
    OBSERVATION_AUTO_ACK_DAYS
@@ -272,7 +274,7 @@ flowchart TD
 
 The application container runs `prisma migrate deploy` before starting Next.js. If migrations fail, application startup stops instead of serving code against an incompatible schema.
 
-The Compose deployment also runs an hourly observation acknowledgement scheduler. It calls the protected `/api/cron/observation-acknowledgements` endpoint using `CRON_SECRET`. Deployments that do not use the provided Compose configuration must configure an equivalent hourly scheduled request. See the [observation acknowledgement automation runbook](./docs/operations/observation-acknowledgement-automation.md).
+The long-lived Next.js Node process starts the observation acknowledgement scheduler through `src/instrumentation.ts`. It runs shortly after application startup and hourly thereafter by default. PostgreSQL advisory locking ensures that only one application replica processes a scheduler cycle. See the [observation acknowledgement automation runbook](./docs/operations/observation-acknowledgement-automation.md).
 
 ### Deployment verification
 

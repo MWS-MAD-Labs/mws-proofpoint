@@ -30,6 +30,10 @@ import {
   queryObservationSummary,
 } from "./queries";
 import { processObservationAcknowledgementAutomation } from "./processAcknowledgementAutomation";
+import {
+  OBSERVATION_SCHEDULER_ADVISORY_LOCK,
+  runObservationAcknowledgementSchedulerOnce,
+} from "./observationAcknowledgementScheduler";
 
 interface Fixture {
   prefix: string;
@@ -1174,6 +1178,41 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
   } finally {
     setObservationTestActor(null);
     if (fixture) await cleanupWorkflowFixture(fixture);
+  }
+});
+
+test("observation scheduler skips processing when another replica holds the advisory lock", async () => {
+  const lockClient = await pool.connect();
+  let processorCalled = false;
+  try {
+    const lock = await lockClient.query<{ acquired: boolean }>(
+      `SELECT pg_try_advisory_lock($1, $2) AS acquired`,
+      [
+        OBSERVATION_SCHEDULER_ADVISORY_LOCK.namespace,
+        OBSERVATION_SCHEDULER_ADVISORY_LOCK.key,
+      ],
+    );
+    assert.equal(lock.rows[0]?.acquired, true);
+
+    const result = await runObservationAcknowledgementSchedulerOnce(async () => {
+      processorCalled = true;
+      return {
+        checked: 0,
+        remindersSent: 0,
+        remindersSkipped: 0,
+        automaticallyAcknowledged: 0,
+        automaticAcknowledgementsSkipped: 0,
+        errors: 0,
+      };
+    });
+    assert.equal(result, "skipped");
+    assert.equal(processorCalled, false);
+  } finally {
+    await lockClient.query(`SELECT pg_advisory_unlock($1, $2)`, [
+      OBSERVATION_SCHEDULER_ADVISORY_LOCK.namespace,
+      OBSERVATION_SCHEDULER_ADVISORY_LOCK.key,
+    ]);
+    lockClient.release();
   }
 });
 
