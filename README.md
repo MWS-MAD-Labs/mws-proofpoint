@@ -320,6 +320,8 @@ At `v0.2.0` release time:
 - [Strategic planning specification](./docs/specs/strategic-planning.md)
 - [Production data migration runbook](./docs/operations/production-data-migration.md)
 - [Observation acknowledgement automation runbook](./docs/operations/observation-acknowledgement-automation.md)
+- [Global observation notification settings development plan](./docs/specs/global-observation-notification-settings-plan.md)
+- [Multi-teacher observations development plan (proposed future development)](./docs/specs/multi-teacher-observations-development-plan.md)
 
 ## Release versioning
 
