@@ -154,6 +154,7 @@ export async function notifyManagerObservationAcknowledged(
   observationId: string,
   settings?: ObservationNotificationSettings,
   sender?: ObservationEmailSender,
+  progress?: { remaining: number },
 ) {
   void managerUserId;
   return sendObservationEmail("personalAcknowledgement", {
@@ -163,6 +164,9 @@ export async function notifyManagerObservationAcknowledged(
       <h2>Observation Personally Acknowledged</h2>
       <p>Hello <strong>${esc(managerName)}</strong>,</p>
       <p><strong>${esc(staffName)}</strong> personally acknowledged the observation results you submitted.</p>
+      ${progress
+        ? `<p><strong>${progress.remaining === 0 ? "All participants have now acknowledged." : `${progress.remaining} participant${progress.remaining === 1 ? "" : "s"} still awaiting acknowledgement.`}</strong></p>`
+        : ""}
       <p><strong>Observation:</strong> ${esc(observationTitle)}</p>
       <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">View Details</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
@@ -186,8 +190,8 @@ export async function notifyObservationAcknowledged(
     subject: `Staff Acknowledged Observation: ${observationTitle}`,
     html: `<div style="${CARD_STYLE}">
       <h2>Observation Personally Acknowledged</h2>
-      <p>The staff member personally acknowledged the observation results.</p>
-      <p><strong>Staff:</strong> ${esc(staffName)}</p>
+      <p>An observation participant personally acknowledged the observation results.</p>
+      <p><strong>Participant:</strong> ${esc(staffName)}</p>
       <p><strong>Observer:</strong> ${esc(managerName)}</p>
       <p><strong>Observation:</strong> ${esc(observationTitle)}</p>
       <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">View Details</a>
@@ -214,10 +218,10 @@ export async function notifyObservationAutomaticallyAcknowledged(
     html: `<div style="${CARD_STYLE}">
       <h2>Observation Automatically Acknowledged</h2>
       <p>Hello <strong>${esc(recipientName)}</strong>,</p>
-      <p>The observation below was automatically marked as acknowledged because the response deadline passed.</p>
-      <p style="font-weight:bold;color:#8A4B08;">The staff member did not personally acknowledge this observation.</p>
+      <p>Your participation in the observation below was automatically marked as acknowledged because the response deadline passed.</p>
+      <p style="font-weight:bold;color:#8A4B08;">This was not a personal acknowledgement.</p>
       <table style="border-collapse:collapse;width:100%;margin:12px 0;">
-        <tr><td style="padding:6px 0;color:#5D4B4C;width:120px;">Staff</td><td style="font-weight:bold;">${esc(staffName)}</td></tr>
+        <tr><td style="padding:6px 0;color:#5D4B4C;width:120px;">Participant</td><td style="font-weight:bold;">${esc(staffName)}</td></tr>
         <tr><td style="padding:6px 0;color:#5D4B4C;">Observer</td><td style="font-weight:bold;">${esc(managerName)}</td></tr>
         <tr><td style="padding:6px 0;color:#5D4B4C;">Observation</td><td style="font-weight:bold;">${esc(observationTitle)}</td></tr>
       </table>

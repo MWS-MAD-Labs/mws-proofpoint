@@ -14,6 +14,7 @@ import {
   Loader2,
   RefreshCcw,
   Send,
+  UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -56,7 +57,13 @@ import {
   findIncompleteRequiredIndicators,
   isObservationAnswerComplete,
 } from "../validation";
-import { formatRelativeDate } from "../utils";
+import {
+  formatRelativeDate,
+  observationScopeSummary,
+  participantSummary,
+} from "../utils";
+import { getObservationDetailParticipants } from "../detailPresentation";
+import { ObservationParticipantsDialog } from "./ObservationParticipantsDialog";
 
 type DraftValue = {
   score: string;
@@ -82,7 +89,9 @@ export function ObservationFormEditor({
   const router = useRouter();
   const queryClient = useQueryClient();
   const { observation, permissions } = detail;
+  const participants = getObservationDetailParticipants(observation);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [participantsOpen, setParticipantsOpen] = useState(false);
   const [drafts, setDrafts] = useState<DraftValues>(() =>
     Object.fromEntries(
       observation.rubric.sections.flatMap((section) =>
@@ -163,7 +172,9 @@ export function ObservationFormEditor({
         queryClient.invalidateQueries({ queryKey: observationKeys.lists() }),
         queryClient.invalidateQueries({ queryKey: observationKeys.summary() }),
       ]);
-      toast.success("Observation submitted for acknowledgement.");
+      toast.success(
+        `Observation submitted to ${participants.length} ${participants.length === 1 ? "participant" : "participants"} for acknowledgement.`,
+      );
       router.push(`/observations/${observation.id}`);
     },
     onError: (error) => toast.error(error.message),
@@ -273,9 +284,18 @@ export function ObservationFormEditor({
               {observation.title?.trim() || observation.rubric.name}
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Observing {personName(observation.staff)} · Required responses save
-              automatically.
+              Observing {participantSummary(participants)} · {observationScopeSummary(observation.scope)} · Required responses save automatically.
             </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-4"
+              onClick={() => setParticipantsOpen(true)}
+            >
+              <UsersRound className="h-4 w-4" />
+              Manage observed teachers
+            </Button>
           </div>
           <div className="min-w-56 rounded-xl bg-muted/40 p-4">
             <div className="flex items-center justify-between text-sm">
@@ -404,6 +424,12 @@ export function ObservationFormEditor({
         </div>
       </div>
 
+      <ObservationParticipantsDialog
+        observation={observation}
+        open={participantsOpen}
+        onOpenChangeAction={setParticipantsOpen}
+      />
+
       <ReviewDialog
         open={reviewOpen}
         onOpenChange={setReviewOpen}
@@ -415,6 +441,7 @@ export function ObservationFormEditor({
         canSubmit={canSubmit}
         submitting={submit.isPending}
         onIndicator={scrollTo}
+        participantCount={participants.length}
         onSubmit={() => submit.mutate()}
       />
     </>
@@ -858,6 +885,7 @@ function ReviewDialog({
   canSubmit,
   submitting,
   onIndicator,
+  participantCount,
   onSubmit,
 }: {
   open: boolean;
@@ -870,6 +898,7 @@ function ReviewDialog({
   canSubmit: boolean;
   submitting: boolean;
   onIndicator: (id: string) => void;
+  participantCount: number;
   onSubmit: () => void;
 }) {
   const grouped = incomplete.reduce(
@@ -886,7 +915,7 @@ function ReviewDialog({
           <DialogTitle>Review observation</DialogTitle>
           <DialogDescription>
             Confirm completion and save reliability before sending this report to
-            the staff member.
+            {participantCount === 1 ? " the observed teacher." : ` all ${participantCount} observed teachers.`}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -1014,8 +1043,4 @@ function scrollToSection(sectionId: string) {
     behavior: preferredScrollBehavior(),
     block: "start",
   });
-}
-
-function personName(person: ObservationDetailResponse["observation"]["staff"]) {
-  return person?.profile.fullName?.trim() || person?.email || "Unknown staff";
 }

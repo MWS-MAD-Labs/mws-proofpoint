@@ -17,6 +17,20 @@ export const OBSERVATION_QUESTION_TYPES = ["SCALE", "TEXT", "CHOICE"] as const;
 export type ObservationQuestionType =
   (typeof OBSERVATION_QUESTION_TYPES)[number];
 
+export const OBSERVATION_SCOPE_TYPES = [
+  "INDIVIDUAL",
+  "CLASS",
+  "SUBJECT",
+] as const;
+export type ObservationScopeType = (typeof OBSERVATION_SCOPE_TYPES)[number];
+
+export const OBSERVATION_ACKNOWLEDGEMENT_METHODS = [
+  "personal",
+  "automatic",
+] as const;
+export type ObservationAcknowledgementMethod =
+  (typeof OBSERVATION_ACKNOWLEDGEMENT_METHODS)[number];
+
 export interface ObservationActor {
   id: string;
   roles: readonly string[];
@@ -24,8 +38,15 @@ export interface ObservationActor {
 
 export interface ObservationAccessRecord {
   status: ObservationStatusInput;
-  staffId: string;
   managerId: string | null;
+  /** Precomputed with an observation_participants EXISTS query. */
+  isParticipant?: boolean;
+  /** The current actor's participant acknowledgement timestamp. */
+  participantAcknowledgedAt?: Date | string | null;
+  /** The current actor's participant acknowledgement method. */
+  participantAcknowledgementMethod?: ObservationAcknowledgementMethod | null;
+  /** @deprecated Use isParticipant. Retained while singular routes migrate. */
+  staffId?: string;
 }
 
 export interface ObservationPermissions {
@@ -77,10 +98,38 @@ export interface PersonSummary {
   fullName: string | null;
 }
 
+export interface ObservationParticipantSummary extends PersonSummary {
+  department: { id: string; name: string } | null;
+  acknowledgedAt: string | null;
+  acknowledgementMethod: ObservationAcknowledgementMethod | null;
+}
+
+export interface ObservationParticipantDetail
+  extends ObservationParticipantSummary {
+  acknowledgementResponse: string | null;
+  acknowledgementNote: string | null;
+  acknowledgementResponseVisible: boolean;
+}
+
+export interface ObservationAcknowledgementProgress {
+  acknowledged: number;
+  total: number;
+  pending: number;
+  percentage: number;
+}
+
+export interface ObservationScope {
+  type: ObservationScopeType;
+  className: string | null;
+  subjectName: string | null;
+}
+
 export interface ObservationListItem {
   id: string;
   title: string | null;
   status: ObservationStatus;
+  participants: ObservationParticipantSummary[];
+  /** @deprecated Use participants. The first participant is returned here. */
   staff: PersonSummary;
   manager: PersonSummary | null;
   department: { id: string; name: string } | null;
@@ -90,7 +139,10 @@ export interface ObservationListItem {
   observationDate: string | null;
   dueAt: string | null;
   submittedAt: string | null;
+  /** @deprecated Use participants or acknowledgementProgress. */
   acknowledgedAt: string | null;
+  scope: ObservationScope;
+  acknowledgementProgress: ObservationAcknowledgementProgress;
   progress: ObservationProgress | null;
   isOverdue: boolean;
   isStale: boolean;
@@ -193,6 +245,7 @@ export interface ObservationActivityEntry {
 
 export interface ObservationDetail {
   id: string;
+  /** @deprecated Use participants. */
   staffId: string;
   managerId: string | null;
   templateId: string;
@@ -207,9 +260,13 @@ export interface ObservationDetail {
   submittedAt: string | null;
   acknowledgedAt: string | null;
   acknowledgementResponse: string | null;
-  acknowledgementMethod: "personal" | "automatic" | null;
+  acknowledgementMethod: ObservationAcknowledgementMethod | null;
   acknowledgementNote: string | null;
+  /** @deprecated Use participants. */
   staff: ObservationDetailPerson | null;
+  participants?: ObservationParticipantDetail[];
+  scope?: ObservationScope;
+  acknowledgementProgress?: ObservationAcknowledgementProgress;
   manager: ObservationDetailPerson | null;
   rubric: {
     id: string;
@@ -259,20 +316,34 @@ export interface CreateObservationResponse {
     description: string | null;
     observationDate: string | null;
     dueAt: string;
-    staff: PersonSummary;
+    participants: PersonSummary[];
+    scope?: ObservationScope;
+    /** @deprecated Use scope. */
+    scopeType?: ObservationScopeType;
+    /** @deprecated Use scope. */
+    className?: string | null;
+    /** @deprecated Use scope. */
+    subjectName?: string | null;
+    /** @deprecated Use participants. */
+    staff?: PersonSummary;
     manager: PersonSummary;
     rubric: { id: string; name: string };
   };
 }
 
 export interface CreateObservationInput {
-  staffId: string;
+  staffIds: string[];
+  /** @deprecated Use staffIds. */
+  staffId?: string;
   rubricId: string;
   workflowId?: string;
   title?: string;
   description?: string;
   observationDate?: string;
   dueAt: string;
+  scopeType?: ObservationScopeType;
+  className?: string;
+  subjectName?: string;
 }
 
 export interface ObservationAcknowledgeInput {
@@ -281,8 +352,12 @@ export interface ObservationAcknowledgeInput {
 
 export interface UpdateObservationInput {
   managerId?: string;
+  staffIds?: string[];
   title?: string;
   description?: string;
   observationDate?: string | null;
   dueAt?: string | null;
+  scopeType?: ObservationScopeType;
+  className?: string | null;
+  subjectName?: string | null;
 }

@@ -6,7 +6,9 @@ import {
 import type {
   ObservationActor,
   ObservationListItem,
+  ObservationAcknowledgementMethod,
   ObservationListResponse,
+  ObservationParticipantSummary,
   ObservationStatus,
   ObservationSummaryResponse,
 } from "../types";
@@ -20,6 +22,15 @@ interface ObservationListRow {
   id: string;
   title: string | null;
   status: ObservationStatus;
+  participants: Array<{
+    id: string;
+    email: string;
+    fullName: string | null;
+    departmentId: string | null;
+    departmentName: string | null;
+    acknowledgedAt: Date | string | null;
+    acknowledgementMethod: ObservationAcknowledgementMethod | null;
+  }> | string;
   staff_id: string;
   staff_email: string;
   staff_name: string | null;
@@ -36,6 +47,11 @@ interface ObservationListRow {
   due_at: Date | string | null;
   submitted_at: Date | string | null;
   acknowledged_at: Date | string | null;
+  scope_type: "INDIVIDUAL" | "CLASS" | "SUBJECT";
+  class_name: string | null;
+  subject_name: string | null;
+  acknowledged_count: number | string;
+  participant_count: number | string;
   required_answered: number | string;
   required_total: number | string;
   optional_answered: number | string;
@@ -62,9 +78,18 @@ interface ObservationCountRow {
 
 
 const statusExpression = `CASE
-  WHEN o.status::text = 'pending' THEN 'draft'
-  WHEN o.status::text = 'reviewed' AND o.acknowledged_at IS NOT NULL THEN 'acknowledged'
-  WHEN o.status::text = 'reviewed' THEN 'submitted'
+  WHEN o.status::text IN ('pending', 'draft') THEN 'draft'
+  WHEN o.status::text IN ('reviewed', 'submitted', 'acknowledged')
+    AND EXISTS (
+      SELECT 1 FROM observation_participants status_participant
+      WHERE status_participant.observation_id = o.id
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM observation_participants status_participant
+      WHERE status_participant.observation_id = o.id
+        AND status_participant.acknowledged_at IS NULL
+    ) THEN 'acknowledged'
+  WHEN o.status::text IN ('reviewed', 'submitted', 'acknowledged') THEN 'submitted'
   ELSE o.status::text
 END`;
 
@@ -77,15 +102,49 @@ function toNumber(value: number | string): number {
   return typeof value === "number" ? value : Number(value);
 }
 
+function parseParticipants(
+  value: ObservationListRow["participants"],
+): ObservationParticipantSummary[] {
+  const participants: Exclude<ObservationListRow["participants"], string> =
+    typeof value === "string"
+      ? (JSON.parse(value) as Exclude<
+          ObservationListRow["participants"],
+          string
+        >)
+      : value;
+  return participants.map((participant) => ({
+    id: participant.id,
+    email: participant.email,
+    fullName: participant.fullName,
+    department:
+      participant.departmentId && participant.departmentName
+        ? { id: participant.departmentId, name: participant.departmentName }
+        : null,
+    acknowledgedAt: toIso(participant.acknowledgedAt),
+    acknowledgementMethod: participant.acknowledgementMethod,
+  }));
+}
+
 function buildVisibilityClause(actor: ObservationActor, params: unknown[]): string {
   if (actor.roles.includes("admin") || actor.roles.includes("director")) return "TRUE";
 
   params.push(actor.id);
   const actorParam = `$${params.length}`;
   if (actor.roles.includes("manager")) {
-    return `(o."managerId" = ${actorParam} OR (o."staffId" = ${actorParam} AND (${statusExpression}) <> 'draft'))`;
+    return `(o."managerId" = ${actorParam} OR (
+      EXISTS (
+        SELECT 1 FROM observation_participants visibility_participant
+        WHERE visibility_participant.observation_id = o.id
+          AND visibility_participant.staff_id = ${actorParam}
+      )
+      AND (${statusExpression}) <> 'draft'
+    ))`;
   }
-  return `(o."staffId" = ${actorParam} AND (${statusExpression}) <> 'draft')`;
+  return `(EXISTS (
+    SELECT 1 FROM observation_participants visibility_participant
+    WHERE visibility_participant.observation_id = o.id
+      AND visibility_participant.staff_id = ${actorParam}
+  ) AND (${statusExpression}) <> 'draft')`;
 }
 
 function actionExpressionNeedsActor(actor: ObservationActor): boolean {
@@ -104,11 +163,22 @@ function buildActionRequiredExpression(
   }
   if (actor.roles.includes("manager")) {
     const managerActions = `(o."managerId" = ${actorParam} AND (${statusExpression}) = 'draft')
-      OR (o."managerId" IS DISTINCT FROM ${actorParam} AND o."staffId" = ${actorParam} AND (${statusExpression}) = 'submitted')`;
+      OR (o."managerId" IS DISTINCT FROM ${actorParam}
+        AND EXISTS (
+          SELECT 1 FROM observation_participants action_participant
+          WHERE action_participant.observation_id = o.id
+            AND action_participant.staff_id = ${actorParam}
+            AND action_participant.acknowledged_at IS NULL
+        )
+        AND (${statusExpression}) = 'submitted')`;
     if (actor.roles.includes("director")) {
       return `(${managerActions}) OR (
         o."managerId" IS DISTINCT FROM ${actorParam}
-        AND o."staffId" IS DISTINCT FROM ${actorParam}
+        AND NOT EXISTS (
+          SELECT 1 FROM observation_participants action_participant
+          WHERE action_participant.observation_id = o.id
+            AND action_participant.staff_id = ${actorParam}
+        )
         AND (${statusExpression}) <> 'acknowledged'
         AND o.due_at < NOW()
       )`;
@@ -118,10 +188,15 @@ function buildActionRequiredExpression(
   if (actor.roles.includes("director")) {
     return `((${statusExpression}) <> 'acknowledged' AND o.due_at < NOW())`;
   }
-  return `(o."staffId" = ${actorParam} AND (${statusExpression}) = 'submitted')`;
+  return `(EXISTS (
+    SELECT 1 FROM observation_participants action_participant
+    WHERE action_participant.observation_id = o.id
+      AND action_participant.staff_id = ${actorParam}
+      AND action_participant.acknowledged_at IS NULL
+  ) AND (${statusExpression}) = 'submitted')`;
 }
 
-function buildListFilters(
+export function buildListFilters(
   actor: ObservationActor,
   input: ObservationListQuery,
   params: unknown[],
@@ -139,21 +214,44 @@ function buildListFilters(
     const param = `$${params.length}`;
     clauses.push(`(
       COALESCE(o.title, '') ILIKE ${param}
-      OR COALESCE(sp.full_name, '') ILIKE ${param}
-      OR su.email ILIKE ${param}
+      OR EXISTS (
+        SELECT 1
+        FROM observation_participants search_participant
+        JOIN users search_user ON search_user.id = search_participant.staff_id
+        LEFT JOIN profiles search_profile ON search_profile.user_id = search_user.id
+        WHERE search_participant.observation_id = o.id
+          AND (
+            COALESCE(search_profile.full_name, '') ILIKE ${param}
+            OR search_user.email ILIKE ${param}
+          )
+      )
       OR COALESCE(mp.full_name, '') ILIKE ${param}
       OR COALESCE(mu.email, '') ILIKE ${param}
       OR rt.name ILIKE ${param}
-      OR COALESCE(d.name, '') ILIKE ${param}
+      OR EXISTS (
+        SELECT 1
+        FROM observation_participants search_department_participant
+        JOIN profiles search_department_profile
+          ON search_department_profile.user_id = search_department_participant.staff_id
+        JOIN departments search_department
+          ON search_department.id = search_department_profile.department_id
+        WHERE search_department_participant.observation_id = o.id
+          AND search_department.name ILIKE ${param}
+      )
     )`);
   }
   if (input.status) {
     params.push(input.status);
     clauses.push(`(${statusExpression}) = $${params.length}`);
   }
-  if (input.staffId) {
-    params.push(input.staffId);
-    clauses.push(`o."staffId" = $${params.length}`);
+  const participantId = input.participantId ?? input.staffId;
+  if (participantId) {
+    params.push(participantId);
+    clauses.push(`EXISTS (
+      SELECT 1 FROM observation_participants filtered_participant
+      WHERE filtered_participant.observation_id = o.id
+        AND filtered_participant.staff_id = $${params.length}
+    )`);
   }
   if (input.managerId) {
     params.push(input.managerId === "me" ? actor.id : input.managerId);
@@ -161,7 +259,14 @@ function buildListFilters(
   }
   if (input.departmentId) {
     params.push(input.departmentId);
-    clauses.push(`sp.department_id = $${params.length}`);
+    clauses.push(`EXISTS (
+      SELECT 1
+      FROM observation_participants department_participant
+      JOIN profiles department_profile
+        ON department_profile.user_id = department_participant.staff_id
+      WHERE department_participant.observation_id = o.id
+        AND department_profile.department_id = $${params.length}
+    )`);
   }
   if (input.rubricId) {
     params.push(input.rubricId);
@@ -208,6 +313,11 @@ function sortSql(sort: ObservationListQuery["sort"], alias = "o"): string {
 }
 
 function mapListItem(actor: ObservationActor, row: ObservationListRow): ObservationListItem {
+  const participants = parseParticipants(row.participants);
+  const firstParticipant = participants[0];
+  if (!firstParticipant) {
+    throw new Error(`Observation ${row.id} has no participants.`);
+  }
   const requiredAnswered = toNumber(row.required_answered);
   const requiredTotal = toNumber(row.required_total);
   const optionalAnswered = toNumber(row.optional_answered);
@@ -230,14 +340,24 @@ function mapListItem(actor: ObservationActor, row: ObservationListRow): Observat
 
   let nextAction: ObservationListItem["nextAction"] = "view";
   if (row.manager_id === actor.id && row.status === "draft") nextAction = "continue";
-  else if (row.staff_id === actor.id && row.status === "submitted") nextAction = "acknowledge";
+  else if (
+    participants.some(
+      (participant) =>
+        participant.id === actor.id && participant.acknowledgedAt === null,
+    ) && row.status === "submitted"
+  ) nextAction = "acknowledge";
   else if (row.action_required) nextAction = "follow_up";
 
   return {
     id: row.id,
     title: row.title,
     status: row.status,
-    staff: { id: row.staff_id, email: row.staff_email, fullName: row.staff_name },
+    participants,
+    staff: {
+      id: firstParticipant.id,
+      email: firstParticipant.email,
+      fullName: firstParticipant.fullName,
+    },
     manager: row.manager_id && row.manager_email
       ? { id: row.manager_id, email: row.manager_email, fullName: row.manager_name }
       : null,
@@ -251,6 +371,24 @@ function mapListItem(actor: ObservationActor, row: ObservationListRow): Observat
     dueAt: toIso(row.due_at),
     submittedAt: toIso(row.submitted_at),
     acknowledgedAt: toIso(row.acknowledged_at),
+    scope: {
+      type: row.scope_type,
+      className: row.class_name,
+      subjectName: row.subject_name,
+    },
+    acknowledgementProgress: {
+      acknowledged: toNumber(row.acknowledged_count),
+      total: toNumber(row.participant_count),
+      pending: toNumber(row.participant_count) - toNumber(row.acknowledged_count),
+      percentage:
+        toNumber(row.participant_count) === 0
+          ? 0
+          : Math.round(
+              (toNumber(row.acknowledged_count) /
+                toNumber(row.participant_count)) *
+                100,
+            ),
+    },
     progress,
     isOverdue: row.is_overdue,
     isStale: row.is_stale,
@@ -274,14 +412,18 @@ export async function queryObservationList(
          o.id,
          o.title,
          (${statusExpression})::text AS status,
-         o."staffId" AS staff_id,
-         su.email AS staff_email,
-         sp.full_name AS staff_name,
+         participant_data.participants,
+         participant_data.staff_id,
+         participant_data.staff_email,
+         participant_data.staff_name,
+         participant_data.department_id,
+         participant_data.department_name,
+         participant_data.staff_acknowledged_at AS acknowledged_at,
+         participant_data.acknowledged_count,
+         participant_data.participant_count,
          o."managerId" AS manager_id,
          mu.email AS manager_email,
          mp.full_name AS manager_name,
-         sp.department_id,
-         d.name AS department_name,
          rt.id AS rubric_id,
          rt.name AS rubric_name,
          o.created_at,
@@ -289,15 +431,52 @@ export async function queryObservationList(
          o.observation_date,
          o.due_at,
          o.submitted_at,
-         o.acknowledged_at,
+         COALESCE(o.scope_type, 'INDIVIDUAL')::text AS scope_type,
+         o.class_name,
+         o.subject_name,
          ((${statusExpression}) <> 'acknowledged' AND o.due_at < NOW()) AS is_overdue,
          (((${statusExpression}) = 'draft' AND o.updated_at < NOW() - INTERVAL '${OBSERVATION_STALE_DAYS} days')
            OR ((${statusExpression}) = 'submitted' AND o.submitted_at < NOW() - INTERVAL '${OBSERVATION_STALE_DAYS} days')) AS is_stale,
          (${actionExpression}) AS action_required
        FROM observations o
-       JOIN users su ON su.id = o."staffId"
-       LEFT JOIN profiles sp ON sp.user_id = su.id
-       LEFT JOIN departments d ON d.id = sp.department_id
+       JOIN LATERAL (
+         SELECT
+           JSONB_AGG(
+             JSONB_BUILD_OBJECT(
+               'id', ordered.staff_id,
+               'email', ordered.email,
+               'fullName', ordered.full_name,
+               'departmentId', ordered.department_id,
+               'departmentName', ordered.department_name,
+               'acknowledgedAt', ordered.acknowledged_at,
+               'acknowledgementMethod', ordered.acknowledgement_method
+             ) ORDER BY ordered.sort_name, ordered.email, ordered.staff_id
+           ) AS participants,
+           (ARRAY_AGG(ordered.staff_id ORDER BY ordered.sort_name, ordered.email, ordered.staff_id))[1] AS staff_id,
+           (ARRAY_AGG(ordered.email ORDER BY ordered.sort_name, ordered.email, ordered.staff_id))[1] AS staff_email,
+           (ARRAY_AGG(ordered.full_name ORDER BY ordered.sort_name, ordered.email, ordered.staff_id))[1] AS staff_name,
+           (ARRAY_AGG(ordered.department_id ORDER BY ordered.sort_name, ordered.email, ordered.staff_id))[1] AS department_id,
+           (ARRAY_AGG(ordered.department_name ORDER BY ordered.sort_name, ordered.email, ordered.staff_id))[1] AS department_name,
+           (ARRAY_AGG(ordered.acknowledged_at ORDER BY ordered.sort_name, ordered.email, ordered.staff_id))[1] AS staff_acknowledged_at,
+           COUNT(*) FILTER (WHERE ordered.acknowledged_at IS NOT NULL) AS acknowledged_count,
+           COUNT(*) AS participant_count
+         FROM (
+           SELECT
+             op.staff_id,
+             pu.email,
+             pp.full_name,
+             pp.department_id,
+             pd.name AS department_name,
+             op.acknowledged_at,
+             op.acknowledgement_method,
+             COALESCE(NULLIF(BTRIM(pp.full_name), ''), pu.email) AS sort_name
+           FROM observation_participants op
+           JOIN users pu ON pu.id = op.staff_id
+           LEFT JOIN profiles pp ON pp.user_id = pu.id
+           LEFT JOIN departments pd ON pd.id = pp.department_id
+           WHERE op.observation_id = o.id
+         ) ordered
+       ) participant_data ON participant_data.participant_count > 0
        LEFT JOIN users mu ON mu.id = o."managerId"
        LEFT JOIN profiles mp ON mp.user_id = mu.id
        JOIN rubric_templates rt ON rt.id = o.template_id
@@ -305,46 +484,44 @@ export async function queryObservationList(
        ORDER BY ${sortSql(input.sort)}
        LIMIT ${limitParam} OFFSET ${offsetParam}
      )
-     SELECT
-       p.*,
-       COUNT(ri.id) FILTER (WHERE ri.is_required) AS required_total,
-       COUNT(ri.id) FILTER (
-         WHERE ri.is_required AND (
-           (COALESCE(ri.question_type::text, 'SCALE') = 'SCALE' AND oa.score BETWEEN 1 AND 4)
-           OR (ri.question_type::text = 'TEXT' AND NULLIF(BTRIM(oa.text_value), '') IS NOT NULL)
-           OR (ri.question_type::text = 'CHOICE'
-             AND NULLIF(BTRIM(oa.selected_option), '') IS NOT NULL
-             AND (
-               ri.score_options IS NULL
-               OR jsonb_array_length(ri.score_options) = 0
-               OR ri.score_options ? oa.selected_option
-             ))
-         )
-       ) AS required_answered,
-       COUNT(ri.id) FILTER (WHERE NOT ri.is_required) AS optional_total,
-       COUNT(ri.id) FILTER (
-         WHERE NOT ri.is_required AND (
-           (COALESCE(ri.question_type::text, 'SCALE') = 'SCALE' AND oa.score BETWEEN 1 AND 4)
-           OR (ri.question_type::text = 'TEXT' AND NULLIF(BTRIM(oa.text_value), '') IS NOT NULL)
-           OR (ri.question_type::text = 'CHOICE'
-             AND NULLIF(BTRIM(oa.selected_option), '') IS NOT NULL
-             AND (
-               ri.score_options IS NULL
-               OR jsonb_array_length(ri.score_options) = 0
-               OR ri.score_options ? oa.selected_option
-             ))
-         )
-       ) AS optional_answered
+     SELECT p.*, progress.*
      FROM paged_observations p
-     LEFT JOIN rubric_sections rs ON rs.template_id = p.rubric_id
-     LEFT JOIN rubric_indicators ri ON ri.section_id = rs.id
-     LEFT JOIN observation_answers oa
-       ON oa.observation_id = p.id AND oa.indicator_id = ri.id
-     GROUP BY p.id, p.title, p.status, p.staff_id, p.staff_email, p.staff_name,
-              p.manager_id, p.manager_email, p.manager_name, p.department_id,
-              p.department_name, p.rubric_id, p.rubric_name, p.created_at,
-              p.updated_at, p.observation_date, p.due_at, p.submitted_at,
-              p.acknowledged_at, p.is_overdue, p.is_stale, p.action_required
+     CROSS JOIN LATERAL (
+       SELECT
+         COUNT(ri.id) FILTER (WHERE ri.is_required) AS required_total,
+         COUNT(ri.id) FILTER (
+           WHERE ri.is_required AND (
+             (COALESCE(ri.question_type::text, 'SCALE') = 'SCALE' AND oa.score BETWEEN 1 AND 4)
+             OR (ri.question_type::text = 'TEXT' AND NULLIF(BTRIM(oa.text_value), '') IS NOT NULL)
+             OR (ri.question_type::text = 'CHOICE'
+               AND NULLIF(BTRIM(oa.selected_option), '') IS NOT NULL
+               AND (
+                 ri.score_options IS NULL
+                 OR jsonb_array_length(ri.score_options) = 0
+                 OR ri.score_options ? oa.selected_option
+               ))
+           )
+         ) AS required_answered,
+         COUNT(ri.id) FILTER (WHERE NOT ri.is_required) AS optional_total,
+         COUNT(ri.id) FILTER (
+           WHERE NOT ri.is_required AND (
+             (COALESCE(ri.question_type::text, 'SCALE') = 'SCALE' AND oa.score BETWEEN 1 AND 4)
+             OR (ri.question_type::text = 'TEXT' AND NULLIF(BTRIM(oa.text_value), '') IS NOT NULL)
+             OR (ri.question_type::text = 'CHOICE'
+               AND NULLIF(BTRIM(oa.selected_option), '') IS NOT NULL
+               AND (
+                 ri.score_options IS NULL
+                 OR jsonb_array_length(ri.score_options) = 0
+                 OR ri.score_options ? oa.selected_option
+               ))
+           )
+         ) AS optional_answered
+       FROM rubric_sections rs
+       JOIN rubric_indicators ri ON ri.section_id = rs.id
+       LEFT JOIN observation_answers oa
+         ON oa.observation_id = p.id AND oa.indicator_id = ri.id
+       WHERE rs.template_id = p.rubric_id
+     ) progress
      ORDER BY ${sortSql(input.sort, "p")}`,
     params,
   );
@@ -371,9 +548,6 @@ export async function queryObservationList(
     query<FilteredCountRow>(
       `SELECT COUNT(*) AS total
        FROM observations o
-       JOIN users su ON su.id = o."staffId"
-       LEFT JOIN profiles sp ON sp.user_id = su.id
-       LEFT JOIN departments d ON d.id = sp.department_id
        LEFT JOIN users mu ON mu.id = o."managerId"
        LEFT JOIN profiles mp ON mp.user_id = mu.id
        JOIN rubric_templates rt ON rt.id = o.template_id
@@ -392,7 +566,11 @@ export async function queryObservationList(
          OR ((${statusExpression}) = 'submitted' AND o.submitted_at < NOW() - INTERVAL '${OBSERVATION_STALE_DAYS} days')
        ) AS stale,
        COUNT(*) FILTER (WHERE (${statusExpression}) = 'acknowledged'
-         AND o.acknowledged_at >= DATE_TRUNC('month', NOW())) AS completed_this_month
+         AND (
+           SELECT MAX(completed_participant.acknowledged_at)
+           FROM observation_participants completed_participant
+           WHERE completed_participant.observation_id = o.id
+         ) >= DATE_TRUNC('month', NOW())) AS completed_this_month
        FROM observations o
        WHERE ${visibility}`,
       summaryParams,

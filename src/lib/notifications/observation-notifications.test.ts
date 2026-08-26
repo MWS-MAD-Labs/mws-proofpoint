@@ -82,3 +82,44 @@ test("mandatory observation emails do not consult legacy user preferences", asyn
   }
   assert.equal(deliveries, Object.keys(invocations).length);
 });
+
+test("manager acknowledgement email includes aggregate participant progress", async () => {
+  let html = "";
+  await notifyManagerObservationAcknowledged(
+    "manager",
+    "manager@example.test",
+    "Participant",
+    "Manager",
+    "Title",
+    "id",
+    DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS,
+    async (message) => {
+      html = message.html;
+      return { success: true } as const;
+    },
+    { remaining: 2 },
+  );
+
+  assert.match(html, /2 participants still awaiting acknowledgement/);
+});
+
+test("automatic acknowledgement email is scoped to the affected participant", async () => {
+  let html = "";
+  await notifyObservationAutomaticallyAcknowledged(
+    "staff",
+    "staff@example.test",
+    "Participant",
+    "Participant",
+    "Manager",
+    "Title",
+    "id",
+    DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS,
+    async (message) => {
+      html = message.html;
+      return { success: true } as const;
+    },
+  );
+
+  assert.match(html, /Your participation/);
+  assert.doesNotMatch(html, /all participants/i);
+});

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { canTransitionObservation, normalizeObservationStatus } from "./lifecycle";
 import { getObservationPermissions } from "./permissions";
+import { buildListFilters } from "./queries";
 import {
   calculateObservationProgress,
   findIncompleteRequiredIndicators,
@@ -127,6 +128,51 @@ test("draft responses are hidden from staff and directors", () => {
   assert.equal(
     getObservationPermissions({ id: "director", roles: ["director"] }, draft)
       .canViewResponses,
+    false,
+  );
+});
+
+test("participant-aware permissions hide drafts and allow only pending acknowledgements", () => {
+  const participantDraft = {
+    status: "draft" as const,
+    managerId: "manager",
+    isParticipant: true,
+    participantAcknowledgedAt: null,
+  };
+  const participantSubmitted = {
+    ...participantDraft,
+    status: "submitted" as const,
+  };
+
+  assert.equal(
+    getObservationPermissions(
+      { id: "participant-b", roles: ["staff"] },
+      participantDraft,
+    ).canViewRecord,
+    false,
+  );
+  assert.equal(
+    getObservationPermissions(
+      { id: "participant-b", roles: ["staff"] },
+      participantSubmitted,
+    ).canAcknowledge,
+    true,
+  );
+  assert.equal(
+    getObservationPermissions(
+      { id: "participant-b", roles: ["staff"] },
+      {
+        ...participantSubmitted,
+        participantAcknowledgedAt: "2026-08-20T00:00:00.000Z",
+      },
+    ).canAcknowledge,
+    false,
+  );
+  assert.equal(
+    getObservationPermissions(
+      { id: "unrelated", roles: ["staff"] },
+      { ...participantSubmitted, isParticipant: false },
+    ).canViewRecord,
     false,
   );
 });
@@ -261,6 +307,46 @@ test("zero-value placeholder rows are incomplete", () => {
     ),
     false,
   );
+});
+
+test("list query accepts participantId and retains the legacy staffId alias", () => {
+  assert.equal(
+    parseObservationListQuery(
+      new URLSearchParams({ participantId: "participant-b" }),
+    ).participantId,
+    "participant-b",
+  );
+  assert.equal(
+    parseObservationListQuery(new URLSearchParams({ staffId: "legacy-staff" }))
+      .staffId,
+    "legacy-staff",
+  );
+});
+
+test("list filters use participant EXISTS predicates without multiplying observations", () => {
+  const params: unknown[] = [];
+  const { whereSql, actionExpression } = buildListFilters(
+    { id: "participant-b", roles: ["staff"] },
+    {
+      q: "Teacher Two",
+      participantId: "participant-b",
+      sort: "updated_desc",
+      page: 1,
+      pageSize: 20,
+    },
+    params,
+  );
+
+  assert.match(whereSql, /EXISTS \(\s*SELECT 1 FROM observation_participants visibility_participant/);
+  assert.match(whereSql, /EXISTS \(\s*SELECT 1\s*FROM observation_participants search_participant/);
+  assert.match(whereSql, /EXISTS \(\s*SELECT 1 FROM observation_participants filtered_participant/);
+  assert.doesNotMatch(whereSql, /JOIN observation_participants/);
+  assert.match(actionExpression, /action_participant\.acknowledged_at IS NULL/);
+  assert.deepEqual(params, [
+    "participant-b",
+    "%Teacher Two%",
+    "participant-b",
+  ]);
 });
 
 test("list query parsing falls back for invalid values", () => {

@@ -316,7 +316,8 @@ At `v0.2.0` release time:
 - [Prisma migration history rebaseline runbook](./docs/operations/prisma-migration-history-rebaseline.md)
 - [Observation acknowledgement automation runbook](./docs/operations/observation-acknowledgement-automation.md)
 - [Global observation notification settings development plan](./docs/specs/global-observation-notification-settings-plan.md)
-- [Multi-teacher observations development plan (proposed future development)](./docs/specs/multi-teacher-observations-development-plan.md)
+- [Multi-teacher observations implementation and compatibility plan](./docs/specs/multi-teacher-observations-development-plan.md)
+- [Multi-teacher observations rollout runbook](./docs/operations/multi-teacher-observations-rollout.md)
 
 ## Release versioning
 

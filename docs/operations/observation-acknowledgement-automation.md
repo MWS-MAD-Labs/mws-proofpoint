@@ -30,7 +30,7 @@ The startup delay is intentionally not configurable: it is an implementation det
 
 No separate cron container or HTTP scheduler endpoint is required. PostgreSQL advisory locking ensures that only one application replica processes a scheduler cycle when multiple replicas are running. A replica that cannot acquire the lock skips that cycle.
 
-The processor calculates eligibility from persisted submission timestamps and the current global timing policy. Missing a cycle while the application is restarting does not change an observation's submitted timestamp or deadline calculation. Processing resumes after the next application startup. If every application replica is stopped, no reminders or automatic acknowledgements are processed until an instance is running again.
+The processor calculates eligibility per pending `observation_participants` row from the shared observation submission timestamp, the participant's persisted automation start, and the current global timing policy. Missing a cycle while the application is restarting does not change the submission timestamp or participant deadline calculation. Processing resumes after the next application startup. If every application replica is stopped, no reminders or automatic acknowledgements are processed until an instance is running again.
 
 ## Mandatory workflow email policy
 
@@ -42,17 +42,19 @@ Disabling a specific global observation event prevents that event's email. Disab
 
 Reminder delivery uses short database operations and sends SMTP outside transactions, so a slow mail provider does not block acknowledgement or reopen actions. Failed reminders can be reclaimed on the next run, and claims left in `processing` for more than one hour are recoverable.
 
-A state check is performed immediately before delivery. Because SMTP is intentionally outside the database transaction, an acknowledgement occurring after that check may very rarely cross with an already-started reminder delivery. Reminder-period uniqueness still prevents duplicate delivery by concurrent scheduler runs.
+Reminder claims are unique by participant, submission timestamp, and reminder period. One participant's acknowledgement does not stop reminders for another pending participant in the same observation.
 
-Automatic acknowledgement uses a conditional database update requiring the observation to remain submitted and unacknowledged for the same submission cycle. Personal acknowledgement can replace an automatic acknowledgement and is preserved as the final acknowledgement method.
+A state check is performed immediately before delivery. Because SMTP is intentionally outside the database transaction, an acknowledgement occurring after that check may very rarely cross with an already-started reminder delivery. Participant-period uniqueness still prevents duplicate delivery by concurrent scheduler runs.
 
-Only observations submitted after the acknowledgement automation migration was deployed are enrolled automatically. Existing pending observations retain their current state unless they are reopened and submitted again. This avoids unexpected changes to historical records.
+Automatic acknowledgement uses a conditional participant update requiring the parent observation to remain submitted and the participant to remain pending for the same submission cycle. After each participant update, the parent becomes `acknowledged` only when no participant remains pending. A participant may later replace only their own automatic acknowledgement with a personal acknowledgement under the existing replacement policy.
+
+Existing observations are backfilled into `observation_participants` by migration `20260828000000_multi_teacher_observation_foundation`. Submitted observations are enrolled or reset per participant when they enter a new submission cycle.
 
 ## Scheduler observability
 
 The administrator page shows the last attempted and successful cycles, the settings revision used, the next expected cycle, advisory-lock skip count, work counters, and the latest error summary. This status is persisted in PostgreSQL so it represents the deployment rather than only the application replica serving the page.
 
-The checked, reminded, automatic-acknowledgement, skipped, and failed counters describe the latest authoritative scheduler outcome rather than cumulative totals. A policy-disabled cycle records one skipped cycle with the other work counters reset; a failed cycle records one failure and retains the previous last-successful timestamp. Advisory-lock skips are cumulative because they are expected across replicas and do not replace the last authoritative work outcome. The next expected cycle is an estimate based on the settings used by the recorded attempt; deployment restarts and configuration changes can shift the actual timer.
+The checked, reminded, automatic-acknowledgement, skipped, and failed work counters count participant processing items and describe the latest authoritative scheduler outcome rather than cumulative totals. A policy-disabled cycle records one skipped cycle with the other work counters reset; a failed cycle records one failure and retains the previous last-successful timestamp. Advisory-lock skips are cumulative because they are expected across replicas and do not replace the last authoritative work outcome. The next expected cycle is an estimate based on the settings used by the recorded attempt; deployment restarts and configuration changes can shift the actual timer.
 
 The page intentionally has no manual “run now” control. Use application logs and the persisted status for monitoring rather than remote execution.
 
@@ -60,13 +62,14 @@ The page intentionally has no manual “run now” control. Use application logs
 
 Application logs use the `[Observation scheduler]` prefix. After deployment:
 
-1. Confirm migrations completed and the singleton settings row is readable through the administrator page.
+1. Confirm migrations completed, `observation_participants` exists, every observation has at least one participant, and the singleton settings row is readable through the administrator page.
 2. Review the saved global policy, especially reminder timing, automatic acknowledgement, and scheduler enablement.
 3. Confirm the scheduler status card records the settings revision and expected cycle time.
 4. Confirm logs show the scheduler starting after the fixed delay and a completed, disabled, failed, or advisory-lock-skipped cycle.
 5. For multi-replica deployments, expect advisory-lock-skipped cycles on secondary replicas and an increasing lock-skip count.
 6. Review the paginated audit history after changing policy, especially highlighted timing-policy changes.
 7. When validating timing in staging, use reduced values through the administrator page and restore the intended policy afterward.
+8. For a multi-teacher observation, confirm one participant acknowledgement does not suppress another participant's reminder and that the parent completes only after the final participant acknowledges.
 
 A database read failure is logged and does not permanently stop the timer; the scheduler retries using its safe internal interval fallback. Do not use the administrator page as a manual “run now” control.
 

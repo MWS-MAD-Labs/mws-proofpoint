@@ -1,9 +1,83 @@
 import { format, formatDistanceToNowStrict } from "date-fns";
-import type { ObservationListItem, ObservationStatus } from "./types";
+import type {
+  ObservationListItem,
+  ObservationParticipantSummary,
+  ObservationScope,
+  ObservationStatus,
+} from "./types";
 
 export function personName(person: { email: string; fullName: string | null } | null): string {
   if (!person) return "Unassigned";
   return person.fullName?.trim() || person.email;
+}
+
+export function personFirstName(person: { email: string; fullName: string | null }): string {
+  const fullName = person.fullName?.trim();
+  if (fullName) return fullName.split(/\s+/)[0];
+  return person.email.split("@")[0] || person.email;
+}
+
+export function observationParticipants(
+  item: Pick<ObservationListItem, "participants" | "staff">,
+): ObservationParticipantSummary[] {
+  if (item.participants.length > 0) return item.participants;
+  return [
+    {
+      ...item.staff,
+      department: null,
+      acknowledgedAt: null,
+      acknowledgementMethod: null,
+    },
+  ];
+}
+
+export function participantSummary(
+  participants: readonly { email: string; fullName: string | null }[],
+  visibleNames = 2,
+): string {
+  if (participants.length === 0) return "No participants";
+  const shown = participants.slice(0, visibleNames).map(personFirstName);
+  const remaining = participants.length - shown.length;
+  return `${shown.join(", ")}${remaining > 0 ? ` +${remaining}` : ""}`;
+}
+
+export function participantLabel(count: number): string {
+  return count === 1 ? "Observed teacher" : "Observed teachers";
+}
+
+export function participantDepartmentSummary(
+  participants: readonly { department?: { name: string } | null }[],
+  fallback?: { name: string } | null,
+): string {
+  const departments = Array.from(
+    new Set(
+      participants
+        .map((participant) => participant.department?.name?.trim())
+        .filter((name): name is string => Boolean(name)),
+    ),
+  );
+  if (departments.length === 0) return fallback?.name || "Not assigned";
+  if (departments.length === 1) return departments[0];
+  return `${departments.length} departments`;
+}
+
+export function observationScopeLabel(scope: ObservationScope | undefined): string {
+  if (!scope) return "Individual";
+  if (scope.type === "CLASS") return scope.className?.trim() || "Class";
+  if (scope.type === "SUBJECT") return scope.subjectName?.trim() || "Subject";
+  return "Individual";
+}
+
+export function observationScopeTypeLabel(scope: ObservationScope | undefined): string {
+  if (scope?.type === "CLASS") return "Class";
+  if (scope?.type === "SUBJECT") return "Subject";
+  return "Individual";
+}
+
+export function observationScopeSummary(scope: ObservationScope | undefined): string {
+  const type = observationScopeTypeLabel(scope);
+  if (type === "Individual") return "Individual observation";
+  return `${type}: ${observationScopeLabel(scope)}`;
 }
 
 export function formatObservationDate(value: string | null): string {
@@ -40,7 +114,7 @@ export function observationActionLabel(item: Pick<ObservationListItem, "nextActi
 }
 
 export function statusStage(status: ObservationStatus): string {
-  if (status === "submitted") return "Ready for staff review";
+  if (status === "submitted") return "Awaiting acknowledgement";
   if (status === "acknowledged") return "Complete";
   return "In progress";
 }

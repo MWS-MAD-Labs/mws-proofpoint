@@ -7,7 +7,11 @@ import {
   formatObservationDate,
   observationActionLabel,
   observationHref,
+  observationParticipants,
+  observationScopeSummary,
   observationTitle,
+  participantLabel,
+  participantSummary,
   personName,
 } from "../utils";
 import { ObservationProgress } from "./ObservationProgress";
@@ -15,12 +19,16 @@ import { ObservationStatusBadge } from "./ObservationStatusBadge";
 
 export function ObservationCard({ item }: { item: ObservationListItem }) {
   const href = observationHref(item);
+  const participants = observationParticipants(item);
   return (
     <Card className="overflow-hidden border-border/60 bg-card/80">
       <CardContent className="min-w-0 p-5">
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
-            <p className="break-words font-semibold">{personName(item.staff)}</p>
+            <p className="break-words font-semibold">{participantSummary(participants)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {participantLabel(participants.length)} · {participants.length} total
+            </p>
             <p className="mt-1 line-clamp-2 break-words text-sm text-muted-foreground">
               {observationTitle(item)}
             </p>
@@ -28,9 +36,13 @@ export function ObservationCard({ item }: { item: ObservationListItem }) {
           <div className="shrink-0 self-start"><ObservationStatusBadge status={item.status} /></div>
         </div>
         <div className="mt-4 grid gap-3 text-sm text-muted-foreground">
+
           <div className="flex items-center gap-2">
             <UserRound className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span className="min-w-0 break-words">Observer: {personName(item.manager)}</span>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {observationScopeSummary(item.scope)}
           </div>
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 shrink-0" aria-hidden="true" />

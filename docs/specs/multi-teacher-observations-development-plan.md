@@ -1,15 +1,20 @@
 # Multi-Teacher Observations — Development Plan
 
-**Status:** Proposed future development  
-**Scope:** Allow one observation to cover multiple observed teachers at class or subject level  
-**Primary outcome:** One shared observation report can name multiple teachers, while access, acknowledgement, reminders, notifications, audit history, and reporting remain correct for each teacher  
-**Out of scope:** Timetable management, student records, automatic class-roster synchronization, and replacing the current observation rubric/workflow system
+**Status:** Implemented compatibility release; staging deployment candidate
+
+**Implemented migration:** `20260828000000_multi_teacher_observation_foundation`
+
+**Scope:** Allow one observation to cover multiple observed teachers at class or subject level
+
+**Primary outcome:** One shared observation report can name multiple teachers, while access, acknowledgement, reminders, notifications, audit history, and reporting remain correct for each teacher
+
+**Out of scope:** Timetable management, student records, automatic class-roster synchronization, replacing the current observation rubric/workflow system, and removal of legacy compatibility columns
 
 ## 1. Objective
 
-ProofPoint currently requires one `staffId` for every observation. This models an observation as a report about one teacher, but classroom and subject observations may involve co-teachers, teaching assistants, specialist teachers, or other staff participating in the same lesson.
+Before this compatibility release, ProofPoint required one `staffId` for every observation. This modeled an observation as a report about one teacher, but classroom and subject observations may involve co-teachers, teaching assistants, specialist teachers, or other staff participating in the same lesson.
 
-The target behavior is to let an authorized observer select one or more eligible teachers and create one shared observation containing:
+The implemented behavior lets an authorized observer select one or more eligible teachers and create one shared observation containing:
 
 - one observer;
 - one rubric and answer set;
@@ -22,9 +27,9 @@ This project must not create duplicate observation reports for the same event. S
 
 ## 2. Product decisions
 
-The implementation should use the following rules unless product review explicitly changes them before development.
+The compatibility release implements the following rules:
 
-| Concern | Proposed rule |
+| Concern | Implemented rule |
 | --- | --- |
 | Number of teachers | At least 1 and at most 20 active eligible staff per observation |
 | Shared content | All selected teachers share the same rubric answers, scores, notes, evidence, title, dates, and observer |
@@ -54,23 +59,24 @@ flowchart TD
 
 While the observation is `submitted`, individual participants may be pending, personally acknowledged, or automatically acknowledged. The top-level status changes to `acknowledged` only when no participant remains pending.
 
-## 3. Current state and impact
+## 3. Implemented state and compatibility impact
 
-The current implementation assumes one observed teacher throughout the stack:
+The implementation now uses participant records throughout the observation workflow:
 
-- `prisma/schema.prisma` stores `Observation.staffId` and a single `staff` relation;
-- acknowledgement timestamps, method, note, response, and automation start are stored at observation level;
-- acknowledgement reminders are unique by observation, submission, and reminder period;
-- `POST /api/observations` accepts one `staffId`;
-- available forms are resolved for one teacher;
-- permission checks compare the current user with one `staffId`;
-- list, summary, detail, search, notification, print, and automation queries join one staff user/profile;
-- TypeScript response shapes expose `staff` rather than `staff[]` or `participants[]`;
-- the creation wizard has a single-select staff step.
+- `ObservationParticipant`, mapped to `observation_participants`, stores membership and per-teacher acknowledgement state;
+- acknowledgement reminders are owned and deduplicated by participant and submission cycle;
+- `POST /api/observations` accepts `staffIds` and temporarily accepts legacy `staffId` input;
+- `POST /api/observations/available-forms` returns the intersection valid for every selected teacher;
+- permissions use participant membership and the current participant's acknowledgement state;
+- list, summary, detail, search, notification, and automation queries remain one row per shared observation while resolving all participants;
+- API and TypeScript response shapes expose deterministic `participants` arrays and aggregate acknowledgement progress;
+- the creation wizard and draft editor provide accessible multi-select participant management;
+- class and subject context are stored as snapshot text;
+- acknowledgement responses are private to the participant and existing privileged viewers.
 
-This is a cross-cutting schema and workflow change. It must be delivered with a compatibility period rather than by changing only the creation control to a multi-select.
+The release deliberately retains legacy `Observation.staffId` and observation-level acknowledgement columns for compatibility. New multi-teacher behavior reads participant records as the source of truth. The legacy `staffId` is maintained as a deterministic compatibility value and must not be interpreted as the complete participant list.
 
-Before implementation, reconcile the Prisma model with the SQL columns used by the observation routes and migrations. Observation routes currently reference fields such as `template_id`, `observation_date`, `due_at`, and acknowledgement response/history fields that must be represented consistently in the migration and generated Prisma client.
+Rolling application code back below this compatibility release is unsafe after a multi-teacher observation is created. See the [multi-teacher observation rollout runbook](../operations/multi-teacher-observations-rollout.md).
 
 ## 4. Target data model
 
@@ -484,7 +490,7 @@ Run focused tests first, followed by TypeScript, ESLint, Prisma validation, prod
 - Monitor creation errors, reminder failures, notification volume, acknowledgement completion time, and observations with zero participants.
 - Add an integrity check or operational query for observations whose aggregate status disagrees with participant states.
 - Document that rolling application code back below the compatibility release is unsafe after the first multi-teacher observation is created.
-- Do not describe the feature as currently supported in the README until production rollout is complete; link this document as proposed future development.
+- Do not add the feature to the README production capability list until production rollout is complete; link this document as the staging implementation and compatibility record.
 
 ## 13. Acceptance criteria
 
@@ -501,13 +507,25 @@ The feature is complete when:
 9. API, database-backed authorization, migration, concurrency, and browser validation pass.
 10. Deployment and rollback constraints are recorded in the release and operations documentation.
 
-## 14. Open product questions
+## 14. Product decisions recorded for the compatibility release
 
-Resolve these before implementation starts:
+1. Observed teachers can see the shared participant list after submission, but each teacher can view only their own private acknowledgement response.
+2. Rubric answers, scores, notes, and evidence remain fully shared; teacher-specific rubric content is not included.
+3. The maximum is fixed at 20 participants for this release.
+4. Class and subject context use free-text snapshots; timetable/SIS integration remains out of scope.
+5. The shared report lists all participants and per-participant acknowledgement state. Private acknowledgement responses are rendered only when authorized for the current viewer.
+6. Participants must be active and eligible when created or added. Later deactivation does not invalidate the historical participant record or automatically remove it before submission.
 
-1. Are all observed teachers allowed to see the names of the other teachers, or only the shared report and their own participation?
-2. Should an observer be allowed to record teacher-specific notes or scores, or is all rubric content always shared? This plan assumes fully shared content.
-3. Is 20 the appropriate maximum, or should the limit be configurable?
-4. Are class and subject free-text snapshots sufficient initially, or must they integrate with an existing external timetable/SIS?
-5. Should all observed teachers receive the same PDF, or should each receive a personalized copy containing only their acknowledgement response?
-6. If one selected teacher becomes inactive before submission, must the observer remove them, or may the observation still be submitted as a historical record?
+## 15. Implementation validation record
+
+Completed before the staging push:
+
+- Prisma schema validation and Prisma Client generation passed.
+- The production Next.js build passed.
+- Observation unit/domain/notification tests passed: 40 tests.
+- Database-backed isolated PostgreSQL observation tests passed: 10 tests.
+- The migration reset and application sequence passed from the active baseline through `20260828000000_multi_teacher_observation_foundation`.
+- Local development migration deployment backfilled 43 existing observations into participant rows and participant-aware summary queries completed successfully.
+- TypeScript, focused ESLint, project diagnostics, and diff whitespace validation passed.
+
+Production capability documentation must remain unchanged until staging verification is complete and the release is promoted to production.

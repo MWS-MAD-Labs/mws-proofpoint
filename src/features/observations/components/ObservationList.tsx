@@ -18,7 +18,11 @@ import {
   formatRelativeDate,
   observationActionLabel,
   observationHref,
+  observationParticipants,
+  observationScopeSummary,
   observationTitle,
+  participantDepartmentSummary,
+  participantSummary,
   personName,
 } from "../utils";
 import { ObservationCard } from "./ObservationCard";
@@ -47,7 +51,7 @@ export function ObservationList({ result }: { result: ObservationListResponse })
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30 hover:bg-muted/30">
-              <TableHead>Staff</TableHead>
+              <TableHead>Observed teachers</TableHead>
               <TableHead>Observation</TableHead>
               <TableHead>Observer</TableHead>
               <TableHead>Status</TableHead>
@@ -61,15 +65,23 @@ export function ObservationList({ result }: { result: ObservationListResponse })
           <TableBody>
             {result.data.map((item) => {
               const href = observationHref(item);
+              const participants = observationParticipants(item);
               return (
                 <TableRow key={item.id}>
                   <TableCell>
-                    <Link href={href} className="font-medium hover:text-primary hover:underline">{personName(item.staff)}</Link>
-                    <p className="mt-1 text-xs text-muted-foreground">{item.department?.name || "No department"}</p>
+                    <Link href={href} className="font-medium hover:text-primary hover:underline">
+                      {participantSummary(participants)}
+                    </Link>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {participants.length} {participants.length === 1 ? "teacher" : "teachers"} · {participantDepartmentSummary(participants, item.department)}
+                    </p>
                   </TableCell>
                   <TableCell className="max-w-56">
                     <p className="truncate font-medium">{observationTitle(item)}</p>
                     {item.title && <p className="mt-1 truncate text-xs text-muted-foreground">{item.rubric.name}</p>}
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {observationScopeSummary(item.scope)}
+                    </p>
                   </TableCell>
                   <TableCell>{personName(item.manager)}</TableCell>
                   <TableCell><ObservationStatusBadge status={item.status} /></TableCell>

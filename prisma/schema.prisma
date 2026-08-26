@@ -47,6 +47,8 @@ model User {
   observationNotificationSettingUpdates  ObservationNotificationSettingUpdate[] @relation("ObservationNotificationSettingUpdateActor")
   updatedObservationNotificationSettings ObservationNotificationSetting[]       @relation("ObservationNotificationSettingsUpdatedBy")
   observationUpdates                     ObservationUpdate[]                    @relation("ObservationUpdateAuthor")
+  observationUpdateStaff                 ObservationUpdate[]                    @relation("ObservationUpdateStaff")
+  observationParticipations              ObservationParticipant[]
   managedObservations                    Observation[]                          @relation("ManagerObservations")
   observations                           Observation[]                          @relation("StaffObservations")
   profile                                Profile?
@@ -426,7 +428,11 @@ model Observation {
   acknowledgementMethod              String?                              @map("acknowledgement_method")
   acknowledgementNote                String?                              @map("acknowledgement_note")
   acknowledgementAutomationStartedAt DateTime?                            @map("acknowledgement_automation_started_at")
+  scopeType                          String                               @default("INDIVIDUAL") @map("scope_type")
+  className                          String?                              @map("class_name")
+  subjectName                        String?                              @map("subject_name")
   acknowledgementReminders           ObservationAcknowledgementReminder[]
+  participants                       ObservationParticipant[]
   answers                            ObservationAnswer[]
   updates                            ObservationUpdate[]
   manager                            User?                                @relation("ManagerObservations", fields: [managerId], references: [id])
@@ -488,36 +494,61 @@ model ObservationNotificationSettingUpdate {
 }
 
 model ObservationAcknowledgementSchedulerStatus {
-  id                    Int       @id @default(1)
-  lastAttemptedAt       DateTime? @map("last_attempted_at")
-  lastSuccessfulAt      DateTime? @map("last_successful_at")
-  settingsRevision      DateTime? @map("settings_revision")
-  nextExpectedAt        DateTime? @map("next_expected_at")
-  advisoryLockSkips     Int       @default(0) @map("advisory_lock_skips")
-  checked               Int       @default(0)
-  reminded              Int       @default(0)
-  autoAcknowledged      Int       @default(0) @map("auto_acknowledged")
-  skipped               Int       @default(0)
-  failed                Int       @default(0)
-  lastError             String?   @map("last_error")
-  updatedAt             DateTime  @default(now()) @map("updated_at")
+  id                Int       @id @default(1)
+  lastAttemptedAt   DateTime? @map("last_attempted_at")
+  lastSuccessfulAt  DateTime? @map("last_successful_at")
+  settingsRevision  DateTime? @map("settings_revision")
+  nextExpectedAt    DateTime? @map("next_expected_at")
+  advisoryLockSkips Int       @default(0) @map("advisory_lock_skips")
+  checked           Int       @default(0)
+  reminded          Int       @default(0)
+  autoAcknowledged  Int       @default(0) @map("auto_acknowledged")
+  skipped           Int       @default(0)
+  failed            Int       @default(0)
+  lastError         String?   @map("last_error")
+  updatedAt         DateTime  @default(now()) @map("updated_at")
 
   @@map("observation_acknowledgement_scheduler_status")
 }
 
-model ObservationAcknowledgementReminder {
-  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  observationId  String      @map("observation_id") @db.Uuid
-  submissionAt   DateTime    @map("submission_at")
-  reminderPeriod Int         @map("reminder_period")
-  status         String      @default("processing")
-  error          String?
-  createdAt      DateTime    @default(now()) @map("created_at")
-  sentAt         DateTime?   @map("sent_at")
-  observation    Observation @relation(fields: [observationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+model ObservationParticipant {
+  id                                 String                               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  observationId                      String                               @map("observation_id") @db.Uuid
+  staffId                            String                               @map("staff_id") @db.Uuid
+  acknowledgedAt                     DateTime?                            @map("acknowledged_at")
+  acknowledgementMethod              String?                              @map("acknowledgement_method")
+  acknowledgementResponse            String?                              @map("acknowledgement_response")
+  acknowledgementNote                String?                              @map("acknowledgement_note")
+  acknowledgementAutomationStartedAt DateTime?                            @map("acknowledgement_automation_started_at")
+  createdAt                          DateTime                             @default(now()) @map("created_at")
+  updatedAt                          DateTime                             @default(now()) @updatedAt @map("updated_at")
+  acknowledgementReminders           ObservationAcknowledgementReminder[]
+  observation                        Observation                          @relation(fields: [observationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  staff                              User                                 @relation(fields: [staffId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
+  @@unique([observationId, staffId], map: "observation_participants_observation_id_staff_id_key")
+  @@index([staffId, observationId], map: "observation_participants_staff_id_observation_id_idx")
+  @@index([observationId, acknowledgedAt], map: "observation_participants_observation_id_acknowledged_at_idx")
+  @@map("observation_participants")
+}
+
+model ObservationAcknowledgementReminder {
+  id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  participantId  String                 @map("participant_id") @db.Uuid
+  observationId  String?                @map("observation_id") @db.Uuid
+  submissionAt   DateTime               @map("submission_at")
+  reminderPeriod Int                    @map("reminder_period")
+  status         String                 @default("processing")
+  error          String?
+  createdAt      DateTime               @default(now()) @map("created_at")
+  sentAt         DateTime?              @map("sent_at")
+  participant    ObservationParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  observation    Observation?           @relation(fields: [observationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([participantId, submissionAt, reminderPeriod], map: "observation_ack_reminders_participant_submission_period_key")
   @@unique([observationId, submissionAt, reminderPeriod], map: "observation_acknowledgement_r_observation_id_submission_at__key")
   @@index([status])
+  @@index([participantId], map: "observation_acknowledgement_reminders_participant_idx")
   @@index([observationId], map: "observation_acknowledgement_reminders_observation_idx")
   @@map("observation_acknowledgement_reminders")
 }
@@ -546,6 +577,7 @@ model ObservationUpdate {
   id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   observationId String      @map("observation_id") @db.Uuid
   updatedById   String?     @map("updated_by_id") @db.Uuid
+  staffId       String?     @map("staff_id") @db.Uuid
   statusFrom    String?     @map("status_from")
   statusTo      String      @map("status_to")
   notes         String?
@@ -553,9 +585,11 @@ model ObservationUpdate {
   eventType     String      @default("status_changed") @map("event_type")
   observation   Observation @relation(fields: [observationId], references: [id], onDelete: Cascade)
   updatedBy     User?       @relation("ObservationUpdateAuthor", fields: [updatedById], references: [id])
+  staff         User?       @relation("ObservationUpdateStaff", fields: [staffId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([observationId])
   @@index([updatedById])
+  @@index([staffId], map: "observation_updates_staff_id_idx")
   @@index([createdAt])
   @@map("observation_updates")
 }

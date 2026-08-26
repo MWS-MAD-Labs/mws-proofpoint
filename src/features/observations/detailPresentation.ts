@@ -1,11 +1,57 @@
 import type {
   ObservationActivityEntry,
+  ObservationAcknowledgementProgress,
   ObservationDetail,
+  ObservationParticipantDetail,
   ObservationPermissions,
   ObservationStatus,
 } from "./types";
 
 export type ObservationPrimaryAction = "edit" | "acknowledge" | "reopen" | null;
+
+export function getObservationDetailParticipants(
+  observation: Pick<ObservationDetail, "participants" | "staff">,
+): ObservationParticipantDetail[] {
+  if (observation.participants?.length) return observation.participants;
+  if (!observation.staff) return [];
+  return [
+    {
+      id: observation.staff.id,
+      email: observation.staff.email,
+      fullName: observation.staff.profile.fullName,
+      department: observation.staff.profile.department ?? null,
+      acknowledgedAt: null,
+      acknowledgementMethod: null,
+      acknowledgementResponse: null,
+      acknowledgementNote: null,
+      acknowledgementResponseVisible: false,
+    },
+  ];
+}
+
+export function getObservationAcknowledgementProgress(
+  observation: Pick<
+    ObservationDetail,
+    "acknowledgementProgress" | "participants" | "staff" | "status" | "acknowledgedAt"
+  >,
+): ObservationAcknowledgementProgress {
+  if (observation.acknowledgementProgress) {
+    return observation.acknowledgementProgress;
+  }
+  const participants = getObservationDetailParticipants(observation);
+  const total = participants.length;
+  const acknowledged = observation.participants?.length
+    ? participants.filter((participant) => participant.acknowledgedAt).length
+    : observation.status === "acknowledged" || Boolean(observation.acknowledgedAt)
+      ? total
+      : 0;
+  return {
+    acknowledged,
+    total,
+    pending: Math.max(total - acknowledged, 0),
+    percentage: total > 0 ? Math.round((acknowledged / total) * 100) : 0,
+  };
+}
 
 export function getObservationPrimaryAction(
   permissions: ObservationPermissions,
