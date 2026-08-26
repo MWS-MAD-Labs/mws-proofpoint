@@ -3,8 +3,8 @@ import { defineConfig } from "prisma/config";
 
 // Load Next.js local development settings for Prisma CLI. Existing Docker-provided
 // environment variables retain precedence because dotenv does not override by default.
-loadEnv({ path: ".env" });
-loadEnv({ path: ".env.local" });
+loadEnv({ path: ".env", quiet: true });
+loadEnv({ path: ".env.local", quiet: true });
 
 const databaseUrl = process.env.DATABASE_URL;
 

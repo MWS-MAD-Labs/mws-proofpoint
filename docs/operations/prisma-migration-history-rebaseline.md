@@ -121,18 +121,22 @@ npx prisma migrate status
 
 No manual resolve or rebaseline command is needed for a new database.
 
-## Prisma datamodel compatibility note
+## Prisma datamodel compatibility
 
-The baseline intentionally represents the verified deployed PostgreSQL schema, including legacy columns, indexes, constraints, and audit tables that are not all represented in `prisma/schema.prisma`. Migration-history repair does not silently reshape those production objects.
+`prisma/schema.prisma` has been reconciled with the verified deployed PostgreSQL schema, including UUID native types, legacy migration fields, timestamp types, relation actions, index names, partial indexes, and audit tables.
 
-Until the Prisma datamodel is separately reconciled with the deployed schema:
+Verify continued alignment before every schema release:
 
-- do not use `prisma db push` in any shared or deployed environment;
-- do not accept an automatically generated migration without reviewing its SQL against a production clone;
-- use explicit forward SQL migrations and test both an empty database and an existing-database clone;
-- treat a non-empty `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma` as known datamodel debt, not as authorization to drop legacy production objects.
+```sh
+npx prisma migrate diff \
+  --exit-code \
+  --from-config-datasource \
+  --to-schema prisma/schema.prisma
+```
 
-This does not affect `prisma migrate deploy` or `prisma migrate status` for the active baseline history.
+The expected result is `No difference detected.` Check constraints, trigger functions, and PostgreSQL extensions remain database-managed objects in the baseline SQL because Prisma Client does not model them directly.
+
+Production and shared environments must still use `prisma migrate deploy`, never `prisma db push`.
 
 ## Rollback
 

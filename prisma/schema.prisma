@@ -1,15 +1,781 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-// Enums
+model Department {
+  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String
+  parentId             String?               @map("parent_id") @db.Uuid
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime              @default(now()) @map("updated_at") @db.Timestamptz(6)
+  departmentRoles      DepartmentRole[]
+  parent               Department?           @relation("DepartmentHierarchy", fields: [parentId], references: [id], onUpdate: NoAction)
+  children             Department[]          @relation("DepartmentHierarchy")
+  profiles             Profile[]
+  programCollaborators ProgramCollaborator[]
+  rubricTemplates      RubricTemplate[]
+  strategicPlan        StrategicPlan?
+
+  @@map("departments")
+}
+
+model User {
+  id                                     String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                                  String                                 @unique
+  passwordHash                           String                                 @map("password_hash")
+  emailVerified                          Boolean?                               @default(false) @map("email_verified")
+  createdAt                              DateTime                               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                              DateTime                               @default(now()) @map("updated_at") @db.Timestamptz(6)
+  status                                 String                                 @default("active")
+  nlsmartrackId                          String?                                @map("nlsmartrack_id")
+  askedQuestions                         AssessmentQuestion[]                   @relation("AskedQuestions")
+  answeredQuestions                      AssessmentQuestion[]                   @relation("AnsweredQuestions")
+  assessmentUpdates                      AssessmentUpdate[]                     @relation("AssessmentUpdateAuthor")
+  directorAssessments                    Assessment[]                           @relation("DirectorAssessments")
+  initiatedAssessments                   Assessment[]                           @relation("InitiatedAssessments")
+  managerAssessments                     Assessment[]                           @relation("ManagerAssessments")
+  returnedAssessments                    Assessment[]                           @relation("ReturnedAssessments")
+  assessments                            Assessment[]                           @relation("StaffAssessments")
+  departmentRoleMemberships              DepartmentRoleMembership[]
+  notificationPreferences                NotificationPreference?
+  notifications                          Notification[]
+  observationNotificationSettingUpdates  ObservationNotificationSettingUpdate[] @relation("ObservationNotificationSettingUpdateActor")
+  updatedObservationNotificationSettings ObservationNotificationSetting[]       @relation("ObservationNotificationSettingsUpdatedBy")
+  observationUpdates                     ObservationUpdate[]                    @relation("ObservationUpdateAuthor")
+  managedObservations                    Observation[]                          @relation("ManagerObservations")
+  observations                           Observation[]                          @relation("StaffObservations")
+  profile                                Profile?
+  progressUpdates                        ProgramProgressUpdate[]                @relation("ProgressUpdateAuthor")
+  createdTemplates                       RubricTemplate[]                       @relation("TemplateCreator")
+  ownedStrategicPlans                    StrategicPlan[]                        @relation("PlanOwner")
+  roles                                  UserRole[]
+
+  @@unique([nlsmartrackId], map: "users_nlsmartrack_id_key", where: raw("(nlsmartrack_id IS NOT NULL)"))
+  @@index([status], map: "idx_users_status")
+  @@map("users")
+}
+
+model Profile {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String      @unique @map("user_id") @db.Uuid
+  email           String
+  fullName        String?     @map("full_name")
+  niy             String?
+  jobTitle        String?     @map("job_title")
+  departmentId    String?     @map("department_id") @db.Uuid
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @default(now()) @map("updated_at") @db.Timestamptz(6)
+  avatarUrl       String?     @map("avatar_url")
+  migrationSource String?     @map("migration_source")
+  department      Department? @relation(fields: [departmentId], references: [id], onUpdate: NoAction)
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([departmentId], map: "idx_profiles_department_id")
+  @@index([userId], map: "idx_profiles_user_id")
+  @@map("profiles")
+}
+
+model UserRole {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      AppRole  @default(staff)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, role])
+  @@index([userId], map: "idx_user_roles_user_id")
+  @@map("user_roles")
+}
+
+model RubricTemplate {
+  id                  String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                String
+  description         String?
+  departmentId        String?                  @map("department_id") @db.Uuid
+  isGlobal            Boolean                  @default(false) @map("is_global")
+  createdById         String?                  @map("created_by") @db.Uuid
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                 @default(now()) @map("updated_at") @db.Timestamptz(6)
+  templateType        TemplateType             @default(KPI_APPRAISAL) @map("template_type")
+  isActive            Boolean                  @default(true) @map("is_active")
+  assessments         Assessment[]
+  departmentRoles     DepartmentRole[]
+  domains             KpiDomain[]
+  kpiStandards        KpiStandard[]
+  kpis                Kpi[]
+  observations        Observation[]
+  workflowAssignments RoleWorkflowAssignment[]
+  sections            RubricSection[]
+  createdBy           User?                    @relation("TemplateCreator", fields: [createdById], references: [id], onUpdate: NoAction)
+  department          Department?              @relation(fields: [departmentId], references: [id], onUpdate: NoAction)
+
+  @@map("rubric_templates")
+}
+
+model RubricSection {
+  id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  templateId String            @map("template_id") @db.Uuid
+  name       String
+  weight     Decimal           @db.Decimal(5, 2)
+  sortOrder  Int               @default(0) @map("sort_order")
+  createdAt  DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  indicators RubricIndicator[]
+  template   RubricTemplate    @relation(fields: [templateId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("rubric_sections")
+}
+
+model RubricIndicator {
+  id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sectionId        String                @map("section_id") @db.Uuid
+  name             String
+  description      String?
+  sortOrder        Int                   @default(0) @map("sort_order")
+  evidenceGuidance String?               @map("evidence_guidance")
+  scoreOptions     Json?                 @map("score_options")
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  questionType     IndicatorQuestionType @default(SCALE) @map("question_type")
+  scoreMin         Int?                  @map("score_min")
+  scoreMax         Int?                  @map("score_max")
+  scoreStep        Int?                  @map("score_step")
+  placeholderText  String?               @map("placeholder_text")
+  isRequired       Boolean               @default(true) @map("is_required")
+  questions        AssessmentQuestion[]
+  answers          ObservationAnswer[]
+  section          RubricSection         @relation(fields: [sectionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("rubric_indicators")
+}
+
+model KpiDomain {
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  templateId String         @map("template_id") @db.Uuid
+  name       String
+  sortOrder  Int            @default(0) @map("sort_order")
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  weight     Decimal        @default(0) @db.Decimal(5, 2)
+  code       String
+  legacyCode String?        @map("legacy_code")
+  template   RubricTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  standards  KpiStandard[]
+
+  @@unique([templateId, code])
+  @@index([templateId], map: "idx_kpi_domains_template_id")
+  @@map("kpi_domains")
+}
+
+model KpiStandard {
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  domainId   String         @map("domain_id") @db.Uuid
+  name       String
+  sortOrder  Int            @default(0) @map("sort_order")
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  code       String
+  legacyCode String?        @map("legacy_code")
+  templateId String         @map("template_id") @db.Uuid
+  domain     KpiDomain      @relation(fields: [domainId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  template   RubricTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  kpis       Kpi[]
+
+  @@unique([templateId, code])
+  @@index([templateId])
+  @@index([domainId], map: "idx_kpi_standards_domain_id")
+  @@map("kpi_standards")
+}
+
+model Kpi {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  standardId        String           @map("standard_id") @db.Uuid
+  name              String
+  description       String?
+  evidenceGuidance  String?          @map("evidence_guidance")
+  trainings         String?
+  sortOrder         Int              @default(0) @map("sort_order")
+  rubric4           String           @map("rubric_4")
+  rubric3           String           @map("rubric_3")
+  rubric2           String           @map("rubric_2")
+  rubric1           String           @map("rubric_1")
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  code              String
+  legacyCode        String?          @map("legacy_code")
+  templateId        String           @map("template_id") @db.Uuid
+  performanceWeight Decimal          @default(100) @map("performance_weight") @db.Decimal(5, 2)
+  standard          KpiStandard      @relation(fields: [standardId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  template          RubricTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  programLinks      ProgramKpiLink[]
+
+  @@unique([templateId, code])
+  @@index([templateId])
+  @@index([standardId], map: "idx_kpis_standard_id")
+  @@map("kpis")
+}
+
+model Assessment {
+  id                   String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  staffId              String                  @map("staff_id") @db.Uuid
+  managerId            String?                 @map("manager_id") @db.Uuid
+  directorId           String?                 @map("director_id") @db.Uuid
+  templateId           String?                 @map("template_id") @db.Uuid
+  period               String
+  status               String                  @default("draft")
+  staffScores          Json?                   @default("{}") @map("staff_scores")
+  managerScores        Json?                   @default("{}") @map("manager_scores")
+  staffEvidence        Json?                   @default("{}") @map("staff_evidence")
+  managerEvidence      Json?                   @default("{}") @map("manager_evidence")
+  managerNotes         String?                 @map("manager_notes")
+  directorComments     String?                 @map("director_comments")
+  finalScore           Decimal?                @map("final_score") @db.Decimal(4, 2)
+  finalGrade           String?                 @map("final_grade")
+  staffSubmittedAt     DateTime?               @map("staff_submitted_at") @db.Timestamptz(6)
+  managerReviewedAt    DateTime?               @map("manager_reviewed_at") @db.Timestamptz(6)
+  directorApprovedAt   DateTime?               @map("director_approved_at") @db.Timestamptz(6)
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                @default(now()) @map("updated_at") @db.Timestamptz(6)
+  staffNotes           String?                 @map("staff_notes")
+  returnFeedback       String?                 @map("return_feedback")
+  returnedAt           DateTime?               @map("returned_at") @db.Timestamptz(6)
+  returnedById         String?                 @map("returned_by") @db.Uuid
+  nlsmartrackId        String?                 @map("nlsmartrack_id")
+  workflowId           String?                 @map("workflow_id") @db.Uuid
+  workflowAssignmentId String?                 @map("workflow_assignment_id") @db.Uuid
+  workflowSnapshot     Json?                   @map("workflow_snapshot")
+  currentStepOrder     Int?                    @map("current_step_order")
+  initiatedById        String?                 @map("initiated_by_id") @db.Uuid
+  managerSubmittedAt   DateTime?               @map("manager_submitted_at")
+  directorReviewedAt   DateTime?               @map("director_reviewed_at")
+  acknowledgedAt       DateTime?               @map("acknowledged_at")
+  completedAt          DateTime?               @map("completed_at")
+  directorScores       Json                    @default("{}") @map("director_scores")
+  directorEvidence     Json                    @default("{}") @map("director_evidence")
+  questions            AssessmentQuestion[]
+  updates              AssessmentUpdate[]
+  director             User?                   @relation("DirectorAssessments", fields: [directorId], references: [id], onUpdate: NoAction)
+  initiatedBy          User?                   @relation("InitiatedAssessments", fields: [initiatedById], references: [id], onUpdate: NoAction)
+  manager              User?                   @relation("ManagerAssessments", fields: [managerId], references: [id], onUpdate: NoAction)
+  returnedBy           User?                   @relation("ReturnedAssessments", fields: [returnedById], references: [id], onUpdate: NoAction)
+  staff                User                    @relation("StaffAssessments", fields: [staffId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  template             RubricTemplate?         @relation(fields: [templateId], references: [id], onUpdate: NoAction)
+  workflowAssignment   RoleWorkflowAssignment? @relation("AssessmentWorkflowAssignment", fields: [workflowAssignmentId], references: [id], onUpdate: NoAction)
+  workflow             WorkflowDefinition?     @relation(fields: [workflowId], references: [id], onUpdate: NoAction)
+  notifications        Notification[]
+
+  @@unique([nlsmartrackId], map: "assessments_nlsmartrack_id_key", where: raw("(nlsmartrack_id IS NOT NULL)"))
+  @@index([currentStepOrder])
+  @@index([initiatedById])
+  @@index([workflowId])
+  @@index([directorId], map: "idx_assessments_director_id")
+  @@index([managerId], map: "idx_assessments_manager_id")
+  @@index([returnedById], map: "idx_assessments_returned_by")
+  @@index([staffId], map: "idx_assessments_staff_id")
+  @@index([status], map: "idx_assessments_status")
+  @@map("assessments")
+}
+
+model AssessmentUpdate {
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assessmentId String     @map("assessment_id") @db.Uuid
+  updatedById  String?    @map("updated_by_id") @db.Uuid
+  stepOrder    Int?       @map("step_order")
+  statusFrom   String?    @map("status_from")
+  statusTo     String     @map("status_to")
+  eventType    String     @map("event_type")
+  notes        String?
+  createdAt    DateTime   @default(now()) @map("created_at")
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  updatedBy    User?      @relation("AssessmentUpdateAuthor", fields: [updatedById], references: [id], onUpdate: NoAction)
+
+  @@index([assessmentId])
+  @@index([createdAt])
+  @@map("assessment_updates")
+}
+
+model AssessmentQuestion {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assessmentId    String           @map("assessment_id") @db.Uuid
+  indicatorId     String?          @map("indicator_id") @db.Uuid
+  askedBy         String           @map("asked_by") @db.Uuid
+  question        String
+  response        String?
+  respondedById   String?          @map("responded_by") @db.Uuid
+  respondedAt     DateTime?        @map("responded_at") @db.Timestamptz(6)
+  status          String           @default("pending")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
+  askedByUser     User             @relation("AskedQuestions", fields: [askedBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assessment      Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  indicator       RubricIndicator? @relation(fields: [indicatorId], references: [id], onUpdate: NoAction)
+  respondedByUser User?            @relation("AnsweredQuestions", fields: [respondedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([assessmentId], map: "idx_assessment_questions_assessment_id")
+  @@map("assessment_questions")
+}
+
+model DepartmentRole {
+  id                  String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  departmentId        String?                    @map("department_id") @db.Uuid
+  role                AppRole
+  defaultTemplateId   String?                    @map("default_template_id") @db.Uuid
+  createdAt           DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                   @default(now()) @map("updated_at") @db.Timestamptz(6)
+  name                String?
+  approvalWorkflows   ApprovalWorkflow[]
+  memberships         DepartmentRoleMembership[]
+  defaultTemplate     RubricTemplate?            @relation(fields: [defaultTemplateId], references: [id], onUpdate: NoAction)
+  department          Department?                @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workflowAssignments RoleWorkflowAssignment[]
+
+  @@index([departmentId], map: "idx_department_roles_department_id")
+  @@index([role], map: "idx_department_roles_role")
+  @@map("department_roles")
+}
+
+model DepartmentRoleMembership {
+  id               String         @id @default(dbgenerated("(gen_random_uuid())::text"))
+  departmentRoleId String         @map("department_role_id") @db.Uuid
+  userId           String         @map("user_id") @db.Uuid
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @default(now()) @map("updated_at")
+  departmentRole   DepartmentRole @relation(fields: [departmentRoleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([departmentRoleId, userId], map: "department_role_memberships_role_user_key")
+  @@index([departmentRoleId], map: "department_role_memberships_role_idx")
+  @@index([userId], map: "department_role_memberships_user_idx")
+  @@map("department_role_memberships")
+}
+
+model ApprovalWorkflow {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  departmentRoleId String         @map("department_role_id") @db.Uuid
+  stepOrder        Int            @map("step_order")
+  approverRole     AppRole        @map("approver_role")
+  stepType         String         @map("step_type")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  departmentRole   DepartmentRole @relation(fields: [departmentRoleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([departmentRoleId, stepOrder])
+  @@index([departmentRoleId], map: "idx_approval_workflows_department_role_id")
+  @@map("approval_workflows")
+}
+
+model WorkflowDefinition {
+  id          String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  type        TemplateType
+  description String?
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  assessments Assessment[]
+  assignments RoleWorkflowAssignment[]
+  steps       WorkflowStep[]
+
+  @@map("workflow_definitions")
+}
+
+model WorkflowStep {
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflowId  String             @map("workflow_id") @db.Uuid
+  stepOrder   Int                @map("step_order")
+  actorRole   AppRole            @map("actor_role")
+  actionType  WorkflowActionType @map("action_type")
+  description String?
+  workflow    WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@map("workflow_steps")
+}
+
+model RoleWorkflowAssignment {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  departmentRoleId String             @map("department_role_id") @db.Uuid
+  workflowId       String             @map("workflow_id") @db.Uuid
+  rubricId         String?            @map("rubric_id") @db.Uuid
+  isActive         Boolean            @default(true) @map("is_active")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  assessments      Assessment[]       @relation("AssessmentWorkflowAssignment")
+  departmentRole   DepartmentRole     @relation(fields: [departmentRoleId], references: [id], onDelete: Cascade, map: "role_workflow_assignments_dept_role_fkey")
+  rubric           RubricTemplate?    @relation(fields: [rubricId], references: [id], map: "role_workflow_assignments_rubric_fkey")
+  workflow         WorkflowDefinition @relation(fields: [workflowId], references: [id], map: "role_workflow_assignments_workflow_fkey")
+
+  @@index([departmentRoleId], map: "role_workflow_assignments_dept_role_idx")
+  @@map("role_workflow_assignments")
+}
+
+model Observation {
+  id                                 String                               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  staffId                            String                               @map("staffId") @db.Uuid
+  managerId                          String?                              @map("managerId") @db.Uuid
+  rubricId                           String                               @map("template_id") @db.Uuid
+  status                             ObservationStatus                    @default(draft)
+  createdAt                          DateTime                             @default(now()) @map("created_at")
+  updatedAt                          DateTime                             @default(now()) @updatedAt @map("updated_at")
+  submittedAt                        DateTime?                            @map("submitted_at")
+  acknowledgedAt                     DateTime?                            @map("acknowledged_at")
+  nlsmartrackId                      String?                              @map("nlsmartrack_id")
+  observationDate                    DateTime?                            @map("observation_date")
+  dueAt                              DateTime?                            @map("due_at")
+  reopenedAt                         DateTime?                            @map("reopened_at")
+  type                               String                               @default("MANAGER")
+  title                              String?
+  description                        String?
+  acknowledgementResponse            String?                              @map("acknowledgement_response")
+  acknowledgementMethod              String?                              @map("acknowledgement_method")
+  acknowledgementNote                String?                              @map("acknowledgement_note")
+  acknowledgementAutomationStartedAt DateTime?                            @map("acknowledgement_automation_started_at")
+  acknowledgementReminders           ObservationAcknowledgementReminder[]
+  answers                            ObservationAnswer[]
+  updates                            ObservationUpdate[]
+  manager                            User?                                @relation("ManagerObservations", fields: [managerId], references: [id])
+  rubric                             RubricTemplate                       @relation(fields: [rubricId], references: [id], map: "observations_rubricId_fkey")
+  staff                              User                                 @relation("StaffObservations", fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([nlsmartrackId], map: "observations_nlsmartrack_id_key", where: raw("(nlsmartrack_id IS NOT NULL)"))
+  @@index([staffId])
+  @@index([managerId])
+  @@index([status])
+  @@index([status, acknowledgementAutomationStartedAt], map: "observations_acknowledgement_automation_idx", where: raw("((status = 'submitted'::\"ObservationStatus\") AND (acknowledged_at IS NULL))"))
+  @@index([dueAt])
+  @@index([managerId, status, updatedAt], map: "observations_manager_status_updated_idx")
+  @@index([observationDate])
+  @@index([staffId, status, updatedAt], map: "observations_staff_status_updated_idx")
+  @@index([status, dueAt])
+  @@map("observations")
+}
+
+model ObservationNotificationSetting {
+  id                                    Int                                    @id @default(1)
+  notificationsEnabled                  Boolean                                @default(true) @map("notifications_enabled")
+  submissionEmailsEnabled               Boolean                                @default(true) @map("submission_emails_enabled")
+  reminderEmailsEnabled                 Boolean                                @default(true) @map("reminder_emails_enabled")
+  firstReminderDays                     Int                                    @default(3) @map("first_reminder_days")
+  reminderIntervalDays                  Int                                    @default(2) @map("reminder_interval_days")
+  automaticAcknowledgementEnabled       Boolean                                @default(true) @map("automatic_acknowledgement_enabled")
+  automaticAcknowledgementDays          Int                                    @default(30) @map("automatic_acknowledgement_days")
+  personalAcknowledgementEmailsEnabled  Boolean                                @default(true) @map("personal_ack_email_enabled")
+  automaticAcknowledgementEmailsEnabled Boolean                                @default(true) @map("automatic_ack_email_enabled")
+  reopenEmailsEnabled                   Boolean                                @default(true) @map("reopen_emails_enabled")
+  reassignmentEmailsEnabled             Boolean                                @default(true) @map("reassignment_emails_enabled")
+  schedulerEnabled                      Boolean                                @default(true) @map("scheduler_enabled")
+  schedulerIntervalMinutes              Int                                    @default(60) @map("scheduler_interval_minutes")
+  updatedById                           String?                                @map("updated_by_id") @db.Uuid
+  createdAt                             DateTime                               @default(now()) @map("created_at")
+  updatedAt                             DateTime                               @default(now()) @updatedAt @map("updated_at")
+  updates                               ObservationNotificationSettingUpdate[]
+  updatedBy                             User?                                  @relation("ObservationNotificationSettingsUpdatedBy", fields: [updatedById], references: [id], onUpdate: NoAction)
+
+  @@index([updatedById], map: "observation_notification_settings_updated_by_idx")
+  @@map("observation_notification_settings")
+}
+
+model ObservationNotificationSettingUpdate {
+  id             String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  settingsId     Int                            @default(1) @map("settings_id")
+  actorId        String                         @map("actor_id") @db.Uuid
+  beforeSettings Json                           @map("before_settings")
+  afterSettings  Json                           @map("after_settings")
+  createdAt      DateTime                       @default(now()) @map("created_at")
+  actor          User                           @relation("ObservationNotificationSettingUpdateActor", fields: [actorId], references: [id], onUpdate: NoAction)
+  settings       ObservationNotificationSetting @relation(fields: [settingsId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([actorId], map: "observation_notification_setting_updates_actor_idx")
+  @@index([settingsId], map: "observation_notification_setting_updates_settings_idx")
+  @@map("observation_notification_setting_updates")
+}
+
+model ObservationAcknowledgementReminder {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  observationId  String      @map("observation_id") @db.Uuid
+  submissionAt   DateTime    @map("submission_at")
+  reminderPeriod Int         @map("reminder_period")
+  status         String      @default("processing")
+  error          String?
+  createdAt      DateTime    @default(now()) @map("created_at")
+  sentAt         DateTime?   @map("sent_at")
+  observation    Observation @relation(fields: [observationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([observationId, submissionAt, reminderPeriod], map: "observation_acknowledgement_r_observation_id_submission_at__key")
+  @@index([status])
+  @@index([observationId], map: "observation_acknowledgement_reminders_observation_idx")
+  @@map("observation_acknowledgement_reminders")
+}
+
+model ObservationAnswer {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  observationId   String          @map("observation_id") @db.Uuid
+  indicatorId     String          @map("indicator_id") @db.Uuid
+  score           Float           @default(0)
+  note            String?
+  evidence        String?
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at")
+  textValue       String?         @map("text_value")
+  selectedOption  String?         @map("selected_option")
+  selectedOptions Json?           @map("selected_options")
+  indicator       RubricIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  observation     Observation     @relation(fields: [observationId], references: [id], onDelete: Cascade)
+
+  @@unique([observationId, indicatorId])
+  @@index([indicatorId])
+  @@map("observation_answers")
+}
+
+model ObservationUpdate {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  observationId String      @map("observation_id") @db.Uuid
+  updatedById   String?     @map("updated_by_id") @db.Uuid
+  statusFrom    String?     @map("status_from")
+  statusTo      String      @map("status_to")
+  notes         String?
+  createdAt     DateTime    @default(now()) @map("created_at")
+  eventType     String      @default("status_changed") @map("event_type")
+  observation   Observation @relation(fields: [observationId], references: [id], onDelete: Cascade)
+  updatedBy     User?       @relation("ObservationUpdateAuthor", fields: [updatedById], references: [id])
+
+  @@index([observationId])
+  @@index([updatedById])
+  @@index([createdAt])
+  @@map("observation_updates")
+}
+
+model Notification {
+  id           Int        @id @default(autoincrement())
+  assessmentId String     @map("assessment_id") @db.Uuid
+  userId       String     @map("user_id") @db.Uuid
+  type         String
+  status       String     @default("pending")
+  error        String?
+  createdAt    DateTime?  @default(now()) @map("created_at") @db.Timestamptz(6)
+  sentAt       DateTime?  @map("sent_at") @db.Timestamptz(6)
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([assessmentId], map: "idx_notifications_assessment_id")
+  @@index([status], map: "idx_notifications_status")
+  @@index([type], map: "idx_notifications_type")
+  @@index([userId], map: "idx_notifications_user_id")
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id                     Int       @id @default(autoincrement())
+  userId                 String    @unique @map("user_id") @db.Uuid
+  emailEnabled           Boolean?  @default(true) @map("email_enabled")
+  assessmentSubmitted    Boolean?  @default(true) @map("assessment_submitted")
+  managerReviewDone      Boolean?  @default(true) @map("manager_review_done")
+  directorApproved       Boolean?  @default(true) @map("director_approved")
+  adminReleased          Boolean?  @default(true) @map("admin_released")
+  assessmentReturned     Boolean?  @default(true) @map("assessment_returned")
+  assessmentAcknowledged Boolean?  @default(true) @map("assessment_acknowledged")
+  createdAt              DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime? @default(now()) @map("updated_at") @db.Timestamptz(6)
+  observationUpdates     Boolean   @default(true) @map("observation_updates")
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId], map: "idx_notification_preferences_user_id")
+  @@map("notification_preferences")
+}
+
+model StrategicPlan {
+  id           String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  departmentId String              @unique @map("department_id") @db.Uuid
+  name         String
+  description  String?
+  vision       String?
+  mission      String?
+  startYear    Int                 @map("start_year")
+  endYear      Int                 @map("end_year")
+  status       StrategicPlanStatus @default(draft)
+  ownerUserId  String?             @map("owner_user_id") @db.Uuid
+  publishedAt  DateTime?           @map("published_at")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @default(now()) @updatedAt @map("updated_at")
+  goals        StrategicGoal[]
+  periods      StrategicPeriod[]
+  department   Department          @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  ownerUser    User?               @relation("PlanOwner", fields: [ownerUserId], references: [id])
+
+  @@index([status])
+  @@map("strategic_plans")
+}
+
+model StrategicPeriod {
+  id            String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  planId        String                @map("plan_id") @db.Uuid
+  label         String
+  year          Int
+  sortOrder     Int                   @map("sort_order")
+  budgetLines   ProgramBudgetLine[]
+  periodTargets ProgramPeriodTarget[]
+  plan          StrategicPlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, year])
+  @@unique([planId, sortOrder])
+  @@index([planId])
+  @@map("strategic_periods")
+}
+
+model StrategicGoal {
+  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  planId      String               @map("plan_id") @db.Uuid
+  number      Int
+  title       String
+  description String?
+  sortOrder   Int                  @map("sort_order")
+  plan        StrategicPlan        @relation(fields: [planId], references: [id], onDelete: Cascade)
+  objectives  StrategicObjective[]
+
+  @@unique([planId, number])
+  @@unique([planId, sortOrder])
+  @@index([planId])
+  @@map("strategic_goals")
+}
+
+model StrategicObjective {
+  id        String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  goalId    String             @map("goal_id") @db.Uuid
+  number    Int
+  title     String
+  sortOrder Int                @map("sort_order")
+  goal      StrategicGoal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  programs  StrategicProgram[]
+
+  @@unique([goalId, number])
+  @@unique([goalId, sortOrder])
+  @@index([goalId])
+  @@map("strategic_objectives")
+}
+
+model StrategicProgram {
+  id            String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  objectiveId   String                  @map("objective_id") @db.Uuid
+  code          String
+  title         String
+  description   String?
+  status        ProgramStatus           @default(not_started)
+  sortOrder     Int                     @map("sort_order")
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @default(now()) @updatedAt @map("updated_at")
+  budgetLines   ProgramBudgetLine[]
+  checklist     ProgramChecklistItem[]
+  collaborators ProgramCollaborator[]
+  kpiLinks      ProgramKpiLink[]
+  targets       ProgramPeriodTarget[]
+  updates       ProgramProgressUpdate[]
+  objective     StrategicObjective      @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+
+  @@unique([objectiveId, code])
+  @@unique([objectiveId, sortOrder])
+  @@index([objectiveId])
+  @@map("strategic_programs")
+}
+
+model ProgramChecklistItem {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  programId String           @map("program_id") @db.Uuid
+  text      String
+  done      Boolean          @default(false)
+  sortOrder Int              @map("sort_order")
+  program   StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, sortOrder])
+  @@index([programId])
+  @@map("program_checklist_items")
+}
+
+model ProgramKpiLink {
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  programId     String           @map("program_id") @db.Uuid
+  kpiId         String           @map("kpi_id") @db.Uuid
+  coverageLabel String?          @map("coverage_label")
+  kpi           Kpi              @relation(fields: [kpiId], references: [id], onDelete: Cascade)
+  program       StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, kpiId])
+  @@index([programId])
+  @@index([kpiId])
+  @@map("program_kpi_links")
+}
+
+model ProgramPeriodTarget {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  programId   String           @map("program_id") @db.Uuid
+  periodId    String           @map("period_id") @db.Uuid
+  targetText  String           @default("") @map("target_text")
+  actualText  String?          @map("actual_text")
+  status      ProgramStatus    @default(not_started)
+  evidenceKey String?          @map("evidence_key")
+  updatedAt   DateTime         @default(now()) @updatedAt @map("updated_at")
+  period      StrategicPeriod  @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  program     StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, periodId])
+  @@index([programId])
+  @@index([periodId])
+  @@map("program_period_targets")
+}
+
+model ProgramCollaborator {
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  programId    String           @map("program_id") @db.Uuid
+  departmentId String           @map("department_id") @db.Uuid
+  department   Department       @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  program      StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, departmentId])
+  @@index([programId])
+  @@index([departmentId])
+  @@map("program_collaborators")
+}
+
+model ProgramBudgetLine {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  programId   String           @map("program_id") @db.Uuid
+  periodId    String           @map("period_id") @db.Uuid
+  label       String
+  description String?
+  amountIdr   Decimal          @default(0) @map("amount_idr") @db.Decimal(15, 2)
+  period      StrategicPeriod  @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  program     StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([periodId])
+  @@map("program_budget_lines")
+}
+
+model ProgramProgressUpdate {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  programId String           @map("program_id") @db.Uuid
+  authorId  String           @map("author_id") @db.Uuid
+  note      String
+  status    ProgramStatus
+  createdAt DateTime         @default(now()) @map("created_at")
+  author    User             @relation("ProgressUpdateAuthor", fields: [authorId], references: [id], onDelete: NoAction)
+  program   StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([authorId])
+  @@map("program_progress_updates")
+}
+
+model MigrationLog {
+  id         Int      @id @default(autoincrement())
+  entityType String   @map("entity_type")
+  sourceId   String   @map("source_id")
+  targetId   String   @map("target_id")
+  status     String   @default("success")
+  notes      String?
+  migratedAt DateTime @default(now()) @map("migrated_at") @db.Timestamptz(6)
+
+  @@unique([entityType, sourceId], map: "migration_log_entity_source_key")
+  @@index([entityType])
+  @@index([status])
+  @@map("migration_log")
+}
+
 enum AppRole {
   admin
   staff
@@ -20,37 +786,11 @@ enum AppRole {
   @@map("app_role")
 }
 
-enum AssessmentStatus {
-  draft
-  self_submitted
-  manager_reviewed
-  director_approved
-  admin_reviewed
-  acknowledged
-  rejected
-  returned
-  pending_director_review
-  director_reviewed
-}
-
-enum QuestionStatus {
-  pending
-  answered
-  closed
-}
-
-enum WorkflowStepType {
-  review
-  approval
-  review_and_approval
-  acknowledge
-}
-
 enum TemplateType {
   KPI_APPRAISAL
-  STAFF_APPRAISAL
   CLASSROOM_OBSERVATION
   GENERIC
+  STAFF_APPRAISAL
 }
 
 enum WorkflowActionType {
@@ -85,787 +825,4 @@ enum ProgramStatus {
   at_risk
   off_track
   completed
-}
-
-// Models
-model Department {
-  id        String       @id @default(uuid())
-  name      String       @db.Text
-  parentId  String?      @map("parent_id")
-  parent    Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children  Department[] @relation("DepartmentHierarchy")
-  createdAt DateTime     @default(now()) @map("created_at")
-  updatedAt DateTime     @default(now()) @map("updated_at")
-
-  profiles             Profile[]
-  rubricTemplates      RubricTemplate[]
-  departmentRoles      DepartmentRole[]
-  strategicPlan        StrategicPlan?
-  programCollaborators ProgramCollaborator[]
-
-  @@index([parentId])
-  @@map("departments")
-}
-
-model User {
-  id            String   @id @default(uuid())
-  email         String   @unique @db.Text
-  passwordHash  String   @map("password_hash") @db.Text
-  emailVerified Boolean  @default(false) @map("email_verified")
-  status        String   @default("active") @db.Text
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @default(now()) @map("updated_at")
-
-  profile                                Profile?
-  roles                                  UserRole[]
-  createdTemplates                       RubricTemplate[]                       @relation("TemplateCreator")
-  assessments                            Assessment[]                           @relation("StaffAssessments")
-  managerAssessments                     Assessment[]                           @relation("ManagerAssessments")
-  directorAssessments                    Assessment[]                           @relation("DirectorAssessments")
-  returnedAssessments                    Assessment[]                           @relation("ReturnedAssessments")
-  initiatedAssessments                   Assessment[]                           @relation("InitiatedAssessments")
-  assessmentUpdates                      AssessmentUpdate[]                     @relation("AssessmentUpdateAuthor")
-  askedQuestions                         AssessmentQuestion[]                   @relation("AskedQuestions")
-  answeredQuestions                      AssessmentQuestion[]                   @relation("AnsweredQuestions")
-  observations                           Observation[]                          @relation("StaffObservations")
-  managedObservations                    Observation[]                          @relation("ManagerObservations")
-  observationUpdates                     ObservationUpdate[]                    @relation("ObservationUpdateAuthor")
-  notificationPreferences                NotificationPreference?
-  notifications                          Notification[]
-  departmentRoleMemberships              DepartmentRoleMembership[]
-  ownedStrategicPlans                    StrategicPlan[]                        @relation("PlanOwner")
-  progressUpdates                        ProgramProgressUpdate[]                @relation("ProgressUpdateAuthor")
-  updatedObservationNotificationSettings ObservationNotificationSetting[]       @relation("ObservationNotificationSettingsUpdatedBy")
-  observationNotificationSettingUpdates  ObservationNotificationSettingUpdate[] @relation("ObservationNotificationSettingUpdateActor")
-
-  @@index([status])
-  @@map("users")
-}
-
-model Profile {
-  id           String   @id @default(uuid())
-  userId       String   @unique @map("user_id")
-  email        String   @db.Text
-  fullName     String?  @map("full_name") @db.Text
-  niy          String?  @db.Text
-  jobTitle     String?  @map("job_title") @db.Text
-  departmentId String?  @map("department_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @default(now()) @map("updated_at")
-
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-
-  @@index([userId])
-  @@index([departmentId])
-  @@map("profiles")
-}
-
-model UserRole {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  role      AppRole  @default(staff)
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, role])
-  @@index([userId])
-  @@map("user_roles")
-}
-
-model RubricTemplate {
-  id           String       @id @default(uuid())
-  name         String       @db.Text
-  description  String?      @db.Text
-  departmentId String?      @map("department_id")
-  isGlobal     Boolean      @default(false) @map("is_global")
-  isActive     Boolean      @default(true) @map("is_active")
-  createdById  String?      @map("created_by")
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @default(now()) @map("updated_at")
-  templateType TemplateType @default(KPI_APPRAISAL) @map("template_type")
-
-  department          Department?              @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  createdBy           User?                    @relation("TemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  sections            RubricSection[]
-  domains             KpiDomain[]
-  departmentRoles     DepartmentRole[]
-  assessments         Assessment[]
-  workflowAssignments RoleWorkflowAssignment[]
-  observations        Observation[]
-
-  @@map("rubric_templates")
-}
-
-model RubricSection {
-  id         String   @id @default(uuid())
-  templateId String   @map("template_id")
-  name       String   @db.Text
-  weight     Decimal? @db.Decimal(5, 2)
-  sortOrder  Int      @default(0) @map("sort_order")
-  createdAt  DateTime @default(now()) @map("created_at")
-
-  template   RubricTemplate    @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  indicators RubricIndicator[]
-
-  @@map("rubric_sections")
-}
-
-model RubricIndicator {
-  id               String                @id @default(uuid())
-  sectionId        String                @map("section_id")
-  name             String                @db.Text
-  description      String?               @db.Text
-  sortOrder        Int                   @default(0) @map("sort_order")
-  evidenceGuidance String?               @map("evidence_guidance") @db.Text
-  scoreOptions     Json?                 @map("score_options")
-  questionType     IndicatorQuestionType @default(SCALE) @map("question_type")
-  scoreMin         Int?                  @map("score_min")
-  scoreMax         Int?                  @map("score_max")
-  scoreStep        Int?                  @map("score_step")
-  placeholderText  String?               @map("placeholder_text") @db.Text
-  createdAt        DateTime              @default(now()) @map("created_at")
-
-  section   RubricSection        @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  questions AssessmentQuestion[]
-  answers   ObservationAnswer[]
-
-  @@map("rubric_indicators")
-}
-
-model KpiDomain {
-  id         String   @id @default(uuid())
-  templateId String   @map("template_id")
-  name       String   @db.Text
-  weight     Decimal  @default(0) @db.Decimal(5, 2)
-  sortOrder  Int      @default(0) @map("sort_order")
-  code       String   @default("") @db.Text
-  legacyCode String?  @map("legacy_code") @db.Text
-  createdAt  DateTime @default(now()) @map("created_at")
-
-  template  RubricTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  standards KpiStandard[]
-
-  @@unique([templateId, code])
-  @@index([templateId])
-  @@map("kpi_domains")
-}
-
-model KpiStandard {
-  id         String   @id @default(uuid())
-  domainId   String   @map("domain_id")
-  templateId String   @map("template_id")
-  name       String   @db.Text
-  sortOrder  Int      @default(0) @map("sort_order")
-  code       String   @default("") @db.Text
-  legacyCode String?  @map("legacy_code") @db.Text
-  createdAt  DateTime @default(now()) @map("created_at")
-
-  domain KpiDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
-  kpis   Kpi[]
-
-  @@unique([templateId, code])
-  @@index([domainId])
-  @@index([templateId])
-  @@map("kpi_standards")
-}
-
-model Kpi {
-  id                String   @id @default(uuid())
-  standardId        String   @map("standard_id")
-  templateId        String   @map("template_id")
-  name              String   @db.Text
-  description       String?  @db.Text
-  evidenceGuidance  String?  @map("evidence_guidance") @db.Text
-  trainings         String?  @db.Text
-  sortOrder         Int      @default(0) @map("sort_order")
-  code              String   @default("") @db.Text
-  legacyCode        String?  @map("legacy_code") @db.Text
-  rubric4           String   @map("rubric_4") @db.Text
-  rubric3           String   @map("rubric_3") @db.Text
-  rubric2           String   @map("rubric_2") @db.Text
-  rubric1           String   @map("rubric_1") @db.Text
-  performanceWeight Decimal  @default(100) @map("performance_weight") @db.Decimal(5, 2)
-  createdAt         DateTime @default(now()) @map("created_at")
-
-  standard     KpiStandard      @relation(fields: [standardId], references: [id], onDelete: Cascade)
-  programLinks ProgramKpiLink[]
-
-  @@unique([templateId, code])
-  @@index([standardId])
-  @@index([templateId])
-  @@map("kpis")
-}
-
-model Assessment {
-  id                   String           @id @default(uuid())
-  staffId              String           @map("staff_id")
-  managerId            String?          @map("manager_id")
-  directorId           String?          @map("director_id")
-  templateId           String?          @map("template_id")
-  period               String           @db.Text
-  status               AssessmentStatus
-  staffScores          Json             @default("{}") @map("staff_scores")
-  managerScores        Json             @default("{}") @map("manager_scores")
-  staffEvidence        Json             @default("{}") @map("staff_evidence")
-  managerEvidence      Json             @default("{}") @map("manager_evidence")
-  directorScores       Json             @default("{}") @map("director_scores")
-  directorEvidence     Json             @default("{}") @map("director_evidence")
-  managerNotes         String?          @map("manager_notes") @db.Text
-  directorComments     String?          @map("director_comments") @db.Text
-  returnFeedback       String?          @map("return_feedback") @db.Text
-  returnedAt           DateTime?        @map("returned_at")
-  returnedById         String?          @map("returned_by")
-  finalScore           Decimal?         @map("final_score") @db.Decimal(4, 2)
-  finalGrade           String?          @map("final_grade") @db.Text
-  staffSubmittedAt     DateTime?        @map("staff_submitted_at")
-  managerReviewedAt    DateTime?        @map("manager_reviewed_at")
-  directorApprovedAt   DateTime?        @map("director_approved_at")
-  managerSubmittedAt   DateTime?        @map("manager_submitted_at")
-  directorReviewedAt   DateTime?        @map("director_reviewed_at")
-  acknowledgedAt       DateTime?        @map("acknowledged_at")
-  completedAt          DateTime?        @map("completed_at")
-  workflowId           String?          @map("workflow_id")
-  workflowAssignmentId String?          @map("workflow_assignment_id")
-  workflowSnapshot     Json?            @map("workflow_snapshot")
-  currentStepOrder     Int?             @map("current_step_order")
-  initiatedById        String?          @map("initiated_by_id")
-  staffNotes           String?          @map("staff_notes") @db.Text
-  createdAt            DateTime         @default(now()) @map("created_at")
-  updatedAt            DateTime         @default(now()) @map("updated_at")
-
-  staff              User                    @relation("StaffAssessments", fields: [staffId], references: [id], onDelete: Cascade)
-  manager            User?                   @relation("ManagerAssessments", fields: [managerId], references: [id], onDelete: SetNull)
-  director           User?                   @relation("DirectorAssessments", fields: [directorId], references: [id], onDelete: SetNull)
-  template           RubricTemplate?         @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  returnedBy         User?                   @relation("ReturnedAssessments", fields: [returnedById], references: [id], onDelete: SetNull)
-  workflow           WorkflowDefinition?     @relation(fields: [workflowId], references: [id], onDelete: SetNull)
-  workflowAssignment RoleWorkflowAssignment? @relation("AssessmentWorkflowAssignment", fields: [workflowAssignmentId], references: [id], onDelete: SetNull)
-  initiatedBy        User?                   @relation("InitiatedAssessments", fields: [initiatedById], references: [id], onDelete: SetNull)
-  updates            AssessmentUpdate[]
-  questions          AssessmentQuestion[]
-  notifications      Notification[]
-
-  @@index([staffId])
-  @@index([managerId])
-  @@index([directorId])
-  @@index([status])
-  @@index([returnedById])
-  @@map("assessments")
-}
-
-model AssessmentUpdate {
-  id           String   @id @default(uuid())
-  assessmentId String   @map("assessment_id")
-  updatedById  String?  @map("updated_by_id")
-  stepOrder    Int?     @map("step_order")
-  statusFrom   String?  @map("status_from") @db.Text
-  statusTo     String   @map("status_to") @db.Text
-  eventType    String   @map("event_type") @db.Text
-  notes        String?  @db.Text
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  updatedBy  User?      @relation("AssessmentUpdateAuthor", fields: [updatedById], references: [id], onDelete: SetNull)
-
-  @@index([assessmentId])
-  @@index([updatedById])
-  @@map("assessment_updates")
-}
-
-model AssessmentQuestion {
-  id            String         @id @default(uuid())
-  assessmentId  String         @map("assessment_id")
-  indicatorId   String?        @map("indicator_id")
-  askedBy       String         @map("asked_by")
-  question      String         @db.Text
-  response      String?        @db.Text
-  respondedById String?        @map("responded_by")
-  respondedAt   DateTime?      @map("responded_at")
-  status        QuestionStatus
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @default(now()) @map("updated_at")
-
-  assessment      Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  indicator       RubricIndicator? @relation(fields: [indicatorId], references: [id], onDelete: SetNull)
-  askedByUser     User             @relation("AskedQuestions", fields: [askedBy], references: [id])
-  respondedByUser User?            @relation("AnsweredQuestions", fields: [respondedById], references: [id])
-
-  @@index([assessmentId])
-  @@map("assessment_questions")
-}
-
-model DepartmentRole {
-  id                String   @id @default(uuid())
-  departmentId      String?  @map("department_id")
-  role              AppRole
-  defaultTemplateId String?  @map("default_template_id")
-  name              String?  @db.Text
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @default(now()) @map("updated_at")
-
-  department          Department?                @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  defaultTemplate     RubricTemplate?            @relation(fields: [defaultTemplateId], references: [id], onDelete: SetNull)
-  approvalWorkflows   ApprovalWorkflow[]
-  workflowAssignments RoleWorkflowAssignment[]
-  memberships         DepartmentRoleMembership[]
-
-  @@unique([departmentId, role])
-  @@index([departmentId])
-  @@index([role])
-  @@map("department_roles")
-}
-
-model DepartmentRoleMembership {
-  id               String   @id @default(uuid()) @db.Text
-  departmentRoleId String   @map("department_role_id")
-  userId           String   @map("user_id")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @default(now()) @map("updated_at")
-
-  departmentRole DepartmentRole @relation(fields: [departmentRoleId], references: [id], onDelete: Cascade)
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([departmentRoleId, userId])
-  @@index([departmentRoleId])
-  @@index([userId])
-  @@map("department_role_memberships")
-}
-
-model ApprovalWorkflow {
-  id               String           @id @default(uuid())
-  departmentRoleId String           @map("department_role_id")
-  stepOrder        Int              @map("step_order")
-  approverRole     AppRole          @map("approver_role")
-  stepType         WorkflowStepType @map("step_type")
-  createdAt        DateTime         @default(now()) @map("created_at")
-
-  departmentRole DepartmentRole @relation(fields: [departmentRoleId], references: [id], onDelete: Cascade)
-
-  @@index([departmentRoleId])
-  @@map("approval_workflows")
-}
-
-model WorkflowDefinition {
-  id          String       @id @default(uuid())
-  name        String       @db.Text
-  type        TemplateType
-  description String?      @db.Text
-  createdAt   DateTime     @default(now()) @map("created_at")
-
-  steps       WorkflowStep[]
-  assignments RoleWorkflowAssignment[]
-  assessments Assessment[]
-
-  @@map("workflow_definitions")
-}
-
-model WorkflowStep {
-  id          String             @id @default(uuid())
-  workflowId  String             @map("workflow_id")
-  stepOrder   Int                @map("step_order")
-  actorRole   AppRole            @map("actor_role")
-  actionType  WorkflowActionType @map("action_type")
-  description String?            @db.Text
-
-  workflow WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-
-  @@index([workflowId])
-  @@map("workflow_steps")
-}
-
-model RoleWorkflowAssignment {
-  id               String   @id @default(uuid())
-  departmentRoleId String   @map("department_role_id")
-  workflowId       String   @map("workflow_id")
-  rubricId         String?  @map("rubric_id")
-  isActive         Boolean  @default(true) @map("is_active")
-  createdAt        DateTime @default(now()) @map("created_at")
-
-  departmentRole DepartmentRole     @relation(fields: [departmentRoleId], references: [id], onDelete: Cascade)
-  workflow       WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Restrict)
-  rubric         RubricTemplate?    @relation(fields: [rubricId], references: [id], onDelete: SetNull)
-  assessments    Assessment[]       @relation("AssessmentWorkflowAssignment")
-
-  @@index([departmentRoleId])
-  @@index([workflowId])
-  @@index([rubricId])
-  @@map("role_workflow_assignments")
-}
-
-model Observation {
-  id                                 String            @id @default(uuid())
-  staffId                            String            @map("staffId")
-  managerId                          String?           @map("managerId")
-  rubricId                           String            @map("rubricId")
-  status                             ObservationStatus @default(draft)
-  type                               String            @default("MANAGER") @db.Text
-  title                              String?           @db.Text
-  description                        String?           @db.Text
-  createdAt                          DateTime          @default(now()) @map("created_at")
-  updatedAt                          DateTime          @updatedAt @map("updated_at")
-  submittedAt                        DateTime?         @map("submitted_at")
-  acknowledgedAt                     DateTime?         @map("acknowledged_at")
-  acknowledgementMethod              String?           @map("acknowledgement_method") @db.Text
-  acknowledgementNote                String?           @map("acknowledgement_note") @db.Text
-  acknowledgementAutomationStartedAt DateTime?         @map("acknowledgement_automation_started_at")
-
-  staff                    User                                 @relation("StaffObservations", fields: [staffId], references: [id], onDelete: Cascade)
-  manager                  User?                                @relation("ManagerObservations", fields: [managerId], references: [id], onDelete: SetNull)
-  rubric                   RubricTemplate                       @relation(fields: [rubricId], references: [id], onDelete: Restrict)
-  answers                  ObservationAnswer[]
-  updates                  ObservationUpdate[]
-  acknowledgementReminders ObservationAcknowledgementReminder[]
-
-  @@index([staffId])
-  @@index([managerId])
-  @@index([rubricId])
-  @@index([status])
-  @@map("observations")
-}
-
-model ObservationNotificationSetting {
-  id                                    Int      @id @default(1)
-  notificationsEnabled                  Boolean  @default(true) @map("notifications_enabled")
-  submissionEmailsEnabled               Boolean  @default(true) @map("submission_emails_enabled")
-  reminderEmailsEnabled                 Boolean  @default(true) @map("reminder_emails_enabled")
-  firstReminderDays                     Int      @default(3) @map("first_reminder_days")
-  reminderIntervalDays                  Int      @default(2) @map("reminder_interval_days")
-  automaticAcknowledgementEnabled       Boolean  @default(true) @map("automatic_acknowledgement_enabled")
-  automaticAcknowledgementDays          Int      @default(30) @map("automatic_acknowledgement_days")
-  personalAcknowledgementEmailsEnabled  Boolean  @default(true) @map("personal_ack_email_enabled")
-  automaticAcknowledgementEmailsEnabled Boolean  @default(true) @map("automatic_ack_email_enabled")
-  reopenEmailsEnabled                   Boolean  @default(true) @map("reopen_emails_enabled")
-  reassignmentEmailsEnabled             Boolean  @default(true) @map("reassignment_emails_enabled")
-  schedulerEnabled                      Boolean  @default(true) @map("scheduler_enabled")
-  schedulerIntervalMinutes              Int      @default(60) @map("scheduler_interval_minutes")
-  updatedById                           String?  @map("updated_by_id")
-  createdAt                             DateTime @default(now()) @map("created_at")
-  updatedAt                             DateTime @updatedAt @map("updated_at")
-
-  updatedBy User?                                  @relation("ObservationNotificationSettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-  updates   ObservationNotificationSettingUpdate[]
-
-  @@index([updatedById])
-  @@map("observation_notification_settings")
-}
-
-model ObservationNotificationSettingUpdate {
-  id             String   @id @default(uuid())
-  settingsId     Int      @default(1) @map("settings_id")
-  actorId        String   @map("actor_id")
-  beforeSettings Json     @map("before_settings")
-  afterSettings  Json     @map("after_settings")
-  createdAt      DateTime @default(now()) @map("created_at")
-
-  settings ObservationNotificationSetting @relation(fields: [settingsId], references: [id], onDelete: Cascade)
-  actor    User                           @relation("ObservationNotificationSettingUpdateActor", fields: [actorId], references: [id], onDelete: Restrict)
-
-  @@index([settingsId])
-  @@index([actorId])
-  @@map("observation_notification_setting_updates")
-}
-
-model ObservationAcknowledgementReminder {
-  id             String    @id @default(uuid())
-  observationId  String    @map("observation_id")
-  submissionAt   DateTime  @map("submission_at")
-  reminderPeriod Int       @map("reminder_period")
-  status         String    @default("processing") @db.Text
-  error          String?   @db.Text
-  createdAt      DateTime  @default(now()) @map("created_at")
-  sentAt         DateTime? @map("sent_at")
-
-  observation Observation @relation(fields: [observationId], references: [id], onDelete: Cascade)
-
-  @@unique([observationId, submissionAt, reminderPeriod])
-  @@index([observationId])
-  @@index([status])
-  @@map("observation_acknowledgement_reminders")
-}
-
-model ObservationAnswer {
-  id              String   @id @default(uuid())
-  observationId   String   @map("observation_id")
-  indicatorId     String   @map("indicator_id")
-  score           Float    @default(0) @db.DoublePrecision
-  note            String?  @db.Text
-  evidence        String?  @db.Text
-  textValue       String?  @map("text_value") @db.Text
-  selectedOption  String?  @map("selected_option") @db.Text
-  selectedOptions Json?    @map("selected_options")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-
-  observation Observation     @relation(fields: [observationId], references: [id], onDelete: Cascade)
-  indicator   RubricIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
-
-  @@unique([observationId, indicatorId])
-  @@index([indicatorId])
-  @@map("observation_answers")
-}
-
-model ObservationUpdate {
-  id            String   @id @default(uuid())
-  observationId String   @map("observation_id")
-  updatedById   String?  @map("updated_by_id")
-  statusFrom    String?  @map("status_from") @db.Text
-  statusTo      String   @map("status_to") @db.Text
-  notes         String?  @db.Text
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  observation Observation @relation(fields: [observationId], references: [id], onDelete: Cascade)
-  updatedBy   User?       @relation("ObservationUpdateAuthor", fields: [updatedById], references: [id], onDelete: SetNull)
-
-  @@index([observationId])
-  @@index([updatedById])
-  @@map("observation_updates")
-}
-
-model Notification {
-  id           Int                @id @default(autoincrement())
-  assessmentId String?            @map("assessment_id")
-  userId       String?            @map("user_id")
-  type         NotificationType
-  status       NotificationStatus @default(pending)
-  error        String?            @db.Text
-  sentAt       DateTime?          @map("sent_at")
-  createdAt    DateTime           @default(now()) @map("created_at")
-
-  assessment Assessment? @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
-  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([assessmentId])
-  @@index([status])
-  @@index([userId])
-  @@map("notifications")
-}
-
-model NotificationPreference {
-  id                     Int      @id @default(autoincrement())
-  userId                 String   @unique @map("user_id")
-  emailEnabled           Boolean  @default(true) @map("email_enabled")
-  assessmentSubmitted    Boolean  @default(true) @map("assessment_submitted")
-  managerReviewDone      Boolean  @default(true) @map("manager_review_done")
-  directorApproved       Boolean  @default(true) @map("director_approved")
-  adminReleased          Boolean  @default(true) @map("admin_released")
-  assessmentReturned     Boolean  @default(true) @map("assessment_returned")
-  assessmentAcknowledged Boolean  @default(true) @map("assessment_acknowledged")
-  observationUpdates     Boolean  @default(true) @map("observation_updates")
-  createdAt              DateTime @default(now()) @map("created_at")
-  updatedAt              DateTime @default(now()) @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("notification_preferences")
-}
-
-enum NotificationStatus {
-  pending
-  sent
-  failed
-}
-
-enum NotificationType {
-  assessment_submitted
-  manager_review_completed
-  director_approved
-  admin_released
-  assessment_returned
-  assessment_acknowledged
-}
-
-model StrategicPlan {
-  id           String              @id @default(uuid())
-  departmentId String              @unique @map("department_id")
-  name         String              @db.Text
-  description  String?             @db.Text
-  vision       String?             @db.Text
-  mission      String?             @db.Text
-  startYear    Int                 @map("start_year")
-  endYear      Int                 @map("end_year")
-  status       StrategicPlanStatus @default(draft)
-  ownerUserId  String?             @map("owner_user_id")
-  publishedAt  DateTime?           @map("published_at")
-  createdAt    DateTime            @default(now()) @map("created_at")
-  updatedAt    DateTime            @updatedAt @map("updated_at")
-
-  department Department        @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  ownerUser  User?             @relation("PlanOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  periods    StrategicPeriod[]
-  goals      StrategicGoal[]
-
-  @@index([status])
-  @@map("strategic_plans")
-}
-
-model StrategicPeriod {
-  id        String @id @default(uuid())
-  planId    String @map("plan_id")
-  label     String @db.Text
-  year      Int
-  sortOrder Int    @map("sort_order")
-
-  plan          StrategicPlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
-  periodTargets ProgramPeriodTarget[]
-  budgetLines   ProgramBudgetLine[]
-
-  @@unique([planId, year])
-  @@unique([planId, sortOrder])
-  @@index([planId])
-  @@map("strategic_periods")
-}
-
-model StrategicGoal {
-  id          String  @id @default(uuid())
-  planId      String  @map("plan_id")
-  number      Int
-  title       String  @db.Text
-  description String? @db.Text
-  sortOrder   Int     @map("sort_order")
-
-  plan       StrategicPlan        @relation(fields: [planId], references: [id], onDelete: Cascade)
-  objectives StrategicObjective[]
-
-  @@unique([planId, number])
-  @@unique([planId, sortOrder])
-  @@index([planId])
-  @@map("strategic_goals")
-}
-
-model StrategicObjective {
-  id        String @id @default(uuid())
-  goalId    String @map("goal_id")
-  number    Int
-  title     String @db.Text
-  sortOrder Int    @map("sort_order")
-
-  goal     StrategicGoal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
-  programs StrategicProgram[]
-
-  @@unique([goalId, number])
-  @@unique([goalId, sortOrder])
-  @@index([goalId])
-  @@map("strategic_objectives")
-}
-
-model StrategicProgram {
-  id          String        @id @default(uuid())
-  objectiveId String        @map("objective_id")
-  code        String        @db.Text
-  title       String        @db.Text
-  description String?       @db.Text
-  status      ProgramStatus @default(not_started)
-  sortOrder   Int           @map("sort_order")
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-
-  objective     StrategicObjective      @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
-  checklist     ProgramChecklistItem[]
-  kpiLinks      ProgramKpiLink[]
-  targets       ProgramPeriodTarget[]
-  collaborators ProgramCollaborator[]
-  budgetLines   ProgramBudgetLine[]
-  updates       ProgramProgressUpdate[]
-
-  @@unique([objectiveId, code])
-  @@unique([objectiveId, sortOrder])
-  @@index([objectiveId])
-  @@map("strategic_programs")
-}
-
-model ProgramChecklistItem {
-  id        String  @id @default(uuid())
-  programId String  @map("program_id")
-  text      String  @db.Text
-  done      Boolean @default(false)
-  sortOrder Int     @map("sort_order")
-
-  program StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
-
-  @@unique([programId, sortOrder])
-  @@index([programId])
-  @@map("program_checklist_items")
-}
-
-model ProgramKpiLink {
-  id            String  @id @default(uuid())
-  programId     String  @map("program_id")
-  kpiId         String  @map("kpi_id")
-  coverageLabel String? @map("coverage_label") @db.Text
-
-  program StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
-  kpi     Kpi              @relation(fields: [kpiId], references: [id], onDelete: Cascade)
-
-  @@unique([programId, kpiId])
-  @@index([programId])
-  @@index([kpiId])
-  @@map("program_kpi_links")
-}
-
-model ProgramPeriodTarget {
-  id          String        @id @default(uuid())
-  programId   String        @map("program_id")
-  periodId    String        @map("period_id")
-  targetText  String        @default("") @map("target_text") @db.Text
-  actualText  String?       @map("actual_text") @db.Text
-  status      ProgramStatus @default(not_started)
-  evidenceKey String?       @map("evidence_key") @db.Text
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-
-  program StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
-  period  StrategicPeriod  @relation(fields: [periodId], references: [id], onDelete: Cascade)
-
-  @@unique([programId, periodId])
-  @@index([programId])
-  @@index([periodId])
-  @@map("program_period_targets")
-}
-
-model ProgramCollaborator {
-  id           String @id @default(uuid())
-  programId    String @map("program_id")
-  departmentId String @map("department_id")
-
-  program    StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
-  department Department       @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-
-  @@unique([programId, departmentId])
-  @@index([programId])
-  @@index([departmentId])
-  @@map("program_collaborators")
-}
-
-model ProgramBudgetLine {
-  id          String  @id @default(uuid())
-  programId   String  @map("program_id")
-  periodId    String  @map("period_id")
-  label       String  @db.Text
-  description String? @db.Text
-  amountIdr   Decimal @default(0) @map("amount_idr") @db.Decimal(15, 2)
-
-  program StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
-  period  StrategicPeriod  @relation(fields: [periodId], references: [id], onDelete: Cascade)
-
-  @@index([programId])
-  @@index([periodId])
-  @@map("program_budget_lines")
-}
-
-model ProgramProgressUpdate {
-  id        String        @id @default(uuid())
-  programId String        @map("program_id")
-  authorId  String        @map("author_id")
-  note      String        @db.Text
-  status    ProgramStatus
-  createdAt DateTime      @default(now()) @map("created_at")
-
-  program StrategicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
-  author  User             @relation("ProgressUpdateAuthor", fields: [authorId], references: [id])
-
-  @@index([programId])
-  @@index([authorId])
-  @@map("program_progress_updates")
 }
