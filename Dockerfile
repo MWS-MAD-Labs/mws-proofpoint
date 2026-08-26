@@ -7,6 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma/
 COPY prisma.config.ts ./
+COPY src/lib/database-url.ts ./src/lib/database-url.ts
 
 # Build-time placeholders. Real runtime values must be injected by deployment.
 ENV DATABASE_URL="postgresql://proofpoint:proofpoint@localhost:5432/proofpoint?schema=public"
@@ -47,6 +48,7 @@ COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/docker ./docker
 COPY --from=builder /app/next.config.* ./
 COPY --from=builder /app/prisma.config.ts ./
+COPY --from=builder /app/src/lib/database-url.ts ./src/lib/database-url.ts
 RUN chmod +x /app/docker/start.sh
 
 # Set environment
