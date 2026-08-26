@@ -229,6 +229,7 @@ http://localhost:3060/api/auth/callback/google
 | `npm run db:generate` | Generate Prisma Client |
 | `npm run db:migrate:dev` | Create/apply migrations during development |
 | `npm run db:migrate:deploy` | Apply committed migrations in a deployed environment |
+| `npm run db:migrate:rebaseline` | One-time guarded migration-history repair for existing pre-baseline databases |
 | `npm run db:studio` | Open Prisma Studio |
 | `npm run db:seed` | Run the primary development seed |
 | `npm run db:seed:it-support-appraisal` | Intentionally create the IT Support appraisal fixture |
@@ -286,6 +287,8 @@ Also confirm:
 ## Database and migration policy
 
 - Database changes must be committed as ordered Prisma migrations under `prisma/migrations`.
+- The active history starts at the verified `20260812000000_existing_database_baseline`; earlier incomplete files are retained outside the active path for audit context.
+- Existing environments created before that baseline require the one-time [Prisma migration history rebaseline](./docs/operations/prisma-migration-history-rebaseline.md) before deploying this history.
 - Deployments use `prisma migrate deploy`; production must not use `prisma db push`.
 - Migrations are forward-only. Take a database backup before releases with schema changes.
 - Application rollback after new workflow data is written may require database restoration or a compatibility assessment.
@@ -310,6 +313,7 @@ At `v0.2.0` release time:
 - [UX task and validation record](./docs/specs/appraisal-observation-and-department-ux-tasks.md)
 - [Strategic planning specification](./docs/specs/strategic-planning.md)
 - [Production data migration runbook](./docs/operations/production-data-migration.md)
+- [Prisma migration history rebaseline runbook](./docs/operations/prisma-migration-history-rebaseline.md)
 - [Observation acknowledgement automation runbook](./docs/operations/observation-acknowledgement-automation.md)
 - [Global observation notification settings development plan](./docs/specs/global-observation-notification-settings-plan.md)
 - [Multi-teacher observations development plan (proposed future development)](./docs/specs/multi-teacher-observations-development-plan.md)
