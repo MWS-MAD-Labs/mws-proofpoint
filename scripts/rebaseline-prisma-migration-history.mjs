@@ -113,12 +113,15 @@ try {
       ORDER BY started_at, migration_name`,
   );
   const baselineRecord = currentMigrations.rows.find(
-    (row) => row.migration_name === BASELINE_MIGRATION,
+    (row) =>
+      row.migration_name === BASELINE_MIGRATION &&
+      row.finished_at &&
+      !row.rolled_back_at,
   );
 
   if (baselineRecord) {
-    if (baselineRecord.checksum !== baselineChecksum || !baselineRecord.finished_at) {
-      throw new Error("The existing baseline migration record is incomplete or has a different checksum.");
+    if (baselineRecord.checksum !== baselineChecksum) {
+      throw new Error("The existing applied baseline migration record has a different checksum.");
     }
     console.log(`${BASELINE_MIGRATION} is already recorded with the expected checksum.`);
     await client.query("COMMIT");
