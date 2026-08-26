@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { config as loadEnv } from "dotenv";
 import { Pool } from "pg";
+
+loadEnv({ path: ".env" });
+loadEnv({ path: ".env.local" });
 
 const BASELINE_MIGRATION = "20260812000000_existing_database_baseline";
 const CONFIRMATION = `rebaseline-${BASELINE_MIGRATION}`;
