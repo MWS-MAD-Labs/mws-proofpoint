@@ -11,9 +11,9 @@ import type { ObservationIndicatorForProgress } from "../types";
 import {
   getObservationReminderPeriod,
   isAutomaticAcknowledgementDue,
-  positiveInteger,
 } from "./acknowledgementAutomationConfig";
 import { getObservationSchedulerConfig } from "./observationAcknowledgementScheduler";
+import { DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS } from "./notificationSettings";
 import {
   observationReopenSchema,
   parseObservationListQuery,
@@ -38,37 +38,49 @@ import {
 
 const draft = { status: "draft" as const, staffId: "staff", managerId: "manager" };
 
-test("scheduler configuration uses safe defaults and positive overrides", () => {
-  assert.equal(positiveInteger(undefined, 7), 7);
-  assert.equal(positiveInteger("0", 7), 7);
-  assert.equal(positiveInteger("invalid", 7), 7);
-  assert.equal(positiveInteger("12", 7), 12);
-
-  assert.deepEqual(getObservationSchedulerConfig({}), {
-    enabled: true,
-    intervalMs: 60 * 60 * 1000,
-    initialDelayMs: 30 * 1000,
-  });
+test("scheduler configuration uses global settings and a fixed startup delay", () => {
+  assert.deepEqual(
+    getObservationSchedulerConfig(DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS),
+    {
+      enabled: true,
+      intervalMs: 60 * 60 * 1000,
+      initialDelayMs: 30 * 1000,
+    },
+  );
   assert.deepEqual(
     getObservationSchedulerConfig({
-      OBSERVATION_ACK_SCHEDULER_ENABLED: "false",
-      OBSERVATION_ACK_SCHEDULER_INTERVAL_MINUTES: "15",
-      OBSERVATION_ACK_SCHEDULER_INITIAL_DELAY_SECONDS: "5",
+      notificationsEnabled: true,
+      schedulerEnabled: false,
+      schedulerIntervalMinutes: 15,
     }),
     {
       enabled: false,
       intervalMs: 15 * 60 * 1000,
-      initialDelayMs: 5 * 1000,
+      initialDelayMs: 30 * 1000,
     },
+  );
+  assert.equal(
+    getObservationSchedulerConfig({
+      notificationsEnabled: false,
+      schedulerEnabled: true,
+      schedulerIntervalMinutes: 15,
+    }).enabled,
+    false,
   );
 });
 
-test("acknowledgement automation uses the configured reminder cadence", () => {
+test("acknowledgement automation uses explicit configured timing", () => {
   const submitted = new Date("2026-08-01T00:00:00.000Z");
+  const timing = {
+    firstReminderDays: 3,
+    reminderIntervalDays: 2,
+    automaticAcknowledgementDays: 30,
+  };
   assert.equal(
     getObservationReminderPeriod(
       submitted,
       new Date("2026-08-03T23:59:59.999Z"),
+      timing,
     ),
     null,
   );
@@ -76,6 +88,7 @@ test("acknowledgement automation uses the configured reminder cadence", () => {
     getObservationReminderPeriod(
       submitted,
       new Date("2026-08-04T00:00:00.000Z"),
+      timing,
     ),
     0,
   );
@@ -83,6 +96,7 @@ test("acknowledgement automation uses the configured reminder cadence", () => {
     getObservationReminderPeriod(
       submitted,
       new Date("2026-08-06T00:00:00.000Z"),
+      timing,
     ),
     1,
   );
@@ -90,6 +104,7 @@ test("acknowledgement automation uses the configured reminder cadence", () => {
     isAutomaticAcknowledgementDue(
       submitted,
       new Date("2026-08-30T23:59:59.999Z"),
+      timing,
     ),
     false,
   );
@@ -97,6 +112,7 @@ test("acknowledgement automation uses the configured reminder cadence", () => {
     isAutomaticAcknowledgementDue(
       submitted,
       new Date("2026-08-31T00:00:00.000Z"),
+      timing,
     ),
     true,
   );

@@ -1,8 +1,12 @@
 # Global Observation Notification Settings — Development Plan
 
-**Status:** Proposed  
-**Scope:** Observation workflow email policy, acknowledgement reminder timing, and automatic acknowledgement timing  
-**Out of scope:** SMTP credentials, appraisal notification preferences, and changes to existing observation lifecycle states
+**Status:** Implemented
+
+**Scope:** Observation workflow email policy, acknowledgement reminder timing, and automatic acknowledgement timing
+
+**Out of scope:** SMTP credentials, appraisal notification preference behavior, and changes to existing observation lifecycle states
+
+**Delivery summary:** The singleton PostgreSQL settings model, administrator API and audit metadata, runtime scheduler/processor/email-policy cutover, administrator settings page, user preference cleanup, and deployment/runbook cleanup are implemented. The legacy `notification_preferences.observation_updates` database column is intentionally retained for rollback compatibility and is no longer read or updated by the application.
 
 ## 1. Objective
 
@@ -19,20 +23,21 @@ The resulting ownership model is:
 | SMTP server and credentials | Deployment environment variables/secrets |
 | Appraisal notification preferences | Existing per-user notification preferences |
 
-## 2. Current state
+## 2. Implemented state
 
-The deployed observation acknowledgement automation currently:
+The observation acknowledgement automation:
 
 - runs inside the long-lived Next.js Node process through `src/instrumentation.ts`;
-- checks pending observations on a configurable interval;
-- sends the first reminder after 3 days and repeats every 2 days;
-- automatically acknowledges after 30 days;
+- reads global policy and timing from PostgreSQL before processing cycles;
+- defaults to a first reminder after 3 days, repeats every 2 days, and automatic acknowledgement after 30 days;
+- uses a fixed internal 30-second scheduler startup delay;
 - uses PostgreSQL advisory locking for multi-replica safety;
 - prevents duplicate reminder periods in `observation_acknowledgement_reminders`;
-- respects the per-user `email_enabled` and `observation_updates` preferences;
-- reads scheduler and timing values from `OBSERVATION_ACK_*` environment variables.
+- treats observation workflow emails as global operational communications rather than per-user preferences;
+- exposes administrator-managed settings at `/admin/notification-settings` through the existing admin-only API; and
+- no longer uses `OBSERVATION_ACK_*` or `OBSERVATION_AUTO_ACK_DAYS` environment variables.
 
-This plan changes the policy source without replacing the scheduler, processor, email templates, audit history, or idempotency mechanisms.
+The implementation changes the policy source without replacing the scheduler, processor, email templates, audit history, or idempotency mechanisms.
 
 ## 3. Target behavior
 
@@ -393,10 +398,7 @@ Retain SMTP and database environment variables.
 
 ### Phase 4 — Cleanup
 
-1. Monitor staging scheduler logs and email behavior.
-2. Verify reminder and automatic acknowledgement timing using reduced staging-only settings through the admin UI.
-3. Deploy to production with defaults matching current behavior.
-4. In a later release, remove `notification_preferences.observation_updates` after rollback compatibility is no longer required.
+Implementation cleanup is complete: the user toggle and API shape were removed, deployment environment settings were removed, and operations documentation now points to the database-backed administrator settings. Operational staging/production verification remains a deployment activity. In a later release, remove `notification_preferences.observation_updates` after rollback compatibility is no longer required.
 
 ## 10. Backward compatibility
 
@@ -502,15 +504,15 @@ The admin page should not become a scheduler execution control. It must not incl
 13. The user settings page no longer presents an ineffective Observation Updates toggle.
 14. Migration, unit, integration, build, and authenticated browser validation pass before production rollout.
 
-## 14. Delivery estimate and sequence
+## 14. Delivered sequence
 
-Recommended implementation order:
+The feature was implemented as one coordinated application change:
 
-1. Schema, settings service, and API.
-2. Admin settings UI.
-3. Scheduler and processor cutover.
-4. Mandatory email-policy cutover.
-5. User preference cleanup.
-6. Tests, documentation, staging verification, and production rollout.
+1. Singleton schema, settings service, validation, audit metadata, and administrator API.
+2. Scheduler and processor cutover to current database settings with a fixed internal startup delay.
+3. Mandatory observation event-policy cutover independent of per-user appraisal preferences.
+4. Administrator settings UI with validation, policy previews, dirty-state handling, save protection, and disable-confirmation behavior.
+5. User settings/API/type cleanup while retaining every appraisal preference and leaving the legacy database column in place.
+6. Environment, Compose, README, runbook, and plan cleanup.
 
-This should be delivered as one coordinated feature release because exposing the admin UI before the runtime consumes the settings would create misleading controls.
+Staging and production rollout checks remain operational responsibilities and are not implied solely by implementation status.

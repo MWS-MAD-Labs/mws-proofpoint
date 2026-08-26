@@ -1,47 +1,36 @@
-export function positiveInteger(value: string | undefined, fallback: number): number {
-  const parsed = Number.parseInt(value ?? "", 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
+import type { ObservationNotificationSettings } from "./notificationSettings";
 
-export const observationAcknowledgementTiming = {
-  firstReminderDays: positiveInteger(
-    process.env.OBSERVATION_ACK_FIRST_REMINDER_DAYS,
-    3,
-  ),
-  reminderIntervalDays: positiveInteger(
-    process.env.OBSERVATION_ACK_REMINDER_INTERVAL_DAYS,
-    2,
-  ),
-  automaticAcknowledgementDays: positiveInteger(
-    process.env.OBSERVATION_AUTO_ACK_DAYS,
-    30,
-  ),
-} as const;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+type ReminderTiming = Pick<
+  ObservationNotificationSettings,
+  "firstReminderDays" | "reminderIntervalDays"
+>;
+
+type AutomaticAcknowledgementTiming = Pick<
+  ObservationNotificationSettings,
+  "automaticAcknowledgementDays"
+>;
 
 export function getObservationReminderPeriod(
   automationStartedAt: Date,
   now: Date,
+  timing: ReminderTiming,
 ): number | null {
   const elapsedMs = now.getTime() - automationStartedAt.getTime();
-  const firstReminderMs =
-    observationAcknowledgementTiming.firstReminderDays * 24 * 60 * 60 * 1000;
+  const firstReminderMs = timing.firstReminderDays * DAY_MS;
   if (elapsedMs < firstReminderMs) return null;
 
-  const intervalMs =
-    observationAcknowledgementTiming.reminderIntervalDays * 24 * 60 * 60 * 1000;
+  const intervalMs = timing.reminderIntervalDays * DAY_MS;
   return Math.floor((elapsedMs - firstReminderMs) / intervalMs);
 }
 
 export function isAutomaticAcknowledgementDue(
   automationStartedAt: Date,
   now: Date,
+  timing: AutomaticAcknowledgementTiming,
 ): boolean {
   const deadline =
-    automationStartedAt.getTime() +
-    observationAcknowledgementTiming.automaticAcknowledgementDays *
-      24 *
-      60 *
-      60 *
-      1000;
+    automationStartedAt.getTime() + timing.automaticAcknowledgementDays * DAY_MS;
   return now.getTime() >= deadline;
 }

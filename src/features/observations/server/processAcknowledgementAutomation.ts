@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { pool, query } from "@/lib/db";
-import type { EmailResult } from "@/lib/email";
+
 import {
   notifyObservationAcknowledgementReminder,
   notifyObservationAutomaticallyAcknowledged,
@@ -9,6 +9,10 @@ import {
   getObservationReminderPeriod,
   isAutomaticAcknowledgementDue,
 } from "./acknowledgementAutomationConfig";
+import {
+  getObservationNotificationSettings,
+  type ObservationNotificationSettings,
+} from "./notificationSettings";
 
 const AUTOMATIC_ACKNOWLEDGEMENT_NOTE =
   "Automatically acknowledged because the staff response deadline passed. The staff member did not personally acknowledge this observation.";
@@ -35,8 +39,10 @@ export interface ObservationAutomationResult {
   errors: number;
 }
 
-interface ObservationAutomationOptions {
+export interface ObservationAutomationOptions {
   observationIds?: string[];
+  settings?: ObservationNotificationSettings;
+  readSettings?: typeof getObservationNotificationSettings;
   sendReminder?: typeof notifyObservationAcknowledgementReminder;
   sendAutomaticAcknowledgement?: typeof notifyObservationAutomaticallyAcknowledged;
   afterReminderClaim?: (
@@ -54,6 +60,9 @@ export async function processObservationAcknowledgementAutomation(
   now = new Date(),
   options: ObservationAutomationOptions = {},
 ): Promise<ObservationAutomationResult> {
+  const settings =
+    options.settings ??
+    (await (options.readSettings ?? getObservationNotificationSettings)());
   const observationIds = options.observationIds?.length
     ? options.observationIds
     : null;
@@ -96,7 +105,11 @@ export async function processObservationAcknowledgementAutomation(
 
   for (const observation of observations) {
     try {
-      if (isAutomaticAcknowledgementDue(observation.automationStartedAt, now)) {
+      if (
+        settings.notificationsEnabled &&
+        settings.automaticAcknowledgementEnabled &&
+        isAutomaticAcknowledgementDue(observation.automationStartedAt, now, settings)
+      ) {
         await options.beforeAutomaticAcknowledgement?.(
           observation.id,
           observation.submittedAt,
@@ -106,15 +119,21 @@ export async function processObservationAcknowledgementAutomation(
           now,
           options.sendAutomaticAcknowledgement ??
             notifyObservationAutomaticallyAcknowledged,
+          settings,
         );
         if (acknowledged) result.automaticallyAcknowledged += 1;
         else result.automaticAcknowledgementsSkipped += 1;
         continue;
       }
 
+      if (!settings.notificationsEnabled || !settings.reminderEmailsEnabled) {
+        continue;
+      }
+
       const reminderPeriod = getObservationReminderPeriod(
         observation.automationStartedAt,
         now,
+        settings,
       );
       if (reminderPeriod === null) continue;
 
@@ -134,6 +153,7 @@ export async function processObservationAcknowledgementAutomation(
         observation,
         reminderPeriod,
         options.sendReminder ?? notifyObservationAcknowledgementReminder,
+        settings,
       );
       if (reminderStatus === "sent") {
         result.remindersSent += 1;
@@ -178,14 +198,8 @@ async function claimReminder(
 async function sendClaimedReminder(
   observation: PendingObservationRow,
   reminderPeriod: number,
-  sendReminder: (
-    staffUserId: string,
-    staffEmail: string,
-    staffName: string,
-    managerName: string,
-    observationTitle: string,
-    observationId: string,
-  ) => Promise<EmailResult>,
+  sendReminder: typeof notifyObservationAcknowledgementReminder,
+  settings: ObservationNotificationSettings,
 ): Promise<"sent" | "skipped" | "failed"> {
   const eligible = await query<{ eligible: boolean }>(
     `SELECT EXISTS (
@@ -211,6 +225,7 @@ async function sendClaimedReminder(
     observation.managerName ?? observation.managerEmail ?? "Observer",
     observation.observationTitle,
     observation.id,
+    settings,
   );
   await updateReminderStatus(
     observation,
@@ -249,6 +264,7 @@ async function automaticallyAcknowledgeObservation(
   observation: PendingObservationRow,
   now: Date,
   sendAutomaticAcknowledgement: typeof notifyObservationAutomaticallyAcknowledged,
+  settings: ObservationNotificationSettings,
 ): Promise<boolean> {
   const client = await pool.connect();
   let acknowledged = false;
@@ -308,6 +324,7 @@ async function automaticallyAcknowledgeObservation(
       managerName,
       observation.observationTitle,
       observation.id,
+      settings,
     ),
   ];
   if (observation.managerId && observation.managerEmail) {
@@ -320,6 +337,7 @@ async function automaticallyAcknowledgeObservation(
         managerName,
         observation.observationTitle,
         observation.id,
+        settings,
       ),
     );
   }

@@ -20,7 +20,6 @@ interface NotificationPreferences {
   adminReleased: boolean;
   assessmentReturned: boolean;
   assessmentAcknowledged: boolean;
-  observationUpdates: boolean;
 }
 
 export default function NotificationPreferencesPage() {
@@ -33,7 +32,6 @@ export default function NotificationPreferencesPage() {
     adminReleased: true,
     assessmentReturned: true,
     assessmentAcknowledged: true,
-    observationUpdates: true,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -104,15 +102,15 @@ export default function NotificationPreferencesPage() {
         <CardHeader>
           <CardTitle>Email Notifications</CardTitle>
           <CardDescription>
-            Choose which email notifications you want to receive
+            Choose which appraisal email notifications you want to receive
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-medium">Enable Email Notifications</h3>
+              <h3 className="font-medium">Enable Appraisal Email Notifications</h3>
               <p className="text-sm text-muted-foreground">
-                Turn off to disable all email notifications
+                Turn off to disable your appraisal emails. Mandatory observation workflow emails follow the organisation&apos;s global policy and are not disabled here.
               </p>
             </div>
             <Switch
@@ -125,7 +123,7 @@ export default function NotificationPreferencesPage() {
 
           {!preferences.emailEnabled && (
             <p className="text-sm text-warning-foreground bg-warning-soft p-3 rounded">
-              All email notifications are currently disabled.
+              Your appraisal emails are currently disabled. Mandatory observation workflow communications may still be sent under the global administrator-managed policy.
             </p>
           )}
 
@@ -188,15 +186,13 @@ export default function NotificationPreferencesPage() {
               disabled={!preferences.emailEnabled}
             />
 
-            <PreferenceRow
-              label="Observation Updates"
-              description="Observation assignments, submissions, reminders, reopenings, and acknowledgements"
-              checked={preferences.observationUpdates}
-              onChange={(checked) =>
-                updatePreference("observationUpdates", checked)
-              }
-              disabled={!preferences.emailEnabled}
-            />
+          </div>
+
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm leading-6">
+            <p className="font-medium text-foreground">Observation workflow emails</p>
+            <p className="text-muted-foreground">
+              Submission, reminder, acknowledgement, reopen, and reassignment communications are managed globally by administrators and may be mandatory. These appraisal preferences do not control them.
+            </p>
           </div>
 
           <div className="pt-4 border-t">

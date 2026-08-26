@@ -116,25 +116,27 @@ model User {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @default(now()) @map("updated_at")
 
-  profile                   Profile?
-  roles                     UserRole[]
-  createdTemplates          RubricTemplate[]           @relation("TemplateCreator")
-  assessments               Assessment[]               @relation("StaffAssessments")
-  managerAssessments        Assessment[]               @relation("ManagerAssessments")
-  directorAssessments       Assessment[]               @relation("DirectorAssessments")
-  returnedAssessments       Assessment[]               @relation("ReturnedAssessments")
-  initiatedAssessments      Assessment[]               @relation("InitiatedAssessments")
-  assessmentUpdates         AssessmentUpdate[]         @relation("AssessmentUpdateAuthor")
-  askedQuestions            AssessmentQuestion[]       @relation("AskedQuestions")
-  answeredQuestions         AssessmentQuestion[]       @relation("AnsweredQuestions")
-  observations              Observation[]              @relation("StaffObservations")
-  managedObservations       Observation[]              @relation("ManagerObservations")
-  observationUpdates        ObservationUpdate[]        @relation("ObservationUpdateAuthor")
-  notificationPreferences   NotificationPreference?
-  notifications             Notification[]
-  departmentRoleMemberships DepartmentRoleMembership[]
-  ownedStrategicPlans       StrategicPlan[]            @relation("PlanOwner")
-  progressUpdates           ProgramProgressUpdate[]    @relation("ProgressUpdateAuthor")
+  profile                                Profile?
+  roles                                  UserRole[]
+  createdTemplates                       RubricTemplate[]                       @relation("TemplateCreator")
+  assessments                            Assessment[]                           @relation("StaffAssessments")
+  managerAssessments                     Assessment[]                           @relation("ManagerAssessments")
+  directorAssessments                    Assessment[]                           @relation("DirectorAssessments")
+  returnedAssessments                    Assessment[]                           @relation("ReturnedAssessments")
+  initiatedAssessments                   Assessment[]                           @relation("InitiatedAssessments")
+  assessmentUpdates                      AssessmentUpdate[]                     @relation("AssessmentUpdateAuthor")
+  askedQuestions                         AssessmentQuestion[]                   @relation("AskedQuestions")
+  answeredQuestions                      AssessmentQuestion[]                   @relation("AnsweredQuestions")
+  observations                           Observation[]                          @relation("StaffObservations")
+  managedObservations                    Observation[]                          @relation("ManagerObservations")
+  observationUpdates                     ObservationUpdate[]                    @relation("ObservationUpdateAuthor")
+  notificationPreferences                NotificationPreference?
+  notifications                          Notification[]
+  departmentRoleMemberships              DepartmentRoleMembership[]
+  ownedStrategicPlans                    StrategicPlan[]                        @relation("PlanOwner")
+  progressUpdates                        ProgramProgressUpdate[]                @relation("ProgressUpdateAuthor")
+  updatedObservationNotificationSettings ObservationNotificationSetting[]       @relation("ObservationNotificationSettingsUpdatedBy")
+  observationNotificationSettingUpdates  ObservationNotificationSettingUpdate[] @relation("ObservationNotificationSettingUpdateActor")
 
   @@index([status])
   @@map("users")
@@ -521,6 +523,48 @@ model Observation {
   @@index([rubricId])
   @@index([status])
   @@map("observations")
+}
+
+model ObservationNotificationSetting {
+  id                                    Int      @id @default(1)
+  notificationsEnabled                  Boolean  @default(true) @map("notifications_enabled")
+  submissionEmailsEnabled               Boolean  @default(true) @map("submission_emails_enabled")
+  reminderEmailsEnabled                 Boolean  @default(true) @map("reminder_emails_enabled")
+  firstReminderDays                     Int      @default(3) @map("first_reminder_days")
+  reminderIntervalDays                  Int      @default(2) @map("reminder_interval_days")
+  automaticAcknowledgementEnabled       Boolean  @default(true) @map("automatic_acknowledgement_enabled")
+  automaticAcknowledgementDays          Int      @default(30) @map("automatic_acknowledgement_days")
+  personalAcknowledgementEmailsEnabled  Boolean  @default(true) @map("personal_ack_email_enabled")
+  automaticAcknowledgementEmailsEnabled Boolean  @default(true) @map("automatic_ack_email_enabled")
+  reopenEmailsEnabled                   Boolean  @default(true) @map("reopen_emails_enabled")
+  reassignmentEmailsEnabled             Boolean  @default(true) @map("reassignment_emails_enabled")
+  schedulerEnabled                      Boolean  @default(true) @map("scheduler_enabled")
+  schedulerIntervalMinutes              Int      @default(60) @map("scheduler_interval_minutes")
+  updatedById                           String?  @map("updated_by_id")
+  createdAt                             DateTime @default(now()) @map("created_at")
+  updatedAt                             DateTime @updatedAt @map("updated_at")
+
+  updatedBy User?                                  @relation("ObservationNotificationSettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  updates   ObservationNotificationSettingUpdate[]
+
+  @@index([updatedById])
+  @@map("observation_notification_settings")
+}
+
+model ObservationNotificationSettingUpdate {
+  id             String   @id @default(uuid())
+  settingsId     Int      @default(1) @map("settings_id")
+  actorId        String   @map("actor_id")
+  beforeSettings Json     @map("before_settings")
+  afterSettings  Json     @map("after_settings")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  settings ObservationNotificationSetting @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  actor    User                           @relation("ObservationNotificationSettingUpdateActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([settingsId])
+  @@index([actorId])
+  @@map("observation_notification_setting_updates")
 }
 
 model ObservationAcknowledgementReminder {

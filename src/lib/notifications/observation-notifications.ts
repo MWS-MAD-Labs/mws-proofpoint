@@ -1,5 +1,10 @@
 import { sendEmail, type EmailResult } from "@/lib/email";
-import { isObservationNotificationEnabled } from "@/lib/notifications/preferences";
+import {
+  getObservationNotificationSettings,
+  isObservationNotificationEventEnabled,
+  type ObservationNotificationEvent,
+  type ObservationNotificationSettings,
+} from "@/features/observations/server/notificationSettings";
 
 const BASE_URL = process.env.NEXTAUTH_URL || "http://localhost:3000";
 const CARD_STYLE =
@@ -8,10 +13,13 @@ const BUTTON_STYLE =
   "display:inline-block;background:#1F2A44;color:white;padding:10px 20px;border-radius:12px;text-decoration:none;font-weight:bold;";
 
 async function sendObservationEmail(
-  recipientUserId: string,
+  event: ObservationNotificationEvent,
   params: { to: string; subject: string; html: string; text?: string },
+  settings?: ObservationNotificationSettings,
 ): Promise<EmailResult> {
-  if (!(await isObservationNotificationEnabled(recipientUserId))) {
+  const currentSettings =
+    settings ?? (await getObservationNotificationSettings());
+  if (!isObservationNotificationEventEnabled(currentSettings, event)) {
     return { success: true };
   }
   return sendEmail(params);
@@ -39,18 +47,13 @@ export async function notifyObservationAssigned(
   rubricName: string,
   observationId: string,
 ) {
-  return sendObservationEmail(recipientUserId, {
-    to: managerEmail,
-    subject: `Observation assigned: ${rubricName}`,
-    html: `<div style="${CARD_STYLE}">
-      <h2>Observation Draft Assigned</h2>
-      <p>Hello <strong>${esc(managerName)}</strong>,</p>
-      <p>An observation draft for <strong>${esc(staffName)}</strong> has been assigned to you.</p>
-      <p><strong>Form:</strong> ${esc(rubricName)}</p>
-      <a href="${observationLink(observationId)}/edit" style="${BUTTON_STYLE}">Start Observation</a>
-      <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification.</p>
-    </div>`,
-  });
+  void recipientUserId;
+  void managerEmail;
+  void managerName;
+  void staffName;
+  void rubricName;
+  void observationId;
+  return { success: true } satisfies EmailResult;
 }
 
 export async function notifyObservationReassigned(
@@ -61,8 +64,10 @@ export async function notifyObservationReassigned(
   rubricName: string,
   observationId: string,
   assigned: boolean,
+  settings?: ObservationNotificationSettings,
 ) {
-  return sendObservationEmail(recipientUserId, {
+  void recipientUserId;
+  return sendObservationEmail("reassignment", {
     to: email,
     subject: assigned
       ? `Observation reassigned to you: ${rubricName}`
@@ -77,7 +82,7 @@ export async function notifyObservationReassigned(
       <a href="${observationLink(observationId)}${assigned ? "/edit" : ""}" style="${BUTTON_STYLE}">View Observation</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification.</p>
     </div>`,
-  });
+  }, settings);
 }
 
 export async function notifyObservationSubmitted(
@@ -87,8 +92,10 @@ export async function notifyObservationSubmitted(
   managerName: string,
   observationTitle: string,
   observationId: string,
+  settings?: ObservationNotificationSettings,
 ) {
-  return sendObservationEmail(staffUserId, {
+  void staffUserId;
+  return sendObservationEmail("submission", {
     to: staffEmail,
     subject: `Observation Results Ready: ${observationTitle}`,
     html: `<div style="${CARD_STYLE}">
@@ -102,7 +109,7 @@ export async function notifyObservationSubmitted(
       <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">Review and Acknowledge</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
-  });
+  }, settings);
 }
 
 export async function notifyObservationAcknowledgementReminder(
@@ -112,8 +119,10 @@ export async function notifyObservationAcknowledgementReminder(
   managerName: string,
   observationTitle: string,
   observationId: string,
+  settings?: ObservationNotificationSettings,
 ) {
-  return sendObservationEmail(staffUserId, {
+  void staffUserId;
+  return sendObservationEmail("reminder", {
     to: staffEmail,
     subject: `Reminder: observation awaiting acknowledgement — ${observationTitle}`,
     html: `<div style="${CARD_STYLE}">
@@ -127,7 +136,7 @@ export async function notifyObservationAcknowledgementReminder(
       <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">Review and Acknowledge</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
-  });
+  }, settings);
 }
 
 export async function notifyManagerObservationAcknowledged(
@@ -137,8 +146,10 @@ export async function notifyManagerObservationAcknowledged(
   managerName: string,
   observationTitle: string,
   observationId: string,
+  settings?: ObservationNotificationSettings,
 ) {
-  return sendObservationEmail(managerUserId, {
+  void managerUserId;
+  return sendObservationEmail("personalAcknowledgement", {
     to: managerEmail,
     subject: `Staff Acknowledged Observation: ${observationTitle}`,
     html: `<div style="${CARD_STYLE}">
@@ -149,7 +160,7 @@ export async function notifyManagerObservationAcknowledged(
       <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">View Details</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
-  });
+  }, settings);
 }
 
 export async function notifyObservationAcknowledged(
@@ -159,8 +170,10 @@ export async function notifyObservationAcknowledged(
   managerName: string,
   observationTitle: string,
   observationId: string,
+  settings?: ObservationNotificationSettings,
 ) {
-  return sendObservationEmail(adminUserId, {
+  void adminUserId;
+  return sendObservationEmail("personalAcknowledgement", {
     to: adminEmail,
     subject: `Staff Acknowledged Observation: ${observationTitle}`,
     html: `<div style="${CARD_STYLE}">
@@ -172,7 +185,7 @@ export async function notifyObservationAcknowledged(
       <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">View Details</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
-  });
+  }, settings);
 }
 
 export async function notifyObservationAutomaticallyAcknowledged(
@@ -183,8 +196,10 @@ export async function notifyObservationAutomaticallyAcknowledged(
   managerName: string,
   observationTitle: string,
   observationId: string,
+  settings?: ObservationNotificationSettings,
 ) {
-  return sendObservationEmail(recipientUserId, {
+  void recipientUserId;
+  return sendObservationEmail("automaticAcknowledgement", {
     to: email,
     subject: `Observation Automatically Acknowledged: ${observationTitle}`,
     html: `<div style="${CARD_STYLE}">
@@ -200,7 +215,7 @@ export async function notifyObservationAutomaticallyAcknowledged(
       <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">View Details</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
-  });
+  }, settings);
 }
 
 export async function notifyManagerObservationReopened(
@@ -211,8 +226,10 @@ export async function notifyManagerObservationReopened(
   rubricName: string,
   reason: string,
   observationId: string,
+  settings?: ObservationNotificationSettings,
 ) {
-  return sendObservationEmail(managerUserId, {
+  void managerUserId;
+  return sendObservationEmail("reopen", {
     to: managerEmail,
     subject: `Observation Reopened: ${rubricName}`,
     html: `<div style="${CARD_STYLE}">
@@ -223,5 +240,5 @@ export async function notifyManagerObservationReopened(
       <a href="${observationLink(observationId)}/edit" style="${BUTTON_STYLE}">Continue Editing</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification.</p>
     </div>`,
-  });
+  }, settings);
 }

@@ -181,16 +181,7 @@ Important authorization rules include:
    MINIO_SECRET_KEY
    ```
 
-   Observation acknowledgement timing can optionally be changed with:
-
-   ```text
-   OBSERVATION_ACK_SCHEDULER_ENABLED
-   OBSERVATION_ACK_SCHEDULER_INTERVAL_MINUTES
-   OBSERVATION_ACK_SCHEDULER_INITIAL_DELAY_SECONDS
-   OBSERVATION_ACK_FIRST_REMINDER_DAYS
-   OBSERVATION_ACK_REMINDER_INTERVAL_DAYS
-   OBSERVATION_AUTO_ACK_DAYS
-   ```
+   Observation notification policy, reminder timing, automatic acknowledgement, and the scheduler interval are stored in PostgreSQL. After migrations are applied, administrators manage them from **Administration → Notification settings**; no observation acknowledgement environment variables are required.
 
    Google authentication additionally requires:
 

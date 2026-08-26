@@ -29,7 +29,14 @@ import {
   queryObservationList,
   queryObservationSummary,
 } from "./queries";
-import { processObservationAcknowledgementAutomation } from "./processAcknowledgementAutomation";
+import {
+  processObservationAcknowledgementAutomation as processObservationAcknowledgementAutomationRuntime,
+  type ObservationAutomationOptions,
+} from "./processAcknowledgementAutomation";
+import {
+  DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS,
+  type ObservationNotificationSettings,
+} from "./notificationSettings";
 import {
   OBSERVATION_SCHEDULER_ADVISORY_LOCK,
   runObservationAcknowledgementSchedulerOnce,
@@ -47,6 +54,20 @@ interface Fixture {
   director: ObservationActor;
   admin: ObservationActor;
   observationIds: string[];
+}
+
+const AUTOMATION_SETTINGS: ObservationNotificationSettings = {
+  ...DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS,
+};
+
+function processObservationAcknowledgementAutomation(
+  now: Date,
+  options: ObservationAutomationOptions = {},
+) {
+  return processObservationAcknowledgementAutomationRuntime(now, {
+    settings: AUTOMATION_SETTINGS,
+    ...options,
+  });
 }
 
 const countsKeys: Array<keyof ObservationSummaryCounts> = [
@@ -1181,6 +1202,26 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
   }
 });
 
+test("observation scheduler skips processing when global scheduling is disabled", async () => {
+  let processorCalled = false;
+
+  for (const settings of [
+    { ...AUTOMATION_SETTINGS, notificationsEnabled: false },
+    { ...AUTOMATION_SETTINGS, schedulerEnabled: false },
+  ]) {
+    const result = await runObservationAcknowledgementSchedulerOnce({
+      readSettings: async () => settings,
+      processAutomation: async () => {
+        processorCalled = true;
+        throw new Error("processor should not run while scheduling is disabled");
+      },
+    });
+    assert.equal(result, "skipped");
+  }
+
+  assert.equal(processorCalled, false);
+});
+
 test("observation scheduler skips processing when another replica holds the advisory lock", async () => {
   const lockClient = await pool.connect();
   let processorCalled = false;
@@ -1194,16 +1235,19 @@ test("observation scheduler skips processing when another replica holds the advi
     );
     assert.equal(lock.rows[0]?.acquired, true);
 
-    const result = await runObservationAcknowledgementSchedulerOnce(async () => {
-      processorCalled = true;
-      return {
-        checked: 0,
-        remindersSent: 0,
-        remindersSkipped: 0,
-        automaticallyAcknowledged: 0,
-        automaticAcknowledgementsSkipped: 0,
-        errors: 0,
-      };
+    const result = await runObservationAcknowledgementSchedulerOnce({
+      readSettings: async () => AUTOMATION_SETTINGS,
+      processAutomation: async () => {
+        processorCalled = true;
+        return {
+          checked: 0,
+          remindersSent: 0,
+          remindersSkipped: 0,
+          automaticallyAcknowledged: 0,
+          automaticAcknowledgementsSkipped: 0,
+          errors: 0,
+        };
+      },
     });
     assert.equal(result, "skipped");
     assert.equal(processorCalled, false);
@@ -1336,12 +1380,35 @@ test("acknowledgement automation is idempotent, retryable, and guarded by submis
     });
     assert.equal(acknowledgedRun.remindersSkipped, 1);
     assert.equal(postAcknowledgementDelivery, false);
+
+    const remindersDisabledId = await insertAutomationObservation(fixture, {
+      submittedAt: reminderStartedAt,
+    });
+    const remindersDisabledRun =
+      await processObservationAcknowledgementAutomationRuntime(now, {
+        settings: { ...AUTOMATION_SETTINGS, reminderEmailsEnabled: false },
+        observationIds: [remindersDisabledId],
+        sendReminder: async () => {
+          throw new Error("disabled reminders must not be delivered");
+        },
+      });
+    assert.equal(remindersDisabledRun.checked, 1);
+    assert.equal(remindersDisabledRun.remindersSent, 0);
+    assert.equal(
+      await queryOne<{ count: number }>(
+        `SELECT COUNT(*)::int AS count
+         FROM observation_acknowledgement_reminders
+         WHERE observation_id = $1`,
+        [remindersDisabledId],
+      ).then((row) => row?.count),
+      0,
+    );
   } finally {
     if (fixture) await cleanupFixture(fixture);
   }
 });
 
-test("acknowledgement automation auto-acknowledges once and respects suppressed observation email preferences", async () => {
+test("acknowledgement automation auto-acknowledges once and ignores legacy per-user observation preferences", async () => {
   let fixture: Fixture | null = null;
   try {
     fixture = await insertFixture();
@@ -1416,6 +1483,34 @@ test("acknowledgement automation auto-acknowledges once and respects suppressed 
       ).then((row) => row?.status),
       "draft",
     );
+
+    const automaticDisabledId = await insertAutomationObservation(fixture, {
+      submittedAt: overdueSubmission,
+    });
+    const automaticDisabledRun =
+      await processObservationAcknowledgementAutomationRuntime(now, {
+        settings: {
+          ...AUTOMATION_SETTINGS,
+          reminderEmailsEnabled: false,
+          automaticAcknowledgementEnabled: false,
+        },
+        observationIds: [automaticDisabledId],
+        sendAutomaticAcknowledgement: async () => {
+          throw new Error("disabled automatic acknowledgement must not notify");
+        },
+      });
+    assert.equal(automaticDisabledRun.checked, 1);
+    assert.equal(automaticDisabledRun.automaticallyAcknowledged, 0);
+    const automaticDisabledObservation = await queryOne<{
+      status: string;
+      acknowledgedAt: Date | null;
+    }>(
+      `SELECT status, acknowledged_at AS "acknowledgedAt"
+       FROM observations WHERE id = $1`,
+      [automaticDisabledId],
+    );
+    assert.equal(automaticDisabledObservation?.status, "submitted");
+    assert.equal(automaticDisabledObservation?.acknowledgedAt, null);
 
     const preferenceId = await insertAutomationObservation(fixture, {
       submittedAt: new Date("2026-09-11T12:00:00.000Z"),
