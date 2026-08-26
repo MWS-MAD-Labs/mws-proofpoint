@@ -18,29 +18,91 @@ const VALID_ACTOR_ROLES = [
   "supervisor",
 ];
 
+interface SessionUserWithRoles {
+  roles?: string[];
+}
+
 interface StepInput {
   actorRole?: string;
   actionType?: string;
   description?: string | null;
 }
 
+interface WorkflowBody {
+  id?: string;
+  name?: string;
+  type?: string;
+  description?: string | null;
+  steps?: unknown;
+}
+
+interface WorkflowRow {
+  id: string;
+  name: string;
+  type: string;
+  description: string | null;
+  createdAt: string | Date;
+}
+
+interface WorkflowStepRow {
+  id: string;
+  workflow_id: string;
+  step_order: number;
+  actor_role: string;
+  action_type: string;
+  description: string | null;
+}
+
+interface FormattedWorkflowStep {
+  id: string;
+  stepOrder: number;
+  actorRole?: string;
+  actionType?: string;
+  description?: string | null;
+}
+
+interface AssignmentRow {
+  id: string;
+  workflow_id: string;
+  departmentRoleId: string;
+  rubricId: string | null;
+  isActive: boolean;
+  dr_role: string | null;
+  dept_id: string | null;
+  dept_name: string | null;
+  r_id: string | null;
+  r_name: string | null;
+  r_type: string | null;
+}
+
+interface ExistingWorkflowRow {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
+interface ValidationError {
+  error: string;
+}
+
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
-  const roles = (session.user as any).roles ?? [];
+  const roles = (session.user as SessionUserWithRoles).roles ?? [];
   if (!roles.includes("admin")) return { error: "Forbidden", status: 403 };
   return { session };
 }
 
-function validateSteps(steps: any): StepInput[] | { error: string } {
+function validateSteps(steps: unknown): StepInput[] | ValidationError {
   if (!Array.isArray(steps)) return [];
-  for (const s of steps) {
-    if (s.actorRole && !VALID_ACTOR_ROLES.includes(s.actorRole))
-      return { error: `Invalid actor role: ${s.actorRole}` };
-    if (s.actionType && !VALID_ACTION_TYPES.includes(s.actionType))
-      return { error: `Invalid action type: ${s.actionType}` };
+  const stepInputs = steps as StepInput[];
+  for (const step of stepInputs) {
+    if (step.actorRole && !VALID_ACTOR_ROLES.includes(step.actorRole))
+      return { error: `Invalid actor role: ${step.actorRole}` };
+    if (step.actionType && !VALID_ACTION_TYPES.includes(step.actionType))
+      return { error: `Invalid action type: ${step.actionType}` };
   }
-  return steps;
+  return stepInputs;
 }
 
 // ── GET ───────────────────────────────────────────────────────────────────────
@@ -53,20 +115,20 @@ export async function GET() {
         { status: adminCheck.status },
       );
 
-    const workflows = (await query(
+    const workflows = await query<WorkflowRow>(
       `SELECT id, name, type, description, created_at AS "createdAt"
        FROM workflow_definitions
        ORDER BY created_at DESC`,
-    )) as any[];
+    );
 
     // Fetch steps for all workflows
-    const wfIds = workflows.map((w: any) => w.id);
-    const stepsMap: Record<string, any[]> = {};
+    const wfIds = workflows.map((workflow) => workflow.id);
+    const stepsMap: Record<string, FormattedWorkflowStep[]> = {};
     if (wfIds.length > 0) {
-      const steps = (await query(
+      const steps = await query<WorkflowStepRow>(
         `SELECT * FROM workflow_steps WHERE workflow_id = ANY($1) ORDER BY step_order ASC`,
         [wfIds],
-      )) as any[];
+      );
       for (const s of steps) {
         if (!stepsMap[s.workflow_id]) stepsMap[s.workflow_id] = [];
         stepsMap[s.workflow_id].push({
@@ -80,9 +142,9 @@ export async function GET() {
     }
 
     // Fetch assignments for all workflows
-    const assignmentsMap: Record<string, any[]> = {};
+    const assignmentsMap: Record<string, Record<string, unknown>[]> = {};
     if (wfIds.length > 0) {
-      const assignments = (await query(
+      const assignments = await query<AssignmentRow>(
         `SELECT rwa.id, rwa.workflow_id, rwa.department_role_id AS "departmentRoleId",
                 rwa.rubric_id AS "rubricId", rwa.is_active AS "isActive",
                 dr.role AS dr_role, d.id AS dept_id, d.name AS dept_name,
@@ -93,7 +155,7 @@ export async function GET() {
          LEFT JOIN rubric_templates rt ON rt.id = rwa.rubric_id
          WHERE rwa.workflow_id = ANY($1)`,
         [wfIds],
-      )) as any[];
+      );
       for (const a of assignments) {
         if (!assignmentsMap[a.workflow_id]) assignmentsMap[a.workflow_id] = [];
         assignmentsMap[a.workflow_id].push({
@@ -117,10 +179,10 @@ export async function GET() {
       }
     }
 
-    const result = workflows.map((w: any) => ({
-      ...w,
-      steps: stepsMap[w.id] ?? [],
-      assignments: assignmentsMap[w.id] ?? [],
+    const result = workflows.map((workflow) => ({
+      ...workflow,
+      steps: stepsMap[workflow.id] ?? [],
+      assignments: assignmentsMap[workflow.id] ?? [],
     }));
 
     return NextResponse.json(result);
@@ -143,7 +205,7 @@ export async function POST(request: Request) {
         { status: adminCheck.status },
       );
 
-    const body = await request.json();
+    const body = (await request.json()) as WorkflowBody;
     const { name, type, description, steps } = body;
 
     if (!name?.trim())
@@ -160,7 +222,7 @@ export async function POST(request: Request) {
     const validatedSteps = validateSteps(steps);
     if (!Array.isArray(validatedSteps))
       return NextResponse.json(
-        { error: (validatedSteps as any).error },
+        { error: validatedSteps.error },
         { status: 400 },
       );
 
@@ -172,7 +234,7 @@ export async function POST(request: Request) {
     );
 
     // Insert steps
-    const createdSteps: any[] = [];
+    const createdSteps: FormattedWorkflowStep[] = [];
     for (let i = 0; i < validatedSteps.length; i++) {
       const s = validatedSteps[i];
       const stepId = randomUUID();
@@ -197,10 +259,10 @@ export async function POST(request: Request) {
       });
     }
 
-    const workflow = (await queryOne(
+    const workflow = await queryOne<WorkflowRow>(
       `SELECT id, name, type, description, created_at AS "createdAt" FROM workflow_definitions WHERE id = $1`,
       [wfId],
-    )) as any;
+    );
 
     return NextResponse.json(
       { data: { ...workflow, steps: createdSteps, assignments: [] } },
@@ -225,7 +287,7 @@ export async function PUT(request: Request) {
         { status: adminCheck.status },
       );
 
-    const body = await request.json();
+    const body = (await request.json()) as WorkflowBody;
     const { id, name, description, steps } = body;
 
     if (!id)
@@ -234,10 +296,10 @@ export async function PUT(request: Request) {
         { status: 400 },
       );
 
-    const existing = (await queryOne(
+    const existing = await queryOne<ExistingWorkflowRow>(
       `SELECT id, name, description FROM workflow_definitions WHERE id = $1`,
       [id],
-    )) as any;
+    );
     if (!existing)
       return NextResponse.json(
         { error: "Workflow definition not found" },
@@ -258,12 +320,12 @@ export async function PUT(request: Request) {
     );
 
     // Replace steps if provided
-    let updatedSteps = [];
+    let updatedSteps: FormattedWorkflowStep[] = [];
     if (steps !== undefined) {
       const validatedSteps = validateSteps(steps);
       if (!Array.isArray(validatedSteps))
         return NextResponse.json(
-          { error: (validatedSteps as any).error },
+          { error: validatedSteps.error },
           { status: 400 },
         );
 
@@ -293,18 +355,18 @@ export async function PUT(request: Request) {
         });
       }
     } else {
-      updatedSteps = (await query(
+      updatedSteps = await query<FormattedWorkflowStep>(
         `SELECT id, step_order AS "stepOrder", actor_role AS "actorRole",
                 action_type AS "actionType", description
          FROM workflow_steps WHERE workflow_id = $1 ORDER BY step_order ASC`,
         [id],
-      )) as any[];
+      );
     }
 
-    const workflow = (await queryOne(
+    const workflow = await queryOne<WorkflowRow>(
       `SELECT id, name, type, description, created_at AS "createdAt" FROM workflow_definitions WHERE id = $1`,
       [id],
-    )) as any;
+    );
 
     return NextResponse.json({ data: { ...workflow, steps: updatedSteps } });
   } catch (error) {

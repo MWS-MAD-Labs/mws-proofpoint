@@ -11,6 +11,7 @@ const CONFIRMATION = `rebaseline-${BASELINE_MIGRATION}`;
 const FORWARD_MIGRATIONS = new Set([
   "20260824000000_observation_acknowledgement_automation",
   "20260826000000_observation_notification_settings",
+  "20260827000000_observation_scheduler_observability",
 ]);
 const REQUIRED_TABLES = [
   "users",

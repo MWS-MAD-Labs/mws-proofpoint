@@ -1,17 +1,15 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
+import { requireDatabaseUrl } from "@/lib/database-url";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
 function createPrismaClient() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error("DATABASE_URL is required to initialize PrismaClient.");
-  }
-
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const databaseUrl = requireDatabaseUrl("to initialize PrismaClient");
+  const pool = new Pool({ connectionString: databaseUrl });
   const adapter = new PrismaPg(pool);
 
   return new PrismaClient({

@@ -6,7 +6,7 @@
 
 **Out of scope:** SMTP credentials, appraisal notification preference behavior, and changes to existing observation lifecycle states
 
-**Delivery summary:** The singleton PostgreSQL settings model, administrator API and audit metadata, runtime scheduler/processor/email-policy cutover, administrator settings page, user preference cleanup, and deployment/runbook cleanup are implemented. The legacy `notification_preferences.observation_updates` database column is intentionally retained for rollback compatibility and is no longer read or updated by the application.
+**Delivery summary:** The singleton PostgreSQL settings model, administrator API, paginated audit-history UI, scheduler observability, runtime scheduler/processor/email-policy cutover, administrator settings page, user preference cleanup, focused automated coverage, migration CI, and deployment/runbook cleanup are implemented. The legacy `notification_preferences.observation_updates` database column is intentionally retained for the documented one-release rollback-compatibility period and is no longer read or updated by the application.
 
 ## 1. Objective
 
@@ -34,7 +34,9 @@ The observation acknowledgement automation:
 - uses PostgreSQL advisory locking for multi-replica safety;
 - prevents duplicate reminder periods in `observation_acknowledgement_reminders`;
 - treats observation workflow emails as global operational communications rather than per-user preferences;
-- exposes administrator-managed settings at `/admin/notification-settings` through the existing admin-only API; and
+- exposes administrator-managed settings, scheduler status, and paginated audit history at `/admin/notification-settings` through admin-only APIs;
+- validates fresh PostgreSQL 16 migration replay and schema drift in CI;
+- runs database integration tests only through `npm run test:observations:integration`, guarded by a distinct `TEST_DATABASE_URL` whose database name ends in `_test`; and
 - no longer uses `OBSERVATION_ACK_*` or `OBSERVATION_AUTO_ACK_DAYS` environment variables.
 
 The implementation changes the policy source without replacing the scheduler, processor, email templates, audit history, or idempotency mechanisms.
@@ -160,8 +162,8 @@ Safe rollout sequence:
 
 1. Stop reading the column in application code.
 2. Remove the **Observation Updates** toggle from the user settings API and page.
-3. Leave the database column in place for one release to support rollback compatibility.
-4. Remove the column in a later cleanup migration after the new behavior is stable.
+3. Leave the database column in place for one release to support rollback compatibility. **Current state:** retained; application references have been reduced to compatibility coverage and schema/migration documentation.
+4. Remove the column in a later cleanup migration after the new behavior is stable and rollback no longer requires the old application behavior.
 
 Do not change appraisal preference columns.
 

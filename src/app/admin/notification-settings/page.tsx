@@ -40,6 +40,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
+import { ObservationNotificationSettingsAuditHistory } from './ObservationNotificationSettingsAuditHistory';
+import { ObservationSchedulerStatusCard } from './ObservationSchedulerStatusCard';
 
 interface ObservationNotificationSettingsForm {
   notificationsEnabled: boolean;
@@ -254,6 +256,7 @@ function NotificationSettingsContent() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
+  const [operationalRefreshToken, setOperationalRefreshToken] = useState(0);
   const savingRef = useRef(false);
 
   const validationErrors = useMemo(() => validateSettings(settings), [settings]);
@@ -279,6 +282,7 @@ function NotificationSettingsContent() {
 
       setSavedSettings(loaded);
       setSettings(toForm(loaded));
+      setOperationalRefreshToken((current) => current + 1);
     } catch (error) {
       toast({
         title: 'Unable to load settings',
@@ -326,6 +330,7 @@ function NotificationSettingsContent() {
 
       setSavedSettings(updated);
       setSettings(toForm(updated));
+      setOperationalRefreshToken((current) => current + 1);
       toast({
         title: 'Settings saved',
         description: 'Observation workflow policy will be used by subsequent processing.',
@@ -637,6 +642,8 @@ function NotificationSettingsContent() {
             </CardContent>
           </Card>
 
+          <ObservationSchedulerStatusCard refreshToken={operationalRefreshToken} />
+
           <Card className="glass-panel border-border/30">
             <CardContent className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1 text-sm text-muted-foreground">
@@ -666,6 +673,8 @@ function NotificationSettingsContent() {
               </Button>
             </CardContent>
           </Card>
+
+          <ObservationNotificationSettingsAuditHistory refreshToken={operationalRefreshToken} />
         </>
       )}
 

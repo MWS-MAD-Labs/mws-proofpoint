@@ -5,13 +5,24 @@ import { randomUUID } from "crypto";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
-import type { AppRole } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
+
+interface SessionUserWithRoles {
+  roles?: string[];
+}
+
+type UserWithProfileAndRoles = Prisma.UserGetPayload<{
+  include: {
+    profile: { include: { department: true } };
+    roles: true;
+  };
+}>;
 
 // Helper: cek admin
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized", status: 401 as const };
-  const roles = (session.user as any).roles ?? [];
+  const roles = (session.user as SessionUserWithRoles).roles ?? [];
   if (!roles.includes("admin")) return { error: "Forbidden", status: 403 as const };
   return { session };
 }
@@ -226,7 +237,7 @@ function sanitizeRoles(roles: unknown): string[] {
   return filtered.length > 0 ? filtered : ["staff"];
 }
 
-function formatUser(user: any) {
+function formatUser(user: UserWithProfileAndRoles) {
   return {
     id:              user.id,
     email:           user.email,
@@ -237,6 +248,6 @@ function formatUser(user: any) {
     job_title:       user.profile?.jobTitle     ?? null,
     department_id:   user.profile?.departmentId ?? null,
     department_name: user.profile?.department?.name ?? null,
-    roles:           user.roles?.map((r: any) => r.role) ?? [],
+    roles:           user.roles?.map((role) => role.role) ?? [],
   };
 }

@@ -12,17 +12,20 @@ const CARD_STYLE =
 const BUTTON_STYLE =
   "display:inline-block;background:#1F2A44;color:white;padding:10px 20px;border-radius:12px;text-decoration:none;font-weight:bold;";
 
+type ObservationEmailSender = typeof sendEmail;
+
 async function sendObservationEmail(
   event: ObservationNotificationEvent,
   params: { to: string; subject: string; html: string; text?: string },
   settings?: ObservationNotificationSettings,
+  sender: ObservationEmailSender = sendEmail,
 ): Promise<EmailResult> {
   const currentSettings =
     settings ?? (await getObservationNotificationSettings());
   if (!isObservationNotificationEventEnabled(currentSettings, event)) {
     return { success: true };
   }
-  return sendEmail(params);
+  return sender(params);
 }
 
 function esc(str: string | null | undefined): string {
@@ -65,6 +68,7 @@ export async function notifyObservationReassigned(
   observationId: string,
   assigned: boolean,
   settings?: ObservationNotificationSettings,
+  sender?: ObservationEmailSender,
 ) {
   void recipientUserId;
   return sendObservationEmail("reassignment", {
@@ -82,7 +86,7 @@ export async function notifyObservationReassigned(
       <a href="${observationLink(observationId)}${assigned ? "/edit" : ""}" style="${BUTTON_STYLE}">View Observation</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification.</p>
     </div>`,
-  }, settings);
+  }, settings, sender);
 }
 
 export async function notifyObservationSubmitted(
@@ -93,6 +97,7 @@ export async function notifyObservationSubmitted(
   observationTitle: string,
   observationId: string,
   settings?: ObservationNotificationSettings,
+  sender?: ObservationEmailSender,
 ) {
   void staffUserId;
   return sendObservationEmail("submission", {
@@ -109,7 +114,7 @@ export async function notifyObservationSubmitted(
       <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">Review and Acknowledge</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
-  }, settings);
+  }, settings, sender);
 }
 
 export async function notifyObservationAcknowledgementReminder(
@@ -120,6 +125,7 @@ export async function notifyObservationAcknowledgementReminder(
   observationTitle: string,
   observationId: string,
   settings?: ObservationNotificationSettings,
+  sender?: ObservationEmailSender,
 ) {
   void staffUserId;
   return sendObservationEmail("reminder", {
@@ -136,7 +142,7 @@ export async function notifyObservationAcknowledgementReminder(
       <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">Review and Acknowledge</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
-  }, settings);
+  }, settings, sender);
 }
 
 export async function notifyManagerObservationAcknowledged(
@@ -147,6 +153,7 @@ export async function notifyManagerObservationAcknowledged(
   observationTitle: string,
   observationId: string,
   settings?: ObservationNotificationSettings,
+  sender?: ObservationEmailSender,
 ) {
   void managerUserId;
   return sendObservationEmail("personalAcknowledgement", {
@@ -160,7 +167,7 @@ export async function notifyManagerObservationAcknowledged(
       <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">View Details</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
-  }, settings);
+  }, settings, sender);
 }
 
 export async function notifyObservationAcknowledged(
@@ -171,6 +178,7 @@ export async function notifyObservationAcknowledged(
   observationTitle: string,
   observationId: string,
   settings?: ObservationNotificationSettings,
+  sender?: ObservationEmailSender,
 ) {
   void adminUserId;
   return sendObservationEmail("personalAcknowledgement", {
@@ -185,7 +193,7 @@ export async function notifyObservationAcknowledged(
       <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">View Details</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
-  }, settings);
+  }, settings, sender);
 }
 
 export async function notifyObservationAutomaticallyAcknowledged(
@@ -197,6 +205,7 @@ export async function notifyObservationAutomaticallyAcknowledged(
   observationTitle: string,
   observationId: string,
   settings?: ObservationNotificationSettings,
+  sender?: ObservationEmailSender,
 ) {
   void recipientUserId;
   return sendObservationEmail("automaticAcknowledgement", {
@@ -215,7 +224,7 @@ export async function notifyObservationAutomaticallyAcknowledged(
       <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">View Details</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
-  }, settings);
+  }, settings, sender);
 }
 
 export async function notifyManagerObservationReopened(
@@ -227,6 +236,7 @@ export async function notifyManagerObservationReopened(
   reason: string,
   observationId: string,
   settings?: ObservationNotificationSettings,
+  sender?: ObservationEmailSender,
 ) {
   void managerUserId;
   return sendObservationEmail("reopen", {
@@ -240,5 +250,5 @@ export async function notifyManagerObservationReopened(
       <a href="${observationLink(observationId)}/edit" style="${BUTTON_STYLE}">Continue Editing</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification.</p>
     </div>`,
-  }, settings);
+  }, settings, sender);
 }

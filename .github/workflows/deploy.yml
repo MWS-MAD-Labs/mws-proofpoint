@@ -3,6 +3,8 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [main, Staging]
+  pull_request:
+    branches: [main, Staging]
   workflow_dispatch:
     inputs:
       environment:
@@ -23,8 +25,24 @@ jobs:
   # Shared: Test & Build (runs for both branches)
   # ─────────────────────────────────────────────
   test:
-    name: Run Tests & Build
+    name: Run Tests, Migrations & Build
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: proofpoint_test
+          POSTGRES_PASSWORD: proofpoint_test
+          POSTGRES_DB: proofpoint_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U proofpoint_test -d proofpoint_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgresql://proofpoint_test:proofpoint_test@localhost:5432/proofpoint_test?schema=public
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,14 +59,37 @@ jobs:
       - name: Generate Prisma Client
         run: npm run db:generate
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://proofpoint:proofpoint@localhost:5432/proofpoint?schema=public' }}
+          NODE_ENV: test
+
+      - name: Apply migrations to empty PostgreSQL 16 database
+        run: npm run db:migrate:deploy
+        env:
+          NODE_ENV: test
+
+      - name: Verify migration status
+        run: npm run db:migrate:status
+        env:
+          NODE_ENV: test
+
+      - name: Verify migrated database matches Prisma schema
+        run: npm run db:migrate:check
+        env:
+          NODE_ENV: test
+
+      - name: Run focused observation tests
+        run: npm run test:observations
+        env:
+          NODE_ENV: test
+
+      - name: Run observation database integration tests
+        run: npm run test:observations:integration
 
       - name: Build application
         run: npm run build
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://proofpoint:proofpoint@localhost:5432/proofpoint?schema=public' }}
-          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          DATABASE_URL: postgresql://proofpoint_test:proofpoint_test@localhost:5432/proofpoint_test?schema=public
+          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_SECRET: ci-build-placeholder-not-for-runtime
 
   # ─────────────────────────────────────────────
   # Build & Push Docker image
@@ -56,6 +97,7 @@ jobs:
   build-and-push:
     name: Build & Push Docker Image
     needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read

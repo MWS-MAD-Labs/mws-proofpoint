@@ -14,6 +14,7 @@ The active history was therefore replaced with a verified schema baseline:
 20260812000000_existing_database_baseline
 20260824000000_observation_acknowledgement_automation
 20260826000000_observation_notification_settings
+20260827000000_observation_scheduler_observability
 ```
 
 The former files are retained under `prisma/migration-history-archive/pre-20260812-baseline` for audit context and are not executed by Prisma.
@@ -31,7 +32,7 @@ The command refuses to run unless:
 - required baseline tables exist;
 - core identifiers use UUIDs, matching the verified baseline.
 
-It preserves already-applied forward migration records for `20260824000000_observation_acknowledgement_automation` and `20260826000000_observation_notification_settings`.
+It preserves already-applied forward migration records for `20260824000000_observation_acknowledgement_automation`, `20260826000000_observation_notification_settings`, and `20260827000000_observation_scheduler_observability`.
 
 ## Required rollout sequence
 
@@ -82,7 +83,7 @@ If the acknowledgement migrations were already applied, Prisma reports no pendin
 ### 6. Verify migration status
 
 ```sh
-npx prisma migrate status
+npm run db:migrate:status
 ```
 
 Expected result:
@@ -116,7 +117,8 @@ A new PostgreSQL 16 database must be able to run:
 
 ```sh
 npm run db:migrate:deploy
-npx prisma migrate status
+npm run db:migrate:status
+npm run db:migrate:check
 ```
 
 No manual resolve or rebaseline command is needed for a new database.

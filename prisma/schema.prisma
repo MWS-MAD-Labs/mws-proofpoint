@@ -483,7 +483,26 @@ model ObservationNotificationSettingUpdate {
 
   @@index([actorId], map: "observation_notification_setting_updates_actor_idx")
   @@index([settingsId], map: "observation_notification_setting_updates_settings_idx")
+  @@index([settingsId, createdAt(sort: Desc), id(sort: Desc)], map: "observation_notification_setting_updates_history_idx")
   @@map("observation_notification_setting_updates")
+}
+
+model ObservationAcknowledgementSchedulerStatus {
+  id                    Int       @id @default(1)
+  lastAttemptedAt       DateTime? @map("last_attempted_at")
+  lastSuccessfulAt      DateTime? @map("last_successful_at")
+  settingsRevision      DateTime? @map("settings_revision")
+  nextExpectedAt        DateTime? @map("next_expected_at")
+  advisoryLockSkips     Int       @default(0) @map("advisory_lock_skips")
+  checked               Int       @default(0)
+  reminded              Int       @default(0)
+  autoAcknowledged      Int       @default(0) @map("auto_acknowledged")
+  skipped               Int       @default(0)
+  failed                Int       @default(0)
+  lastError             String?   @map("last_error")
+  updatedAt             DateTime  @default(now()) @map("updated_at")
+
+  @@map("observation_acknowledgement_scheduler_status")
 }
 
 model ObservationAcknowledgementReminder {

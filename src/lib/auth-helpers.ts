@@ -4,6 +4,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
+interface SessionUserWithRoles {
+  roles?: string[];
+}
+
 type AuthResult = {
   user: { id: string; roles: string[] } | null;
   response: NextResponse | null;
@@ -20,7 +24,7 @@ export async function requireAuth(): Promise<AuthResult> {
   return {
     user: {
       id: session.user.id,
-      roles: (session.user as any).roles ?? [],
+      roles: (session.user as SessionUserWithRoles).roles ?? [],
     },
     response: null,
   };

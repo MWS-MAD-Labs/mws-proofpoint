@@ -8,6 +8,12 @@ import {
   type ObservationNotificationSettings,
 } from "./notificationSettings";
 import { processObservationAcknowledgementAutomation } from "./processAcknowledgementAutomation";
+import {
+  recordObservationSchedulerFailure,
+  recordObservationSchedulerLockSkip,
+  recordObservationSchedulerPolicySkip,
+  recordObservationSchedulerSuccess,
+} from "./observationSchedulerStatus";
 
 export const OBSERVATION_SCHEDULER_ADVISORY_LOCK = {
   namespace: 1_347_436_354,
@@ -47,6 +53,10 @@ type AutomationProcessor = typeof processObservationAcknowledgementAutomation;
 export interface ObservationSchedulerRunOptions {
   processAutomation?: AutomationProcessor;
   readSettings?: SettingsReader;
+  recordFailure?: typeof recordObservationSchedulerFailure;
+  recordLockSkip?: typeof recordObservationSchedulerLockSkip;
+  recordPolicySkip?: typeof recordObservationSchedulerPolicySkip;
+  recordSuccess?: typeof recordObservationSchedulerSuccess;
 }
 
 export async function runObservationAcknowledgementSchedulerOnce(
@@ -60,18 +70,26 @@ export async function runObservationAcknowledgementSchedulerOnce(
   const processAutomation =
     options.processAutomation ?? processObservationAcknowledgementAutomation;
   const readSettings = options.readSettings ?? getObservationNotificationSettings;
+  const recordFailure = options.recordFailure ?? recordObservationSchedulerFailure;
+  const recordLockSkip = options.recordLockSkip ?? recordObservationSchedulerLockSkip;
+  const recordPolicySkip = options.recordPolicySkip ?? recordObservationSchedulerPolicySkip;
+  const recordSuccess = options.recordSuccess ?? recordObservationSchedulerSuccess;
+  const attemptedAt = new Date();
+  let settings: ObservationNotificationSettings | null = null;
   let client: PoolClient | null = null;
   let lockAcquired = false;
 
   try {
-    const settings = await readSettings();
+    settings = await readSettings();
     if (!settings.notificationsEnabled) {
+      await recordPolicySkip(attemptedAt, settings);
       console.log(
         "[Observation scheduler] Skipping run because observation notifications are disabled.",
       );
       return "skipped";
     }
     if (!settings.schedulerEnabled) {
+      await recordPolicySkip(attemptedAt, settings);
       console.log(
         "[Observation scheduler] Skipping run because acknowledgement scheduling is disabled.",
       );
@@ -88,16 +106,29 @@ export async function runObservationAcknowledgementSchedulerOnce(
     );
     lockAcquired = lockResult.rows[0]?.acquired === true;
     if (!lockAcquired) {
+      await recordLockSkip(attemptedAt, settings);
       console.log(
         "[Observation scheduler] Another application instance is processing acknowledgements; skipping this run.",
       );
       return "skipped";
     }
 
-    const result = await processAutomation(new Date(), { settings });
-    console.log("[Observation scheduler] Run completed:", result);
+    const result = await processAutomation(attemptedAt, { settings });
+    await recordSuccess(attemptedAt, settings, result);
+    console.log("[Observation scheduler] Run completed:", {
+      settingsRevision: settings.updatedAt,
+      nextExpectedAt: new Date(
+        attemptedAt.getTime() + settings.schedulerIntervalMinutes * 60 * 1000,
+      ).toISOString(),
+      ...result,
+    });
     return "completed";
   } catch (error) {
+    try {
+      await recordFailure(attemptedAt, settings, error);
+    } catch (statusError) {
+      console.error("[Observation scheduler] Failed to record scheduler failure:", statusError);
+    }
     console.error("[Observation scheduler] Run failed:", error);
     return "failed";
   } finally {

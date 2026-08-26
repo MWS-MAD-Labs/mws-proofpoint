@@ -4,7 +4,9 @@ import {
   DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS,
   getObservationSchedulerIntervalMs,
   isObservationNotificationEventEnabled,
+  OBSERVATION_NOTIFICATION_EVENT_POLICY,
   observationNotificationSettingsUpdateSchema,
+  type ObservationNotificationEvent,
 } from "./notificationSettings";
 
 const validUpdate = {
@@ -67,34 +69,39 @@ test("reminder deadline must follow the first reminder when reminders are enable
   );
 });
 
-test("event policy honors the master switch and event-specific switch", () => {
-  assert.equal(
-    isObservationNotificationEventEnabled(
-      DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS,
-      "submission",
-    ),
-    true,
-  );
-  assert.equal(
-    isObservationNotificationEventEnabled(
-      {
-        ...DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS,
-        notificationsEnabled: false,
-      },
-      "submission",
-    ),
-    false,
-  );
-  assert.equal(
-    isObservationNotificationEventEnabled(
-      {
-        ...DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS,
-        reminderEmailsEnabled: false,
-      },
-      "reminder",
-    ),
-    false,
-  );
+test("every event policy honors the master switch and corresponding event switch", () => {
+  for (const event of Object.keys(
+    OBSERVATION_NOTIFICATION_EVENT_POLICY,
+  ) as ObservationNotificationEvent[]) {
+    const settingKey = OBSERVATION_NOTIFICATION_EVENT_POLICY[event];
+    assert.equal(
+      isObservationNotificationEventEnabled(
+        DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS,
+        event,
+      ),
+      true,
+    );
+    assert.equal(
+      isObservationNotificationEventEnabled(
+        {
+          ...DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS,
+          notificationsEnabled: false,
+        },
+        event,
+      ),
+      false,
+    );
+    assert.equal(
+      isObservationNotificationEventEnabled(
+        {
+          ...DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS,
+          [settingKey]: false,
+        },
+        event,
+      ),
+      false,
+    );
+  }
 });
 
 test("scheduler interval uses valid settings or the safe 60 minute fallback", () => {

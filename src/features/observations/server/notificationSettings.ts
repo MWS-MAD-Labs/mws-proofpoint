@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { z } from "zod";
-import { pool, query } from "@/lib/db";
+import { pool, query, queryOne } from "@/lib/db";
 
 export const DEFAULT_OBSERVATION_SCHEDULER_INTERVAL_MINUTES = 60;
 const SETTINGS_ID = 1;
@@ -51,6 +51,31 @@ export interface ObservationNotificationSettings
   extends ObservationNotificationSettingsUpdate {
   updatedAt: string;
   updatedBy: ObservationNotificationSettingsActor | null;
+}
+
+export type ObservationNotificationSettingsField = keyof ObservationNotificationSettingsUpdate;
+
+export interface ObservationNotificationSettingsChange {
+  field: ObservationNotificationSettingsField;
+  before: boolean | number;
+  after: boolean | number;
+}
+
+export interface ObservationNotificationSettingsAuditEntry {
+  id: string;
+  createdAt: string;
+  actor: ObservationNotificationSettingsActor;
+  changes: ObservationNotificationSettingsChange[];
+}
+
+export interface ObservationNotificationSettingsAuditPage {
+  data: ObservationNotificationSettingsAuditEntry[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 export type ObservationNotificationEvent =
@@ -109,6 +134,20 @@ interface SettingsRow extends ObservationNotificationSettingsUpdate {
   updatedByName: string | null;
   updatedByEmail: string | null;
 }
+
+interface SettingsAuditRow {
+  id: string;
+  createdAt: Date | string;
+  actorId: string;
+  actorName: string | null;
+  actorEmail: string;
+  beforeSettings: unknown;
+  afterSettings: unknown;
+}
+
+const SETTINGS_FIELDS = Object.keys(
+  DEFAULT_UPDATE_SETTINGS,
+) as ObservationNotificationSettingsField[];
 
 const SETTINGS_SELECT = `
   SELECT s.notifications_enabled AS "notificationsEnabled",
@@ -185,6 +224,85 @@ export async function getObservationNotificationSettings(): Promise<ObservationN
   return rows[0]
     ? serializeSettings(rows[0])
     : { ...DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS };
+}
+
+function parseAuditSnapshot(snapshot: unknown): ObservationNotificationSettingsUpdate | null {
+  const parsed = observationNotificationSettingsUpdateSchema.safeParse(snapshot);
+  if (parsed.success) return parsed.data;
+
+  if (snapshot && typeof snapshot === "object") {
+    const policy = Object.fromEntries(
+      SETTINGS_FIELDS.map((field) => [
+        field,
+        (snapshot as Record<string, unknown>)[field],
+      ]),
+    );
+    const policyParsed = observationNotificationSettingsUpdateSchema.safeParse(policy);
+    return policyParsed.success ? policyParsed.data : null;
+  }
+
+  return null;
+}
+
+export async function listObservationNotificationSettingsAudit(
+  page: number,
+  pageSize: number,
+): Promise<ObservationNotificationSettingsAuditPage> {
+  const offset = (page - 1) * pageSize;
+  const rows = await query<SettingsAuditRow>(
+    `SELECT su.id::text,
+            su.created_at AS "createdAt",
+            su.actor_id::text AS "actorId",
+            p.full_name AS "actorName",
+            u.email AS "actorEmail",
+            su.before_settings AS "beforeSettings",
+            su.after_settings AS "afterSettings"
+       FROM observation_notification_setting_updates su
+       JOIN users u ON u.id = su.actor_id
+       LEFT JOIN profiles p ON p.user_id = u.id
+      WHERE su.settings_id = $1
+      ORDER BY su.created_at DESC, su.id DESC
+      LIMIT $2 OFFSET $3`,
+    [SETTINGS_ID, pageSize, offset],
+  );
+  const total =
+    (await queryOne<{ total: number }>(
+      `SELECT COUNT(*)::int AS total
+         FROM observation_notification_setting_updates
+        WHERE settings_id = $1`,
+      [SETTINGS_ID],
+    ))?.total ?? 0;
+
+  return {
+    data: rows.map((row) => {
+      const before = parseAuditSnapshot(row.beforeSettings);
+      const after = parseAuditSnapshot(row.afterSettings);
+      const changes = before && after
+        ? SETTINGS_FIELDS.flatMap((field) =>
+            before[field] === after[field]
+              ? []
+              : [{ field, before: before[field], after: after[field] }],
+          )
+        : [];
+
+      return {
+        id: row.id,
+        createdAt: new Date(row.createdAt).toISOString(),
+        actor: {
+          id: row.actorId,
+          name: row.actorName,
+          email: row.actorEmail,
+        },
+        changes,
+      };
+    }),
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+    },
+  };
 }
 
 export async function updateObservationNotificationSettings(
