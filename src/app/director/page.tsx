@@ -1,7 +1,7 @@
 "use client";
 
 import { toast } from "@/hooks/use-toast";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Header } from "@/components/layout/Header";
@@ -30,6 +30,7 @@ import {
   getGradeFromScore,
   getPerformanceDetails,
 } from "@/hooks/useAssessment";
+import { shouldReconcileFinalScore } from "@/features/assessments/scoring";
 import {
   Building2,
   ChevronRight,
@@ -113,17 +114,18 @@ function DirectorContent() {
   const [showStickyBar, setShowStickyBar] = useState(false);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnFeedbackInput, setReturnFeedbackInput] = useState("");
-  const isLegacyManagerSelfAppraisal =
+  const reconciliationKeyRef = useRef<string | null>(null);
+  const isDirectSelfAssessment =
     !assessment?.permissions?.isManagerLed &&
-    assessment?.staff_roles?.some((role) => role.toLowerCase() === "manager");
+    assessment?.manager_id === null;
 
   const directorChanges = domains.flatMap((domain) =>
     domain.standards.flatMap((standard) =>
       standard.kpis.filter((kpi) => {
-        const submittedManagerScore = isLegacyManagerSelfAppraisal ? kpi.score : kpi.managerScore;
+        const submittedScore = isDirectSelfAssessment ? kpi.score : kpi.managerScore;
         return kpi.directorScore !== null &&
           kpi.directorScore !== undefined &&
-          kpi.directorScore !== submittedManagerScore;
+          kpi.directorScore !== submittedScore;
       }),
     ),
   );
@@ -200,54 +202,92 @@ function DirectorContent() {
     fetchOrgAssessments();
   }, [user]);
 
-  // Self-healing: Update final_score if missing for completed assessments
-  // Moved to top level to comply with Rules of Hooks
+  // Reconcile scores persisted before the current workflow scoring rules were fixed.
+  const reconciliationDomains = isDirectSelfAssessment
+    ? domains.map((domain) => ({
+        ...domain,
+        standards: domain.standards.map((standard) => ({
+          ...standard,
+          kpis: standard.kpis.map((kpi) => ({
+            ...kpi,
+            managerScore: kpi.directorScore ?? kpi.score,
+          })),
+        })),
+      }))
+    : domains;
   const managerScoreForEffect =
     domains && domains.length > 0
       ? assessment?.permissions?.isManagerLed
         ? calculateStaffAppraisalScore(domains, "manager")
-        : calculateWeightedScore(domains, "manager")
+        : calculateWeightedScore(reconciliationDomains, "manager")
       : null;
 
-  useEffect(() => {
-    if (!assessment || !managerScoreForEffect) return;
+  const reconciliationAssessmentId = assessment?.id;
+  const reconciliationStatus = assessment?.status;
+  const reconciliationStoredScore = assessment?.final_score;
+  const reconciliationStoredGrade = assessment?.final_grade;
+  const reconciliationIsManagerLed = assessment?.permissions?.isManagerLed ?? false;
 
-    const isComplete = [
+  useEffect(() => {
+    if (!reconciliationAssessmentId || !reconciliationStatus || managerScoreForEffect === null) return;
+
+    const hasSubmittedScore = [
       "manager_reviewed",
+      "pending_director_review",
+      "admin_reviewed",
+      "director_reviewed",
       "director_approved",
       "acknowledged",
-    ].includes(assessment.status);
-    const isMissingScore =
-      assessment.final_score === null || assessment.final_score === undefined;
-
-    // Also check if the grade matches the current scoring logic (e.g. migrating from 'A' to 'Rising Star')
+    ].includes(reconciliationStatus);
     const calculatedGrade = getGradeFromScore(managerScoreForEffect);
-    const isWrongGrade = assessment.final_grade !== calculatedGrade;
+    const hasStaleScore = shouldReconcileFinalScore(
+      reconciliationStoredScore,
+      managerScoreForEffect,
+    );
+    const hasStaleGrade = reconciliationStoredGrade !== calculatedGrade;
+    const reconciliationKey = `${reconciliationAssessmentId}:${managerScoreForEffect}:${calculatedGrade}`;
 
-    if (isComplete && (isMissingScore || isWrongGrade)) {
-      console.log("Self-healing: Updating assessment score/grade", {
-        score: managerScoreForEffect,
-        oldGrade: assessment.final_grade,
-        newGrade: calculatedGrade,
-      });
-
-      api
-        .updateAssessment(assessment.id, {
-          final_score: managerScoreForEffect,
-          final_grade: calculatedGrade,
-        })
-        .then(() => {
-          toast({
-            title: "Grade Updated",
-            description: "Assessment grade has been updated to the new format.",
+    if (
+      hasSubmittedScore &&
+      (hasStaleScore || hasStaleGrade) &&
+      reconciliationKeyRef.current !== reconciliationKey
+    ) {
+      reconciliationKeyRef.current = reconciliationKey;
+      const reconcileRequest = reconciliationIsManagerLed
+        ? api.performAssessmentAction(reconciliationAssessmentId, {
+            action: "reconcile_score",
+          })
+        : api.updateAssessment(reconciliationAssessmentId, {
+            final_score: managerScoreForEffect,
+            final_grade: calculatedGrade,
           });
-        });
+
+      reconcileRequest.then(({ error }) => {
+        if (!error) {
+          setAssessments((current) => current.map((item) =>
+            item.id === reconciliationAssessmentId
+              ? {
+                  ...item,
+                  final_score: managerScoreForEffect,
+                  final_grade: calculatedGrade,
+                }
+              : item,
+          ));
+          toast({
+            title: "Final Score Updated",
+            description: "The overview score was reconciled with the assessment ratings.",
+          });
+        } else {
+          reconciliationKeyRef.current = null;
+        }
+      });
     }
   }, [
-    assessment?.id,
-    assessment?.status,
-    assessment?.final_score,
-    assessment?.final_grade,
+    reconciliationAssessmentId,
+    reconciliationStatus,
+    reconciliationStoredScore,
+    reconciliationStoredGrade,
+    reconciliationIsManagerLed,
     managerScoreForEffect,
   ]);
 
@@ -482,16 +522,29 @@ function DirectorContent() {
 
     const usesDirectItemPercentages = assessment?.permissions?.isManagerLed ?? false;
 
+    const selfComparisonDomains = isDirectSelfAssessment
+      ? domains.map((domain) => ({
+          ...domain,
+          standards: domain.standards.map((standard) => ({
+            ...standard,
+            kpis: standard.kpis.map((kpi) => ({
+              ...kpi,
+              managerScore: kpi.score,
+              managerEvidence: kpi.evidence,
+            })),
+          })),
+        }))
+      : domains;
     const managerScore = usesDirectItemPercentages
       ? calculateStaffAppraisalScore(domains, "manager")
-      : calculateWeightedScore(domains, isLegacyManagerSelfAppraisal ? "staff" : "manager");
+      : calculateWeightedScore(selfComparisonDomains, "manager");
     const directorDomains = domains.map((domain) => ({
       ...domain,
       standards: domain.standards.map((standard) => ({
         ...standard,
         kpis: standard.kpis.map((kpi) => ({
           ...kpi,
-          managerScore: kpi.directorScore ?? (isLegacyManagerSelfAppraisal ? kpi.score : kpi.managerScore),
+          managerScore: kpi.directorScore ?? (isDirectSelfAssessment ? kpi.score : kpi.managerScore),
         })),
       })),
     }));
@@ -508,7 +561,7 @@ function DirectorContent() {
     const isPendingDirectorReview = assessment?.status === "manager_reviewed" || assessment?.status === "pending_director_review";
     const isDirectorReviewMode =
       assessment?.status === "self_submitted" &&
-      (isDirectorReviewAndApproval || isLegacyManagerSelfAppraisal);
+      (isDirectorReviewAndApproval || isDirectSelfAssessment);
     const canEdit = isPendingDirectorReview || isDirectorReviewMode || Boolean(assessment?.permissions?.canDirectorReview);
     const isReadOnly = !canEdit;
 
@@ -712,9 +765,10 @@ function DirectorContent() {
                   index={index}
                   onIndicatorChange={isReadOnly ? undefined : updateKPI}
                   readonly={isReadOnly}
-                  managerOnly={Boolean(assessment?.permissions?.isManagerLed || isLegacyManagerSelfAppraisal)}
+                  managerOnly={Boolean(assessment?.permissions?.isManagerLed || isDirectSelfAssessment)}
                   directorMode={true}
                   reviewerLabel="Director"
+                  comparisonLabel={isDirectSelfAssessment ? "Self" : "Manager"}
                   assessmentId={assessment?.id}
                   section={{
                     ...domain,
@@ -724,9 +778,9 @@ function DirectorContent() {
                         ...i,
                         description: i.description || "",
                         staffScore: i.score,
-                        staffEvidence: isLegacyManagerSelfAppraisal ? "" : i.evidence,
-                        managerScore: isLegacyManagerSelfAppraisal ? i.score : (i.managerScore ?? null),
-                        managerEvidence: isLegacyManagerSelfAppraisal ? i.evidence : (i.managerEvidence ?? ""),
+                        staffEvidence: i.evidence,
+                        managerScore: isDirectSelfAssessment ? i.score : (i.managerScore ?? null),
+                        managerEvidence: isDirectSelfAssessment ? i.evidence : (i.managerEvidence ?? ""),
                         directorScore: i.directorScore ?? null,
                         directorEvidence: i.directorEvidence ?? "",
                       })),
@@ -865,11 +919,11 @@ function DirectorContent() {
               {/* Score Comparison Widget */}
               <ScoreComparisonWidget
                 domains={directorDomains}
-                secondaryDomains={domains}
+                secondaryDomains={selfComparisonDomains}
                 finalScore={directorScore}
                 projectedScore={managerScore}
                 primaryLabel="Director"
-                secondaryLabel="Manager"
+                secondaryLabel={isDirectSelfAssessment ? "Self" : "Manager"}
               />
 
               <Card className="bg-muted/30 border-dashed border-2 border-muted-foreground/10">

@@ -466,9 +466,9 @@ export function useAssessment(assessmentId?: string) {
     const managerEvidence: Record<string, string | EvidenceItem[]> = {};
     const directorScores: Record<string, number | 'X'> = {};
     const directorEvidence: Record<string, string | EvidenceItem[]> = {};
-    const isLegacyManagerSelfAppraisal =
+    const isDirectSelfAssessment =
       !assessment.permissions?.isManagerLed &&
-      assessment.staff_roles?.some((role) => role.toLowerCase() === "manager");
+      assessment.manager_id === null;
 
     domains.forEach(domain => {
       domain.standards.forEach(standard => {
@@ -489,7 +489,7 @@ export function useAssessment(assessmentId?: string) {
       });
     });
 
-    const directorDomains = isLegacyManagerSelfAppraisal
+    const directorDomains = isDirectSelfAssessment
       ? domains.map((domain) => ({
           ...domain,
           standards: domain.standards.map((standard) => ({
@@ -511,7 +511,7 @@ export function useAssessment(assessmentId?: string) {
       : await api.updateAssessment(assessment.id, {
           status: 'director_approved', director_comments: directorFeedback, director_approved_at: new Date().toISOString(),
           final_score: finalScore, final_grade: finalGrade,
-          ...(isLegacyManagerSelfAppraisal
+          ...(isDirectSelfAssessment
             ? { director_scores: directorScores, director_evidence: directorEvidence }
             : { manager_scores: managerScores, manager_evidence: managerEvidence }),
         });

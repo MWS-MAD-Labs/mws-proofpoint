@@ -36,6 +36,19 @@ export function calculateWeightedPercentageScore(
     : null;
 }
 
+export function shouldReconcileFinalScore(
+  storedScore: number | string | null | undefined,
+  calculatedScore: number,
+): boolean {
+  if (!Number.isFinite(calculatedScore)) return false;
+  if (storedScore === null || storedScore === undefined) return true;
+
+  const numericStoredScore = Number(storedScore);
+  if (!Number.isFinite(numericStoredScore)) return true;
+
+  return Math.abs(numericStoredScore - calculatedScore) >= 0.005;
+}
+
 export function getGradeFromScore(score: number): string {
   if (score >= 3.9) return "Exemplary";
   if (score >= 3.6) return "Trail Blazers";

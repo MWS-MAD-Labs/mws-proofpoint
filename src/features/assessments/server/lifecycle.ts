@@ -4,7 +4,7 @@ export type ManagerLedStatus =
   | "director_reviewed"
   | "acknowledged";
 
-export type AssessmentAction = "save_draft" | "submit" | "director_review" | "return" | "acknowledge";
+export type AssessmentAction = "save_draft" | "submit" | "director_review" | "return" | "acknowledge" | "reconcile_score";
 
 export function isManagerLedAssessment(assessment: { workflowSnapshot?: unknown; workflow_snapshot?: unknown }) {
   const snapshot = assessment.workflowSnapshot ?? assessment.workflow_snapshot;

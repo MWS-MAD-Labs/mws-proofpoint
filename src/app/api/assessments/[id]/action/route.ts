@@ -7,7 +7,7 @@ import { nextManagerLedTransition, type AssessmentAction } from "@/features/asse
 import { triggerNotification } from "@/lib/notifications";
 import { calculateWeightedPercentageScore, getGradeFromScore } from "@/features/assessments/scoring";
 
-const actions = new Set<AssessmentAction>(["save_draft", "submit", "director_review", "return", "acknowledge"]);
+const actions = new Set<AssessmentAction>(["save_draft", "submit", "director_review", "return", "acknowledge", "reconcile_score"]);
 
 function isValidRating(value: unknown): value is number {
   return (
@@ -30,11 +30,62 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const result = await client.query(`SELECT id, staff_id AS "staffId", manager_id AS "managerId", director_id AS "directorId", template_id AS "templateId", status, workflow_snapshot AS "workflowSnapshot" FROM assessments WHERE id = $1 FOR UPDATE`, [id]);
+    const result = await client.query(`SELECT id, staff_id AS "staffId", manager_id AS "managerId", director_id AS "directorId", template_id AS "templateId", status, workflow_snapshot AS "workflowSnapshot", manager_scores AS "managerScores" FROM assessments WHERE id = $1 FOR UPDATE`, [id]);
     const assessment = result.rows[0];
     if (!assessment) throw Object.assign(new Error("Assessment not found"), { statusCode: 404 });
     const roles = ((session.user as { roles?: string[] }).roles ?? []) as string[];
     const permissions = getAssessmentPermissions({ id: session.user.id, roles }, assessment);
+    if (action === "reconcile_score") {
+      const reconciliableStatuses = new Set([
+        "pending_director_review",
+        "director_reviewed",
+        "acknowledged",
+      ]);
+      if (!permissions.canView || !permissions.isManagerLed) {
+        throw Object.assign(new Error("You cannot reconcile this appraisal"), { statusCode: 403 });
+      }
+      if (!reconciliableStatuses.has(assessment.status)) {
+        throw Object.assign(new Error("The appraisal does not have a submitted score to reconcile"), { statusCode: 409 });
+      }
+
+      const managerScores = assessment.managerScores;
+      if (!managerScores || typeof managerScores !== "object" || Array.isArray(managerScores)) {
+        throw Object.assign(new Error("The appraisal has no manager ratings to reconcile"), { statusCode: 400 });
+      }
+      const kpis = await client.query<{ id: string; performanceWeight: number }>(
+        `SELECT id, performance_weight AS "performanceWeight"
+         FROM kpis
+         WHERE template_id = $1
+         ORDER BY sort_order`,
+        [assessment.templateId],
+      );
+      const scoreByKpi = managerScores as Record<string, unknown>;
+      const scoredKpis = kpis.rows.map((kpi) => ({
+        managerScore: scoreByKpi[kpi.id],
+        performanceWeight: kpi.performanceWeight,
+      }));
+      if (scoredKpis.length === 0 || scoredKpis.some((kpi) => !isValidRating(kpi.managerScore))) {
+        throw Object.assign(new Error("A valid manager rating is required for every performance item"), { statusCode: 400 });
+      }
+      const finalScore = calculateWeightedPercentageScore(
+        scoredKpis.map((kpi) => ({
+          managerScore: kpi.managerScore as number,
+          performanceWeight: kpi.performanceWeight,
+        })),
+      );
+      if (finalScore === null) throw Object.assign(new Error("Unable to calculate final score"), { statusCode: 400 });
+
+      const updatedResult = await client.query(
+        `UPDATE assessments
+         SET final_score = $2, final_grade = $3, updated_at = NOW()
+         WHERE id = $1
+         RETURNING *`,
+        [id, finalScore, getGradeFromScore(finalScore)],
+      );
+      await client.query("COMMIT");
+      return NextResponse.json({ data: updatedResult.rows[0] });
+    }
+
     const requiredPermission = action === "save_draft" ? "canSaveDraft" : action === "submit" ? "canSubmit" : action === "director_review" ? "canDirectorReview" : action === "return" ? "canReturn" : "canAcknowledge";
     if (!permissions[requiredPermission]) throw Object.assign(new Error("You cannot perform this action at the current workflow step"), { statusCode: 403 });
     const nextStatus = nextManagerLedTransition(assessment.status, action);
