@@ -42,12 +42,12 @@ See the [v0.2.0 release notes](https://github.com/MWS-MAD-Labs/mws-proofpoint/re
 - Role- and department-aware staff selection using department role memberships.
 - Draft autosave with visible saving, saved, and error feedback.
 - Decimal scores from `1.0` through `4.0` with weighted calculations.
-- Side-by-side staff, manager, and director score comparison where applicable.
+- Workflow-aware score comparison: direct self-assessments show Self versus Director, while manager-led appraisals show Manager versus Director.
 - Director score proposals, evidence, comments, approval, and return feedback.
 - Staff acknowledgement of finalized appraisal results.
 - Immutable workflow snapshots for in-flight appraisals.
 - Lifecycle audit history through `assessment_updates`.
-- Read-only print views and generated appraisal PDFs.
+- Read-only print views and generated appraisal PDFs with workflow-aware score breakdowns and signature blocks.
 
 ### Observations
 
@@ -109,6 +109,8 @@ flowchart TD
 ### Self-assessment and review
 
 Self-assessments are automatically matched or created for eligible staff. Staff complete scores and evidence, after which the configured manager, director, and administrative review path applies to the assessment.
+
+A direct self-assessment is identified by a self-led assessment with no assigned manager. Its approved result uses the employee's self-ratings as the base and applies Director ratings as item-level overrides. Director review screens and print reports label the comparison as Self versus Director, use the same KPI and domain weights at every level, and show only the Director approval signature. Manager-led staff appraisals retain their Manager versus Director comparison and manager/director signature flow.
 
 Legacy assessments without a workflow snapshot retain their established lifecycle for backward compatibility.
 
@@ -314,6 +316,7 @@ At `v0.2.0` release time:
 - [Strategic planning specification](./docs/specs/strategic-planning.md)
 - [Production data migration runbook](./docs/operations/production-data-migration.md)
 - [Prisma migration history rebaseline runbook](./docs/operations/prisma-migration-history-rebaseline.md)
+- [Production-to-staging database refresh runbook](./docs/operations/staging-database-refresh.md)
 - [Observation acknowledgement automation runbook](./docs/operations/observation-acknowledgement-automation.md)
 - [Global observation notification settings development plan](./docs/specs/global-observation-notification-settings-plan.md)
 - [Multi-teacher observations implementation and compatibility plan](./docs/specs/multi-teacher-observations-development-plan.md)

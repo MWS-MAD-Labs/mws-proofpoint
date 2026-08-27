@@ -30,6 +30,7 @@ interface ReviewComparisonIndicatorProps {
   onEvidenceChange?: (evidence: string) => void;
   readonly?: boolean;
   reviewerLabel?: string;
+  comparisonLabel?: string;
   managerOnly?: boolean;
   directorMode?: boolean;
   showDirectorComparison?: boolean;
@@ -59,6 +60,7 @@ export function ReviewComparisonIndicator({
   onEvidenceChange,
   readonly = false,
   reviewerLabel = "Manager",
+  comparisonLabel = "Manager",
   managerOnly = false,
   directorMode = false,
   showDirectorComparison = false,
@@ -94,7 +96,7 @@ export function ReviewComparisonIndicator({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {!managerOnly && <ScoreBadge label="Self" score={indicator.staffScore} />}
-          {(directorMode || showDirectorComparison) && <ScoreBadge label="Manager" score={indicator.managerScore} />}
+          {(directorMode || showDirectorComparison) && <ScoreBadge label={comparisonLabel} score={indicator.managerScore} />}
           {(directorMode || showDirectorComparison) && <ScoreBadge label="Director" score={indicator.directorScore ?? indicator.managerScore} changed={scoreChanged} />}
         </div>
       </div>
@@ -138,6 +140,7 @@ export function ReviewComparisonIndicator({
           </Button>
         )}
       </div>
+
 
       {showFeedback && (
         <div className="w-full border-t pt-3 sm:basis-full">

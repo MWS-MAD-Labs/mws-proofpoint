@@ -178,19 +178,20 @@ export function ScoreComparisonWidget({
             k.managerScore !== "X",
         );
 
-        const staffAvg =
-          staffScoredKPIs.length > 0
-            ? staffScoredKPIs.reduce((a, k) => a + (Number(k.managerScore) || 0), 0) /
-              staffScoredKPIs.length
-            : null;
+        const weightedAverage = (kpis: KPIData[]) => {
+          if (kpis.length === 0) return null;
+          const weightTotal = kpis.reduce(
+            (total, kpi) => total + Number(kpi.performanceWeight ?? 100),
+            0,
+          );
+          return kpis.reduce(
+            (total, kpi) => total + Number(kpi.managerScore) * Number(kpi.performanceWeight ?? 100),
+            0,
+          ) / (weightTotal || kpis.length);
+        };
 
-        const managerAvg =
-          managerScoredKPIs.length > 0
-            ? managerScoredKPIs.reduce(
-                (a, k) => a + (Number(k.managerScore) || 0),
-                0,
-              ) / managerScoredKPIs.length
-            : null;
+        const staffAvg = weightedAverage(staffScoredKPIs);
+        const managerAvg = weightedAverage(managerScoredKPIs);
 
         return { name: domain.name, staffAvg, managerAvg };
       })

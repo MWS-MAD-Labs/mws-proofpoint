@@ -4,6 +4,8 @@ import { query, queryOne } from "@/lib/db";
 import { triggerNotification } from "@/lib/notifications";
 import type { NotificationType } from "@/lib/notifications/types";
 import { getAssessmentPermissions } from "@/features/assessments/server/permissions";
+import { isManagerLedAssessment } from "@/features/assessments/server/lifecycle";
+import { calculateWeightedPercentageScore, getGradeFromScore } from "@/features/assessments/scoring";
 import { getAutomaticPeriod } from "@/lib/utils";
 
 function hasEvidence(value: unknown): boolean {
@@ -19,6 +21,136 @@ function hasEvidence(value: unknown): boolean {
 function isTenthPointRating(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) &&
     value >= 1 && value <= 4 && Math.round(value * 10) === value * 10;
+}
+
+interface AssessmentListRow {
+  id: string;
+  template_id: string | null;
+  manager_id: string | null;
+  status: string;
+  workflow_snapshot: unknown;
+  staff_scores: unknown;
+  manager_scores: unknown;
+  director_scores: unknown;
+  staff_roles: string[] | null;
+  final_score: number | string | null;
+  final_grade: string | null;
+  [key: string]: unknown;
+}
+
+interface AssessmentKpiWeight {
+  id: string;
+  templateId: string;
+  domainId: string;
+  domainWeight: number | string;
+  performanceWeight: number | string;
+}
+
+function asScoreMap(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+
+function calculateLegacyAssessmentScore(
+  kpis: AssessmentKpiWeight[],
+  scores: Record<string, unknown>,
+): number | null {
+  const domains = new Map<string, { weight: number; weightedTotal: number; itemWeightTotal: number }>();
+
+  for (const kpi of kpis) {
+    const rating = scores[kpi.id];
+    if (typeof rating !== "number" || !Number.isFinite(rating)) continue;
+
+    const domainWeight = Number(kpi.domainWeight);
+    const itemWeight = Number(kpi.performanceWeight ?? 100);
+    if (!Number.isFinite(domainWeight) || !Number.isFinite(itemWeight) || itemWeight < 0) continue;
+
+    const domain = domains.get(kpi.domainId) ?? {
+      weight: domainWeight,
+      weightedTotal: 0,
+      itemWeightTotal: 0,
+    };
+    domain.weightedTotal += rating * itemWeight;
+    domain.itemWeightTotal += itemWeight;
+    domains.set(kpi.domainId, domain);
+  }
+
+  let weightedTotal = 0;
+  let domainWeightTotal = 0;
+  for (const domain of domains.values()) {
+    if (domain.itemWeightTotal <= 0) continue;
+    weightedTotal += (domain.weightedTotal / domain.itemWeightTotal) * domain.weight;
+    domainWeightTotal += domain.weight;
+  }
+
+  return domainWeightTotal > 0 ? weightedTotal / domainWeightTotal : null;
+}
+
+async function hydrateCalculatedScores(assessments: AssessmentListRow[]): Promise<AssessmentListRow[]> {
+  const templateIds = Array.from(new Set(
+    assessments.map((assessment) => assessment.template_id).filter((id): id is string => Boolean(id)),
+  ));
+  if (templateIds.length === 0) return assessments;
+
+  const kpis = await query<AssessmentKpiWeight>(
+    `SELECT k.id,
+            k.template_id AS "templateId",
+            kd.id AS "domainId",
+            kd.weight AS "domainWeight",
+            k.performance_weight AS "performanceWeight"
+     FROM kpis k
+     JOIN kpi_standards ks ON ks.id = k.standard_id
+     JOIN kpi_domains kd ON kd.id = ks.domain_id
+     WHERE k.template_id = ANY($1::uuid[])`,
+    [templateIds],
+  );
+  const kpisByTemplate = new Map<string, AssessmentKpiWeight[]>();
+  for (const kpi of kpis) {
+    const templateKpis = kpisByTemplate.get(kpi.templateId) ?? [];
+    templateKpis.push(kpi);
+    kpisByTemplate.set(kpi.templateId, templateKpis);
+  }
+
+  const submittedStatuses = new Set([
+    "manager_reviewed",
+    "pending_director_review",
+    "admin_reviewed",
+    "director_reviewed",
+    "director_approved",
+    "acknowledged",
+  ]);
+
+  return assessments.map((assessment) => {
+    if (!assessment.template_id || !submittedStatuses.has(assessment.status)) return assessment;
+    const templateKpis = kpisByTemplate.get(assessment.template_id) ?? [];
+    if (templateKpis.length === 0) return assessment;
+
+    const managerLed = isManagerLedAssessment(assessment);
+    const isDirectSelfAssessment = !managerLed && assessment.manager_id === null;
+    const baseScores = asScoreMap(
+      isDirectSelfAssessment ? assessment.staff_scores : assessment.manager_scores,
+    );
+    const scores = isDirectSelfAssessment
+      ? { ...baseScores, ...asScoreMap(assessment.director_scores) }
+      : baseScores;
+    const calculatedScore = managerLed
+      ? calculateWeightedPercentageScore(
+          templateKpis.map((kpi) => ({
+            managerScore: scores[kpi.id] as number | "X" | null | undefined,
+            performanceWeight: Number(kpi.performanceWeight),
+          })),
+        )
+      : calculateLegacyAssessmentScore(templateKpis, scores);
+
+    if (calculatedScore === null) return assessment;
+    return {
+      ...assessment,
+      final_score: calculatedScore,
+      final_grade: getGradeFromScore(calculatedScore),
+    };
+  });
 }
 
 // GET /api/assessments - List assessments based on user role
@@ -86,7 +218,7 @@ export async function GET(request: Request) {
              mp.full_name as manager_name,
              mp.job_title as manager_job_title,
              (
-                SELECT array_agg(role)
+                SELECT array_agg(role::text ORDER BY role::text)
                 FROM user_roles
                 WHERE user_id = a.staff_id
              ) as staff_roles
@@ -146,8 +278,9 @@ export async function GET(request: Request) {
       }
     }
 
-    const assessments = await query(sql, params);
-    return NextResponse.json({ data: assessments });
+    const assessments = await query<AssessmentListRow>(sql, params);
+    const assessmentsWithCalculatedScores = await hydrateCalculatedScores(assessments);
+    return NextResponse.json({ data: assessmentsWithCalculatedScores });
   } catch (error) {
     console.error("Assessments error:", error);
     return NextResponse.json(

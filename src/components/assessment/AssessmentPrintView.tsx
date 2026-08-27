@@ -1,5 +1,4 @@
-import { Assessment, calculateWeightedScore } from "@/hooks/useAssessment";
-import { DomainData } from "@/hooks/useAssessment";
+import { Assessment, calculateWeightedScore, DomainData, KPIData } from "@/hooks/useAssessment";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { ProofPointMark } from "@/components/ProofPointMark";
@@ -88,19 +87,40 @@ function getPerformanceTier(score: number) {
 }
 
 export function AssessmentPrintView({ assessment, domains, staffName }: AssessmentPrintViewProps) {
-    const calculatedScore = calculateWeightedScore(domains, 'manager');
+    const isDirectSelfAssessment =
+        !assessment.permissions?.isManagerLed &&
+        assessment.manager_id === null;
+    const printDomains = isDirectSelfAssessment
+        ? domains.map((domain) => ({
+            ...domain,
+            standards: domain.standards.map((standard) => ({
+                ...standard,
+                kpis: standard.kpis.map((kpi) => ({
+                    ...kpi,
+                    managerScore: kpi.directorScore ?? kpi.score,
+                })),
+            })),
+        }))
+        : domains;
+    const calculatedScore = calculateWeightedScore(printDomains, 'manager');
     const managerScore = assessment.final_score !== null && assessment.final_score !== undefined
         ? Number(assessment.final_score)
         : (calculatedScore ?? 0);
     const tier = getPerformanceTier(managerScore);
 
-    // Calculate domain averages
-    const domainScores = domains.map((domain, idx) => {
-        let allKPIs: any[] = [];
-        domain.standards.forEach(s => allKPIs = [...allKPIs, ...s.kpis]);
+    // Calculate domain averages with the same item weights used by the assessment score.
+    const domainScores = printDomains.map((domain, idx) => {
+        const allKPIs: KPIData[] = domain.standards.flatMap((standard) => standard.kpis);
         const scoredKPIs = allKPIs.filter(k => k.managerScore !== null && k.managerScore !== undefined && k.managerScore !== 'X');
+        const itemWeightTotal = scoredKPIs.reduce(
+            (total, kpi) => total + Number(kpi.performanceWeight ?? 100),
+            0,
+        );
         const avg = scoredKPIs.length > 0
-            ? scoredKPIs.reduce((acc, k) => acc + Number(k.managerScore), 0) / scoredKPIs.length
+            ? scoredKPIs.reduce(
+                (total, kpi) => total + Number(kpi.managerScore) * Number(kpi.performanceWeight ?? 100),
+                0,
+            ) / (itemWeightTotal || scoredKPIs.length)
             : null;
         return {
             ...domain,
@@ -305,7 +325,17 @@ export function AssessmentPrintView({ assessment, domains, staffName }: Assessme
 
                 {/* ===== SIGNATURES ===== */}
                 <section className="pt-6 mt-4 border-t border-border avoid-break">
-                    {(assessment.manager_id === assessment.director_id || assessment.manager_name === assessment.director_name) ? (
+                    {isDirectSelfAssessment ? (
+                        <div className="max-w-xs mx-auto text-center">
+                            <div className="text-[8px] font-bold uppercase text-muted-foreground tracking-widest mb-3">Approved by</div>
+                            <div className="text-base font-serif italic text-foreground border-b border-border pb-1 mb-1">
+                                {assessment.director_name || "Director Name"}
+                            </div>
+                            <div className="text-[8px] font-medium text-muted-foreground uppercase tracking-wider">
+                                {assessment.director_job_title || "Director"}
+                            </div>
+                        </div>
+                    ) : (assessment.manager_id === assessment.director_id || assessment.manager_name === assessment.director_name) ? (
                         /* Combined Flow */
                         <div className="max-w-xs mx-auto text-center">
                             <div className="text-[8px] font-bold uppercase text-muted-foreground tracking-widest mb-3">Appraised and Approved by</div>
