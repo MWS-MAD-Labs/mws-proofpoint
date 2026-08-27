@@ -17,19 +17,22 @@ export function getObservationPermissions(
   const isAdmin = hasRole(actor, "admin");
   const isAssignedManager = observation.managerId === actor.id;
   const isDirector = hasRole(actor, "director");
-  const isSubjectStaff = observation.staffId === actor.id;
+  const isParticipant =
+    observation.isParticipant ?? observation.staffId === actor.id;
+  const hasPendingAcknowledgement =
+    isParticipant && observation.participantAcknowledgedAt == null;
 
-  // The observation subject must not learn that a manager's draft exists.
+  // Participants must not learn that an observer's draft exists.
   // A separate privileged role (admin, director, or assigned manager) retains access.
   const canViewRecord =
     isAdmin ||
     isAssignedManager ||
     isDirector ||
-    (isSubjectStaff && status !== "draft");
+    (isParticipant && status !== "draft");
   const canViewResponses =
     isAdmin ||
     isAssignedManager ||
-    ((isDirector || isSubjectStaff) && status !== "draft");
+    ((isDirector || isParticipant) && status !== "draft");
 
   return {
     canViewRecord,
@@ -37,7 +40,7 @@ export function getObservationPermissions(
     canEdit: status === "draft" && (isAdmin || isAssignedManager),
     canSubmit: status === "draft" && (isAdmin || isAssignedManager),
     canAcknowledge:
-      !isAdmin && isSubjectStaff && status === "submitted",
+      !isAdmin && hasPendingAcknowledgement && status === "submitted",
     canReopen:
       isAdmin && (status === "submitted" || status === "acknowledged"),
     canReassign: isAdmin,

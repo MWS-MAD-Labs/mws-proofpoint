@@ -47,14 +47,18 @@ import {
 import { observationKeys } from "../api/queryKeys";
 import { OBSERVATION_STATUS } from "../constants";
 import {
+  getObservationAcknowledgementProgress,
   getObservationAgeStart,
+  getObservationDetailParticipants,
   getObservationPrimaryAction,
   shouldShowObservationResponses,
   sortObservationActivity,
 } from "../detailPresentation";
 import type {
   ObservationAnswer,
+  ObservationAcknowledgementMethod,
   ObservationDetailResponse,
+  ObservationParticipantDetail,
   ObservationRubricIndicator,
   ObservationStatus,
 } from "../types";
@@ -62,6 +66,11 @@ import {
   formatExactDate,
   formatObservationDate,
   formatRelativeDate,
+  observationScopeLabel,
+  observationScopeTypeLabel,
+  participantDepartmentSummary,
+  participantLabel,
+  participantSummary,
 } from "../utils";
 import { ObservationStatusBadge } from "./ObservationStatusBadge";
 import { ObservationReassignmentDialog } from "./ObservationReassignmentDialog";
@@ -97,8 +106,8 @@ const actionContent: Record<
     label: "Acknowledge report",
     title: "Acknowledge this observation?",
     description:
-      "This confirms that you have reviewed the report. The observation will be marked completed.",
-    success: "Observation acknowledged and marked completed.",
+      "This confirms that you have reviewed the report. Your acknowledgement is recorded separately from other participants.",
+    success: "Your acknowledgement was recorded.",
     icon: CheckCircle2,
     className: "bg-success hover:bg-success",
   },
@@ -106,7 +115,7 @@ const actionContent: Record<
     label: "Reopen for revision",
     title: "Reopen this observation?",
     description:
-      "The observation will return to draft. Staff and directors will no longer see its responses until it is submitted again.",
+      "The observation will return to draft. Participants and directors will no longer see its responses until it is submitted again.",
     success: "Observation reopened as a draft.",
     icon: RefreshCcw,
   },
@@ -122,6 +131,8 @@ export function ObservationDetailReport({
   const { observation, permissions } = detail;
   const primaryAction = getObservationPrimaryAction(permissions);
   const showResponses = shouldShowObservationResponses(permissions);
+  const participants = getObservationDetailParticipants(observation);
+  const acknowledgementProgress = getObservationAcknowledgementProgress(observation);
   const action = useMutation({
     mutationFn: async ({
       kind,
@@ -144,7 +155,13 @@ export function ObservationDetailReport({
         queryClient.invalidateQueries({ queryKey: observationKeys.summary() }),
         queryClient.invalidateQueries({ queryKey: ["notifications"] }),
       ]);
-      toast.success(actionContent[variables.kind].success);
+      toast.success(
+        variables.kind === "acknowledge"
+          ? acknowledgementProgress.total > 1
+            ? "Your acknowledgement was recorded. Other participants may still need to acknowledge."
+            : "Your acknowledgement was recorded."
+          : actionContent.reopen.success,
+      );
     },
     onError: (error) => toast.error(error.message),
   });
@@ -229,6 +246,7 @@ export function ObservationDetailReport({
             action={primaryAction}
             loading={action.isPending}
             progress={observation.progress}
+            participantCount={acknowledgementProgress.total}
             onConfirm={(reason) =>
               action.mutate({ kind: primaryAction, reason })
             }
@@ -263,8 +281,8 @@ export function ObservationDetailReport({
           <div className="grid min-w-full gap-3 sm:grid-cols-2 lg:min-w-[28rem]">
             <HeaderFact
               icon={UserRound}
-              label="Staff"
-              value={personName(observation.staff, "Unknown")}
+              label={participantLabel(participants.length)}
+              value={participantSummary(participants)}
             />
             <HeaderFact
               icon={UserRound}
@@ -295,7 +313,7 @@ export function ObservationDetailReport({
         </TabsList>
 
         <TabsContent value="summary" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-3">
             <MetricCard
               label="Required progress"
               value={
@@ -307,6 +325,16 @@ export function ObservationDetailReport({
                 observation.progress
                   ? `${observation.progress.percentage}% complete`
                   : "Draft response progress is hidden for your role"
+              }
+            />
+
+            <MetricCard
+              label="Acknowledgements"
+              value={`${acknowledgementProgress.acknowledged}/${acknowledgementProgress.total}`}
+              description={
+                acknowledgementProgress.pending === 0
+                  ? "All observed teachers have acknowledged"
+                  : `${acknowledgementProgress.pending} ${acknowledgementProgress.pending === 1 ? "participant" : "participants"} pending`
               }
             />
 
@@ -324,17 +352,36 @@ export function ObservationDetailReport({
             <CardContent className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               <Metadata label="Form" value={observation.rubric.name} />
               <Metadata
-                label="Department"
-                value={observation.staff?.profile.department?.name ?? "Not assigned"}
+                label="Departments"
+                value={participantDepartmentSummary(
+                  participants,
+                  observation.staff?.profile.department,
+                )}
               />
+              <Metadata
+                label="Scope"
+                value={observationScopeTypeLabel(observation.scope)}
+              />
+              {observation.scope?.type === "CLASS" && (
+                <Metadata label="Class" value={observationScopeLabel(observation.scope)} />
+              )}
+              {observation.scope?.type === "SUBJECT" && (
+                <Metadata label="Subject" value={observationScopeLabel(observation.scope)} />
+              )}
               <Metadata label="Created" value={formatExactDate(observation.createdAt)} />
               <Metadata
                 label="Submitted"
                 value={observation.submittedAt ? formatExactDate(observation.submittedAt) : "Not submitted"}
               />
               <Metadata
-                label="Acknowledged"
-                value={observation.acknowledgedAt ? formatExactDate(observation.acknowledgedAt) : "Not acknowledged"}
+                label="All acknowledged"
+                value={
+                  observation.acknowledgedAt
+                    ? formatExactDate(observation.acknowledgedAt)
+                    : acknowledgementProgress.pending > 0
+                      ? `${acknowledgementProgress.pending} pending`
+                      : "Not acknowledged"
+                }
               />
               <Metadata
                 label="Last reopened"
@@ -343,21 +390,29 @@ export function ObservationDetailReport({
             </CardContent>
           </Card>
 
-          {observation.acknowledgementResponse && (
-            <Card>
+          <ObservedTeachers
+            participants={participants}
+            legacyAcknowledgedAt={observation.acknowledgedAt}
+            legacyAcknowledgementMethod={observation.acknowledgementMethod}
+          />
+
+          {observation.acknowledgementMethod === "automatic" && (
+            <Card className="border-warning/40 bg-warning-soft/40">
               <CardHeader>
-                <CardTitle>Acknowledgement response</CardTitle>
+                <CardTitle>Automatic acknowledgement</CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="whitespace-pre-wrap text-sm leading-6">
-                  {observation.acknowledgementResponse}
+              <CardContent className="space-y-2 text-sm leading-6">
+                <p className="font-medium">
+                  One or more participants did not personally acknowledge this observation.
                 </p>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  By {personName(observation.staff, "Unknown staff")}
+                <p>
+                  {observation.acknowledgementNote ??
+                    "This observation was automatically acknowledged because the response deadline passed."}
                 </p>
               </CardContent>
             </Card>
           )}
+
 
           {observation.progress && (
             <Card>
@@ -433,11 +488,9 @@ function ObservationLifecycle({
                     : null
                   : observation.acknowledgedAt;
             const actor =
-              stage.status === "draft"
+              stage.status === "draft" || stage.status === "submitted"
                 ? observation.manager
-                : stage.status === "submitted"
-                  ? observation.staff
-                  : null;
+                : null;
             return (
               <li key={stage.status} className="relative">
                 <div
@@ -470,6 +523,86 @@ function ObservationLifecycle({
             );
           })}
         </ol>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ObservedTeachers({
+  participants,
+  legacyAcknowledgedAt,
+  legacyAcknowledgementMethod,
+}: {
+  participants: ObservationParticipantDetail[];
+  legacyAcknowledgedAt: string | null;
+  legacyAcknowledgementMethod: ObservationAcknowledgementMethod | null;
+}) {
+  if (participants.length === 0) {
+    return (
+      <Card>
+        <CardHeader><CardTitle>Observed teachers</CardTitle></CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          Participant details are unavailable for this observation.
+        </CardContent>
+      </Card>
+    );
+  }
+  const useLegacyStatus = participants.length === 1 && !participants[0].acknowledgedAt;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{participantLabel(participants.length)}</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3 sm:grid-cols-2">
+        {participants.map((participant) => {
+          const acknowledgedAt = useLegacyStatus
+            ? legacyAcknowledgedAt
+            : participant.acknowledgedAt;
+          const method = useLegacyStatus
+            ? legacyAcknowledgementMethod
+            : participant.acknowledgementMethod;
+          return (
+            <article key={participant.id} className="rounded-xl border border-border/60 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium" title={personName(participant, "Unknown participant")}>
+                    {personName(participant, "Unknown participant")}
+                  </p>
+                  <p className="mt-1 truncate text-xs text-muted-foreground" title={participant.email}>
+                    {participant.email}
+                  </p>
+                </div>
+                <Badge variant={acknowledgedAt ? "secondary" : "outline"}>
+                  {acknowledgedAt ? "Acknowledged" : "Pending"}
+                </Badge>
+              </div>
+              <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                <p>{participant.department?.name ?? "No department assigned"}</p>
+                {acknowledgedAt && (
+                  <p>
+                    {formatExactDate(acknowledgedAt)}
+                    {method ? ` · ${method === "automatic" ? "Automatic" : "Personal"}` : ""}
+                  </p>
+                )}
+              </div>
+              {participant.acknowledgementResponseVisible && participant.acknowledgementResponse && (
+                <div className="mt-4 rounded-lg bg-muted/40 p-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Acknowledgement response
+                  </p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
+                    {participant.acknowledgementResponse}
+                  </p>
+                </div>
+              )}
+              {participant.acknowledgementResponseVisible && participant.acknowledgementNote && (
+                <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                  {participant.acknowledgementNote}
+                </p>
+              )}
+            </article>
+          );
+        })}
       </CardContent>
     </Card>
   );
@@ -637,11 +770,13 @@ function ObservationActionDialog({
   action,
   loading,
   progress,
+  participantCount,
   onConfirm,
 }: {
   action: "acknowledge" | "reopen";
   loading: boolean;
   progress: ObservationDetailResponse["observation"]["progress"];
+  participantCount: number;
   onConfirm: (reason?: string) => void;
 }) {
   const [reason, setReason] = useState("");
@@ -660,14 +795,18 @@ function ObservationActionDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{content.title}</AlertDialogTitle>
-          <AlertDialogDescription>{content.description}</AlertDialogDescription>
+          <AlertDialogDescription>
+            {action === "acknowledge" && participantCount > 1
+              ? "This records only your acknowledgement. The observation is complete after every participant has acknowledged."
+              : content.description}
+          </AlertDialogDescription>
         </AlertDialogHeader>
         {action === "acknowledge" && (
           <div className="space-y-3">
             <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">
               <p>I confirm that I have reviewed this observation.</p>
               <p className="mt-2 text-muted-foreground">
-                Acknowledgement confirms review, not agreement, and cannot be undone by staff.
+                Acknowledgement confirms your review, not agreement, and cannot be undone by you.
               </p>
               {progress && (
                 <p className="mt-2 text-muted-foreground">
@@ -709,7 +848,7 @@ function ObservationActionDialog({
               rows={4}
             />
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Minimum 10 characters. Observer and staff will be notified.</span>
+              <span>Minimum 10 characters. The observer and participants will be notified.</span>
               <span>{trimmedReason.length}/500</span>
             </div>
           </div>
@@ -752,14 +891,23 @@ function EmptyState({ icon: Icon, title, description }: { icon: typeof History; 
   return <Card className="border-dashed"><CardContent className="flex flex-col items-center px-6 py-14 text-center"><Icon className="h-8 w-8 text-muted-foreground" /><h2 className="mt-4 font-semibold">{title}</h2><p className="mt-2 text-sm text-muted-foreground">{description}</p></CardContent></Card>;
 }
 
-function personName(person: { email: string; profile: { fullName: string | null } } | null, fallback: string): string {
-  return person?.profile.fullName?.trim() || person?.email || fallback;
+function personName(
+  person:
+    | { email: string; fullName: string | null }
+    | { email: string; profile: { fullName: string | null } }
+    | null,
+  fallback: string,
+): string {
+  if (!person) return fallback;
+  const fullName = "profile" in person ? person.profile.fullName : person.fullName;
+  return fullName?.trim() || person.email || fallback;
 }
 
 function activityTitle(eventType: string, status: ObservationStatus): string {
   if (eventType === "created") return "Observation created";
   if (eventType === "submitted") return "Observation submitted";
-  if (eventType === "acknowledged") return "Observation acknowledged";
+  if (eventType === "acknowledged") return "Observation personally acknowledged";
+  if (eventType === "automatic_acknowledged") return "Observation automatically acknowledged";
   if (eventType === "reopened") return "Observation reopened";
   return `Status changed to ${OBSERVATION_STATUS[status].label.toLowerCase()}`;
 }

@@ -7,6 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma/
 COPY prisma.config.ts ./
+COPY src/lib/database-url.ts ./src/lib/database-url.ts
 
 # Build-time placeholders. Real runtime values must be injected by deployment.
 ENV DATABASE_URL="postgresql://proofpoint:proofpoint@localhost:5432/proofpoint?schema=public"
@@ -32,13 +33,16 @@ WORKDIR /app
 
 RUN apk add --no-cache curl
 
-# Install dependencies for production runtime.
-# Prisma CLI is required at container startup for migrate deploy.
-COPY package*.json ./
-RUN npm ci
-
-# Copy built application from builder
+# Copy the standalone application and its traced runtime dependencies.
 COPY --from=builder /app/.next/standalone ./
+
+# Install only the migration tooling needed at container startup. The standalone
+# output already includes application dependencies such as pg.
+RUN npm install --prefix /opt/prisma-runtime --no-save --no-audit --no-fund \
+    prisma@7.4.0 dotenv@17.2.3 \
+    && ln -s /opt/prisma-runtime/node_modules/prisma /app/node_modules/prisma \
+    && ln -s /opt/prisma-runtime/node_modules/dotenv /app/node_modules/dotenv
+ENV PATH="/opt/prisma-runtime/node_modules/.bin:${PATH}"
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/public ./public
@@ -47,6 +51,7 @@ COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/docker ./docker
 COPY --from=builder /app/next.config.* ./
 COPY --from=builder /app/prisma.config.ts ./
+COPY --from=builder /app/src/lib/database-url.ts ./src/lib/database-url.ts
 RUN chmod +x /app/docker/start.sh
 
 # Set environment

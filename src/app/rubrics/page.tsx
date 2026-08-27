@@ -767,7 +767,6 @@ function RubricsContent({ mode = "KPI_APPRAISAL" }: { mode?: "KPI_APPRAISAL" | "
       const { data: newDomain, error: domainError } = await api.createDomain({
         template_id: selectedTemplate.id,
         name: domain.name,
-        sort_order: editData.domains?.length || 0,
       });
 
       if (domainError) {

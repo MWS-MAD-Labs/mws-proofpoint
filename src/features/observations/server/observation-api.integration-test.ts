@@ -18,7 +18,10 @@ import { PATCH as submitObservationRoute } from "@/app/api/observations/[id]/sub
 import { PATCH as acknowledgeObservationRoute } from "@/app/api/observations/[id]/acknowledge/route";
 import { PATCH as reopenObservationRoute } from "@/app/api/observations/[id]/reopen/route";
 import { GET as listCreationStaffRoute } from "@/app/api/observations/staff/route";
-import { GET as listAvailableFormsRoute } from "@/app/api/observations/available-forms/route";
+import {
+  GET as listAvailableFormsRoute,
+  POST as listAvailableFormsForParticipantsRoute,
+} from "@/app/api/observations/available-forms/route";
 import { setObservationTestActor } from "./auth";
 import { observationListQuerySchema } from "../schemas";
 import type {
@@ -29,6 +32,20 @@ import {
   queryObservationList,
   queryObservationSummary,
 } from "./queries";
+import {
+  processObservationAcknowledgementAutomation as processObservationAcknowledgementAutomationRuntime,
+  type ObservationAutomationOptions,
+} from "./processAcknowledgementAutomation";
+import {
+  DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS,
+  getObservationNotificationSettings,
+  updateObservationNotificationSettings,
+  type ObservationNotificationSettings,
+} from "./notificationSettings";
+import {
+  OBSERVATION_SCHEDULER_ADVISORY_LOCK,
+  runObservationAcknowledgementSchedulerOnce,
+} from "./observationAcknowledgementScheduler";
 
 interface Fixture {
   prefix: string;
@@ -42,6 +59,20 @@ interface Fixture {
   director: ObservationActor;
   admin: ObservationActor;
   observationIds: string[];
+}
+
+const AUTOMATION_SETTINGS: ObservationNotificationSettings = {
+  ...DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS,
+};
+
+function processObservationAcknowledgementAutomation(
+  now: Date,
+  options: ObservationAutomationOptions = {},
+) {
+  return processObservationAcknowledgementAutomationRuntime(now, {
+    settings: AUTOMATION_SETTINGS,
+    ...options,
+  });
 }
 
 const countsKeys: Array<keyof ObservationSummaryCounts> = [
@@ -230,6 +261,20 @@ async function insertFixture(): Promise<Fixture> {
         record.acknowledgedAt,
       ],
     );
+    await query(
+      `INSERT INTO observation_participants
+         (id, observation_id, staff_id, acknowledged_at, acknowledgement_method,
+          created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $6)`,
+      [
+        randomUUID(),
+        observationId,
+        record.staffId,
+        record.acknowledgedAt,
+        record.acknowledgedAt ? "personal" : null,
+        record.updatedAt,
+      ],
+    );
   }
 
   await query(
@@ -271,6 +316,54 @@ async function cleanupFixture(fixture: Fixture): Promise<void> {
   await query(`DELETE FROM departments WHERE id::text = ANY($1::text[])`, [
     [fixture.departmentAId, fixture.departmentBId],
   ]);
+}
+
+async function insertAutomationObservation(
+  fixture: Fixture,
+  input: {
+    submittedAt: Date;
+    automationStartedAt?: Date;
+    status?: "draft" | "submitted" | "acknowledged";
+    acknowledgedAt?: Date | null;
+  },
+): Promise<{ observationId: string; participantId: string }> {
+  const observationId = randomUUID();
+  const participantId = randomUUID();
+  fixture.observationIds.push(observationId);
+  await query(
+    `INSERT INTO observations
+       (id, "staffId", "managerId", template_id, status, type, title, description,
+        created_at, updated_at, submitted_at, acknowledged_at,
+        acknowledgement_automation_started_at)
+     VALUES ($1, $2, $3, $4, $5, 'MANAGER', $6, 'Automation integration fixture',
+             NOW(), NOW(), $7, $8, $9)`,
+    [
+      observationId,
+      fixture.staffA.id,
+      fixture.managerA.id,
+      fixture.rubricId,
+      input.status ?? "submitted",
+      `${fixture.prefix}-automation-${observationId}`,
+      input.submittedAt,
+      input.acknowledgedAt ?? null,
+      input.automationStartedAt ?? input.submittedAt,
+    ],
+  );
+  await query(
+    `INSERT INTO observation_participants
+       (id, observation_id, staff_id, acknowledged_at, acknowledgement_method,
+        acknowledgement_automation_started_at, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
+    [
+      participantId,
+      observationId,
+      fixture.staffA.id,
+      input.acknowledgedAt ?? null,
+      input.acknowledgedAt ? "personal" : null,
+      input.automationStartedAt ?? input.submittedAt,
+    ],
+  );
+  return { observationId, participantId };
 }
 
 function assertCountDelta(
@@ -472,6 +565,7 @@ interface WorkflowFixture {
   managerB: ObservationActor;
   staffA: ObservationActor;
   staffB: ObservationActor;
+  staffC: ObservationActor;
   admin: ObservationActor;
   userIds: string[];
   observationIds: string[];
@@ -495,8 +589,9 @@ async function insertWorkflowFixture(): Promise<WorkflowFixture> {
   const managerBId = randomUUID();
   const staffAId = randomUUID();
   const staffBId = randomUUID();
+  const staffCId = randomUUID();
   const adminId = randomUUID();
-  const userIds = [managerAId, managerBId, staffAId, staffBId, adminId];
+  const userIds = [managerAId, managerBId, staffAId, staffBId, staffCId, adminId];
 
   await query(
     `INSERT INTO departments (id, name, created_at, updated_at)
@@ -509,6 +604,7 @@ async function insertWorkflowFixture(): Promise<WorkflowFixture> {
     [managerBId, `${prefix}-manager-b@example.test`, "manager", departmentBId],
     [staffAId, `${prefix}-staff-a@example.test`, "staff", departmentAId],
     [staffBId, `${prefix}-staff-b@example.test`, "staff", departmentBId],
+    [staffCId, `${prefix}-staff-c@example.test`, "staff", departmentAId],
     [adminId, `${prefix}-admin@example.test`, "admin", departmentAId],
   ] as const;
   for (const [userId, email, role, departmentId] of users) {
@@ -635,6 +731,7 @@ async function insertWorkflowFixture(): Promise<WorkflowFixture> {
     managerB: { id: managerBId, roles: ["manager"] },
     staffA: { id: staffAId, roles: ["staff"] },
     staffB: { id: staffBId, roles: ["staff"] },
+    staffC: { id: staffCId, roles: ["staff"] },
     admin: { id: adminId, roles: ["admin"] },
     userIds,
     observationIds: [],
@@ -691,12 +788,13 @@ test("draft and pending observations can be deleted, but completed observations 
 
     await query(
       `INSERT INTO observations
-         (id, "staffId", "managerId", template_id, status, created_at, updated_at)
+         (id, "staffId", "managerId", template_id, status, created_at, updated_at,
+          acknowledged_at, acknowledgement_method)
        VALUES
-         ($1, $2, $3, $4, 'draft', NOW(), NOW()),
-         ($5, $2, $3, $4, 'draft', NOW(), NOW()),
-         ($6, $2, $3, $4, 'submitted', NOW(), NOW()),
-         ($7, $2, $3, $4, 'acknowledged', NOW(), NOW())`,
+         ($1, $2, $3, $4, 'draft', NOW(), NOW(), NULL, NULL),
+         ($5, $2, $3, $4, 'draft', NOW(), NOW(), NULL, NULL),
+         ($6, $2, $3, $4, 'submitted', NOW(), NOW(), NULL, NULL),
+         ($7, $2, $3, $4, 'acknowledged', NOW(), NOW(), NOW(), 'personal')`,
       [
         managerDraftId,
         fixture.staffA.id,
@@ -704,6 +802,27 @@ test("draft and pending observations can be deleted, but completed observations 
         fixture.rubricAId,
         adminDraftId,
         submittedId,
+        acknowledgedId,
+      ],
+    );
+    await query(
+      `INSERT INTO observation_participants
+         (id, observation_id, staff_id, acknowledged_at, acknowledgement_method,
+          created_at, updated_at)
+       VALUES
+         ($1, $2, $3, NULL, NULL, NOW(), NOW()),
+         ($4, $5, $3, NULL, NULL, NOW(), NOW()),
+         ($6, $7, $3, NULL, NULL, NOW(), NOW()),
+         ($8, $9, $3, NOW(), 'personal', NOW(), NOW())`,
+      [
+        randomUUID(),
+        managerDraftId,
+        fixture.staffA.id,
+        randomUUID(),
+        adminDraftId,
+        randomUUID(),
+        submittedId,
+        randomUUID(),
         acknowledgedId,
       ],
     );
@@ -758,6 +877,238 @@ test("draft and pending observations can be deleted, but completed observations 
   }
 });
 
+test("multi-teacher creation uses one record, protects drafts, and completes after every acknowledgement", async () => {
+  let fixture: WorkflowFixture | null = null;
+  try {
+    fixture = await insertWorkflowFixture();
+    const dueAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const title = `${fixture.prefix}-multi-teacher`;
+    const staffIds = [fixture.staffA.id, fixture.staffC.id];
+
+    setObservationTestActor(fixture.managerA);
+    const formsResponse = await listAvailableFormsForParticipantsRoute(
+      jsonRequest("http://localhost/api/observations/available-forms", "POST", {
+        staffIds,
+      }),
+    );
+    assert.equal(formsResponse.status, 200);
+    const forms = await responseBody<Array<{ id: string; workflowId: string }>>(
+      formsResponse,
+    );
+    assert.equal(forms.length, 1);
+    assert.equal(forms[0]?.id, fixture.rubricAId);
+    assert.equal(forms[0]?.workflowId, fixture.workflowAId);
+
+    const createdResponse = await createObservationRoute(
+      jsonRequest("http://localhost/api/observations", "POST", {
+        staffIds,
+        rubricId: fixture.rubricAId,
+        workflowId: fixture.workflowAId,
+        dueAt,
+        scopeType: "CLASS",
+        className: "Integration Class",
+        title,
+      }),
+    );
+    assert.equal(createdResponse.status, 201);
+    const created = await responseBody<{
+      observation: {
+        id: string;
+        participants: Array<{ id: string }>;
+        scopeType: string;
+        className: string | null;
+      };
+    }>(createdResponse);
+    fixture.observationIds.push(created.observation.id);
+    assert.deepEqual(
+      created.observation.participants.map((participant) => participant.id).sort(),
+      [...staffIds].sort(),
+    );
+    assert.equal(created.observation.scopeType, "CLASS");
+    assert.equal(created.observation.className, "Integration Class");
+
+    const participantRows = await query<{
+      id: string;
+      staffId: string;
+      acknowledgedAt: Date | null;
+    }>(
+      `SELECT id, staff_id AS "staffId", acknowledged_at AS "acknowledgedAt"
+       FROM observation_participants
+       WHERE observation_id = $1
+       ORDER BY staff_id`,
+      [created.observation.id],
+    );
+    assert.equal(participantRows.length, 2);
+    assert.ok(participantRows.every((participant) => participant.acknowledgedAt === null));
+
+    const managerListResponse = await listObservationsRoute(
+      new Request(
+        `http://localhost/api/observations?q=${encodeURIComponent(title)}&page=1&pageSize=10`,
+      ),
+    );
+    assert.equal(managerListResponse.status, 200);
+    const managerList = await responseBody<{
+      data: Array<{ id: string; participants: Array<{ id: string }> }>;
+      pagination: { total: number };
+    }>(managerListResponse);
+    assert.equal(managerList.pagination.total, 1);
+    assert.equal(managerList.data.length, 1);
+    assert.equal(managerList.data[0]?.id, created.observation.id);
+    assert.equal(managerList.data[0]?.participants.length, 2);
+
+    for (const participant of [fixture.staffA, fixture.staffC]) {
+      setObservationTestActor(participant);
+      const privateDraftResponse = await getObservationRoute(
+        new NextRequest(`http://localhost/api/observations/${created.observation.id}`),
+        { params: Promise.resolve({ id: created.observation.id }) },
+      );
+      assert.equal(privateDraftResponse.status, 403);
+
+      const privateDraftListResponse = await listObservationsRoute(
+        new Request(
+          `http://localhost/api/observations?q=${encodeURIComponent(title)}&page=1&pageSize=10`,
+        ),
+      );
+      const privateDraftList = await responseBody<{
+        data: Array<{ id: string }>;
+        pagination: { total: number };
+      }>(privateDraftListResponse);
+      assert.equal(privateDraftList.pagination.total, 0);
+      assert.deepEqual(privateDraftList.data, []);
+    }
+
+    setObservationTestActor(fixture.managerA);
+    const savedResponse = await saveAnswerRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}/answers/${fixture.requiredIndicatorId}`,
+        "PUT",
+        { type: "SCALE", score: 4, note: "Shared observation evidence" },
+      ) as Parameters<typeof saveAnswerRoute>[0],
+      {
+        params: Promise.resolve({
+          id: created.observation.id,
+          indicatorId: fixture.requiredIndicatorId,
+        }),
+      },
+    );
+    assert.equal(savedResponse.status, 200);
+
+    const submittedResponse = await submitObservationRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}/submit`,
+        "PATCH",
+      ) as Parameters<typeof submitObservationRoute>[0],
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(submittedResponse.status, 200);
+    assert.equal((await responseBody<{ status: string }>(submittedResponse)).status, "submitted");
+
+    setObservationTestActor(fixture.staffA);
+    const firstAcknowledgementResponse = await acknowledgeObservationRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}/acknowledge`,
+        "PATCH",
+        { response: "First participant acknowledgement response." },
+      ) as Parameters<typeof acknowledgeObservationRoute>[0],
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(firstAcknowledgementResponse.status, 200);
+    const firstAcknowledgement = await responseBody<{
+      status: string;
+      remainingParticipants: number;
+    }>(firstAcknowledgementResponse);
+    assert.equal(firstAcknowledgement.status, "submitted");
+    assert.equal(firstAcknowledgement.remainingParticipants, 1);
+    assert.equal(
+      await queryOne<{ status: string }>(
+        `SELECT status FROM observations WHERE id = $1`,
+        [created.observation.id],
+      ).then((row) => row?.status),
+      "submitted",
+    );
+
+    setObservationTestActor(fixture.staffC);
+    const pendingParticipantResponse = await getObservationRoute(
+      new NextRequest(`http://localhost/api/observations/${created.observation.id}`),
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(pendingParticipantResponse.status, 200);
+    const pendingParticipant = await responseBody<{
+      observation: {
+        status: string;
+        participants: Array<{
+          id: string;
+          acknowledgementResponse: string | null;
+          acknowledgementResponseVisible: boolean;
+        }>;
+        acknowledgementProgress: { acknowledged: number; total: number; pending: number };
+      };
+    }>(pendingParticipantResponse);
+    assert.equal(pendingParticipant.observation.status, "submitted");
+    assert.deepEqual(pendingParticipant.observation.acknowledgementProgress, {
+      acknowledged: 1,
+      total: 2,
+      pending: 1,
+      percentage: 50,
+    });
+    const firstParticipant = pendingParticipant.observation.participants.find(
+      (participant) => participant.id === fixture!.staffA.id,
+    );
+    assert.equal(firstParticipant?.acknowledgementResponseVisible, false);
+    assert.equal(firstParticipant?.acknowledgementResponse, null);
+
+    const finalAcknowledgementResponse = await acknowledgeObservationRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}/acknowledge`,
+        "PATCH",
+        { response: "Second participant acknowledgement response." },
+      ) as Parameters<typeof acknowledgeObservationRoute>[0],
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(finalAcknowledgementResponse.status, 200);
+    const finalAcknowledgement = await responseBody<{
+      status: string;
+      remainingParticipants: number;
+    }>(finalAcknowledgementResponse);
+    assert.equal(finalAcknowledgement.status, "acknowledged");
+    assert.equal(finalAcknowledgement.remainingParticipants, 0);
+
+    setObservationTestActor(fixture.managerA);
+    const completedResponse = await getObservationRoute(
+      new NextRequest(`http://localhost/api/observations/${created.observation.id}`),
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(completedResponse.status, 200);
+    const completed = await responseBody<{
+      observation: {
+        status: string;
+        participants: Array<{
+          acknowledgementResponse: string | null;
+          acknowledgementResponseVisible: boolean;
+        }>;
+        acknowledgementProgress: { acknowledged: number; total: number; pending: number };
+      };
+    }>(completedResponse);
+    assert.equal(completed.observation.status, "acknowledged");
+    assert.deepEqual(completed.observation.acknowledgementProgress, {
+      acknowledged: 2,
+      total: 2,
+      pending: 0,
+      percentage: 100,
+    });
+    assert.ok(
+      completed.observation.participants.every(
+        (participant) =>
+          participant.acknowledgementResponseVisible &&
+          participant.acknowledgementResponse !== null,
+      ),
+    );
+  } finally {
+    setObservationTestActor(null);
+    if (fixture) await cleanupWorkflowFixture(fixture);
+  }
+});
+
 test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, and canonical response fields", async () => {
   let fixture: WorkflowFixture | null = null;
   try {
@@ -774,10 +1125,20 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
     }>(baselineStaffSummaryResponse);
 
     setObservationTestActor(fixture.managerA);
+    for (const invalidBody of [null, []]) {
+      const invalidCreateResponse = await createObservationRoute(
+        jsonRequest("http://localhost/api/observations", "POST", invalidBody),
+      );
+      assert.equal(invalidCreateResponse.status, 400);
+    }
+
     const managerStaffResponse = await listCreationStaffRoute();
     assert.equal(managerStaffResponse.status, 200);
     const managerStaff = await responseBody<Array<{ id: string }>>(managerStaffResponse);
-    assert.deepEqual(managerStaff.map((person) => person.id), [fixture.staffA.id]);
+    assert.deepEqual(managerStaff.map((person) => person.id).sort(), [
+      fixture.staffA.id,
+      fixture.staffC.id,
+    ].sort());
 
     const forbiddenForms = await listAvailableFormsRoute(
       jsonRequest(
@@ -819,6 +1180,29 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
       createdResponse,
     );
     fixture.observationIds.push(created.observation.id);
+
+    for (const invalidBody of [null, [], { managerId: null }, { managerId: 123 }]) {
+      const invalidUpdateResponse = await updateObservationRoute(
+        jsonRequest(
+          `http://localhost/api/observations/${created.observation.id}`,
+          "PATCH",
+          invalidBody,
+        ) as Parameters<typeof updateObservationRoute>[0],
+        { params: Promise.resolve({ id: created.observation.id }) },
+      );
+      assert.equal(invalidUpdateResponse.status, 400);
+    }
+
+    const unsupportedUpdateResponse = await updateObservationRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}`,
+        "PATCH",
+        { unsupported: true },
+      ) as Parameters<typeof updateObservationRoute>[0],
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(unsupportedUpdateResponse.status, 400);
+
     assert.equal(
       created.observation.manager.id,
       fixture.managerA.id,
@@ -1033,11 +1417,21 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
     assert.equal((await responseBody<{ status: string }>(acknowledgedResponse)).status, "acknowledged");
 
     setObservationTestActor(fixture.admin);
-    const reassignedResponse = await updateObservationRoute(
+    const outOfScopeReassignmentResponse = await updateObservationRoute(
       jsonRequest(
         `http://localhost/api/observations/${created.observation.id}`,
         "PATCH",
         { managerId: fixture.managerB.id },
+      ) as Parameters<typeof updateObservationRoute>[0],
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(outOfScopeReassignmentResponse.status, 403);
+
+    const reassignedResponse = await updateObservationRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}`,
+        "PATCH",
+        { managerId: fixture.admin.id },
       ) as Parameters<typeof updateObservationRoute>[0],
       { params: Promise.resolve({ id: created.observation.id }) },
     );
@@ -1046,7 +1440,7 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
       `SELECT "managerId" FROM observations WHERE id = $1`,
       [created.observation.id],
     );
-    assert.equal(reassigned?.managerId, fixture.managerB.id);
+    assert.equal(reassigned?.managerId, fixture.admin.id);
 
     const reopenedResponse = await reopenObservationRoute(
       jsonRequest(
@@ -1140,6 +1534,599 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
   } finally {
     setObservationTestActor(null);
     if (fixture) await cleanupWorkflowFixture(fixture);
+  }
+});
+
+test("notification settings update records actor and before/after audit snapshots", async () => {
+  let fixture: Fixture | null = null;
+  let before: ObservationNotificationSettings | null = null;
+  try {
+    fixture = await insertFixture();
+    before = await getObservationNotificationSettings();
+    const input = {
+      notificationsEnabled: before.notificationsEnabled,
+      submissionEmailsEnabled: !before.submissionEmailsEnabled,
+      reminderEmailsEnabled: before.reminderEmailsEnabled,
+      firstReminderDays: before.firstReminderDays,
+      reminderIntervalDays: before.reminderIntervalDays,
+      automaticAcknowledgementEnabled: before.automaticAcknowledgementEnabled,
+      automaticAcknowledgementDays: before.automaticAcknowledgementDays,
+      personalAcknowledgementEmailsEnabled: before.personalAcknowledgementEmailsEnabled,
+      automaticAcknowledgementEmailsEnabled: before.automaticAcknowledgementEmailsEnabled,
+      reopenEmailsEnabled: before.reopenEmailsEnabled,
+      reassignmentEmailsEnabled: before.reassignmentEmailsEnabled,
+      schedulerEnabled: before.schedulerEnabled,
+      schedulerIntervalMinutes: before.schedulerIntervalMinutes,
+    };
+
+    const updated = await updateObservationNotificationSettings(input, fixture.admin.id);
+    assert.equal(updated.updatedBy?.id, fixture.admin.id);
+    assert.equal(updated.submissionEmailsEnabled, input.submissionEmailsEnabled);
+
+    const audit = await queryOne<{
+      actorId: string;
+      beforeSettings: Record<string, unknown>;
+      afterSettings: Record<string, unknown>;
+    }>(
+      `SELECT actor_id::text AS "actorId",
+              before_settings AS "beforeSettings",
+              after_settings AS "afterSettings"
+         FROM observation_notification_setting_updates
+        WHERE actor_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [fixture.admin.id],
+    );
+    assert.equal(audit?.actorId, fixture.admin.id);
+    assert.equal(audit?.beforeSettings.submissionEmailsEnabled, before.submissionEmailsEnabled);
+    assert.equal(audit?.afterSettings.submissionEmailsEnabled, input.submissionEmailsEnabled);
+    assert.equal(
+      await queryOne<{ updatedById: string }>(
+        `SELECT updated_by_id::text AS "updatedById"
+           FROM observation_notification_settings
+          WHERE id = 1`,
+      ).then((row) => row?.updatedById),
+      fixture.admin.id,
+    );
+  } finally {
+    if (fixture && before) {
+      await updateObservationNotificationSettings(
+        {
+          notificationsEnabled: before.notificationsEnabled,
+          submissionEmailsEnabled: before.submissionEmailsEnabled,
+          reminderEmailsEnabled: before.reminderEmailsEnabled,
+          firstReminderDays: before.firstReminderDays,
+          reminderIntervalDays: before.reminderIntervalDays,
+          automaticAcknowledgementEnabled: before.automaticAcknowledgementEnabled,
+          automaticAcknowledgementDays: before.automaticAcknowledgementDays,
+          personalAcknowledgementEmailsEnabled: before.personalAcknowledgementEmailsEnabled,
+          automaticAcknowledgementEmailsEnabled: before.automaticAcknowledgementEmailsEnabled,
+          reopenEmailsEnabled: before.reopenEmailsEnabled,
+          reassignmentEmailsEnabled: before.reassignmentEmailsEnabled,
+          schedulerEnabled: before.schedulerEnabled,
+          schedulerIntervalMinutes: before.schedulerIntervalMinutes,
+        },
+        fixture.admin.id,
+      );
+    }
+    if (fixture) {
+      await query(`DELETE FROM observation_notification_setting_updates WHERE actor_id = $1`, [
+        fixture.admin.id,
+      ]);
+      await query(
+        `UPDATE observation_notification_settings
+            SET updated_by_id = NULL
+          WHERE updated_by_id = $1`,
+        [fixture.admin.id],
+      );
+      await cleanupFixture(fixture);
+    }
+  }
+});
+
+test("observation scheduler skips processing when global scheduling is disabled", async () => {
+  let processorCalled = false;
+
+  for (const settings of [
+    { ...AUTOMATION_SETTINGS, notificationsEnabled: false },
+    { ...AUTOMATION_SETTINGS, schedulerEnabled: false },
+  ]) {
+    const result = await runObservationAcknowledgementSchedulerOnce({
+      readSettings: async () => settings,
+      processAutomation: async () => {
+        processorCalled = true;
+        throw new Error("processor should not run while scheduling is disabled");
+      },
+    });
+    assert.equal(result, "skipped");
+  }
+
+  assert.equal(processorCalled, false);
+});
+
+test("observation scheduler skips processing when another replica holds the advisory lock", async () => {
+  const lockClient = await pool.connect();
+  let processorCalled = false;
+  try {
+    const lock = await lockClient.query<{ acquired: boolean }>(
+      `SELECT pg_try_advisory_lock($1, $2) AS acquired`,
+      [
+        OBSERVATION_SCHEDULER_ADVISORY_LOCK.namespace,
+        OBSERVATION_SCHEDULER_ADVISORY_LOCK.key,
+      ],
+    );
+    assert.equal(lock.rows[0]?.acquired, true);
+
+    const result = await runObservationAcknowledgementSchedulerOnce({
+      readSettings: async () => AUTOMATION_SETTINGS,
+      processAutomation: async () => {
+        processorCalled = true;
+        return {
+          checked: 0,
+          remindersSent: 0,
+          remindersSkipped: 0,
+          automaticallyAcknowledged: 0,
+          automaticAcknowledgementsSkipped: 0,
+          errors: 0,
+        };
+      },
+    });
+    assert.equal(result, "skipped");
+    assert.equal(processorCalled, false);
+  } finally {
+    await lockClient.query(`SELECT pg_advisory_unlock($1, $2)`, [
+      OBSERVATION_SCHEDULER_ADVISORY_LOCK.namespace,
+      OBSERVATION_SCHEDULER_ADVISORY_LOCK.key,
+    ]);
+    lockClient.release();
+  }
+});
+
+test("scheduler status records cycle metadata, counts, and the last error", async () => {
+  await query(
+    `UPDATE observation_acknowledgement_scheduler_status
+        SET last_attempted_at = NULL,
+            last_successful_at = NULL,
+            settings_revision = NULL,
+            next_expected_at = NULL,
+            advisory_lock_skips = 0,
+            checked = 0,
+            reminded = 0,
+            auto_acknowledged = 0,
+            skipped = 0,
+            failed = 0,
+            last_error = NULL,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = 1`,
+  );
+
+  const completed = await runObservationAcknowledgementSchedulerOnce({
+    readSettings: async () => AUTOMATION_SETTINGS,
+    processAutomation: async () => ({
+      checked: 7,
+      remindersSent: 2,
+      remindersSkipped: 1,
+      automaticallyAcknowledged: 1,
+      automaticAcknowledgementsSkipped: 2,
+      errors: 0,
+    }),
+  });
+  assert.equal(completed, "completed");
+
+  const successfulStatus = await queryOne<{
+    lastAttemptedAt: Date | null;
+    lastSuccessfulAt: Date | null;
+    settingsRevision: Date | null;
+    nextExpectedAt: Date | null;
+    checked: number;
+    reminded: number;
+    autoAcknowledged: number;
+    skipped: number;
+    failed: number;
+    lastError: string | null;
+  }>(
+    `SELECT last_attempted_at AS "lastAttemptedAt",
+            last_successful_at AS "lastSuccessfulAt",
+            settings_revision AS "settingsRevision",
+            next_expected_at AS "nextExpectedAt",
+            checked,
+            reminded,
+            auto_acknowledged AS "autoAcknowledged",
+            skipped,
+            failed,
+            last_error AS "lastError"
+       FROM observation_acknowledgement_scheduler_status
+      WHERE id = 1`,
+  );
+  assert.ok(successfulStatus?.lastAttemptedAt);
+  assert.ok(successfulStatus?.lastSuccessfulAt);
+  assert.ok(successfulStatus?.settingsRevision);
+  assert.ok(successfulStatus?.nextExpectedAt);
+  assert.equal(successfulStatus?.checked, 7);
+  assert.equal(successfulStatus?.reminded, 2);
+  assert.equal(successfulStatus?.autoAcknowledged, 1);
+  assert.equal(successfulStatus?.skipped, 3);
+  assert.equal(successfulStatus?.failed, 0);
+  assert.equal(successfulStatus?.lastError, null);
+
+  const failed = await runObservationAcknowledgementSchedulerOnce({
+    readSettings: async () => AUTOMATION_SETTINGS,
+    processAutomation: async () => {
+      throw new Error("scheduler status test failure");
+    },
+  });
+  assert.equal(failed, "failed");
+  const failedStatus = await queryOne<{
+    lastSuccessfulAt: Date | null;
+    checked: number;
+    skipped: number;
+    failed: number;
+    lastError: string | null;
+  }>(
+    `SELECT last_successful_at AS "lastSuccessfulAt",
+            checked,
+            skipped,
+            failed,
+            last_error AS "lastError"
+       FROM observation_acknowledgement_scheduler_status
+      WHERE id = 1`,
+  );
+  assert.equal(
+    failedStatus?.lastSuccessfulAt?.toISOString(),
+    successfulStatus?.lastSuccessfulAt?.toISOString(),
+  );
+  assert.equal(failedStatus?.checked, 0);
+  assert.equal(failedStatus?.skipped, 0);
+  assert.equal(failedStatus?.failed, 1);
+  assert.match(failedStatus?.lastError ?? "", /scheduler status test failure/);
+
+  const secondFailure = await runObservationAcknowledgementSchedulerOnce({
+    readSettings: async () => AUTOMATION_SETTINGS,
+    processAutomation: async () => {
+      throw new Error("second scheduler status test failure");
+    },
+  });
+  assert.equal(secondFailure, "failed");
+  assert.equal(
+    await queryOne<{ failed: number }>(
+      `SELECT failed FROM observation_acknowledgement_scheduler_status WHERE id = 1`,
+    ).then((row) => row?.failed),
+    1,
+  );
+
+  for (const settings of [
+    { ...AUTOMATION_SETTINGS, notificationsEnabled: false },
+    { ...AUTOMATION_SETTINGS, schedulerEnabled: false },
+  ]) {
+    await runObservationAcknowledgementSchedulerOnce({ readSettings: async () => settings });
+  }
+  const skippedStatus = await queryOne<{
+    checked: number;
+    skipped: number;
+    failed: number;
+    lastError: string | null;
+  }>(
+    `SELECT checked, skipped, failed, last_error AS "lastError"
+       FROM observation_acknowledgement_scheduler_status
+      WHERE id = 1`,
+  );
+  assert.equal(skippedStatus?.checked, 0);
+  assert.equal(skippedStatus?.skipped, 1);
+  assert.equal(skippedStatus?.failed, 0);
+  assert.equal(skippedStatus?.lastError, null);
+});
+
+test("acknowledgement automation is idempotent, retryable, and guarded by submission state", async () => {
+  let fixture: Fixture | null = null;
+  try {
+    fixture = await insertFixture();
+    const now = new Date("2026-08-10T12:00:00.000Z");
+    const reminderStartedAt = new Date("2026-08-06T12:00:00.000Z");
+
+    const { observationId: reminderId, participantId: reminderParticipantId } =
+      await insertAutomationObservation(fixture, {
+        submittedAt: reminderStartedAt,
+      });
+    let reminderDeliveries = 0;
+    const sendReminder = async () => {
+      reminderDeliveries += 1;
+      return { success: true };
+    };
+    const firstRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [reminderId],
+      sendReminder,
+    });
+    const duplicateRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [reminderId],
+      sendReminder,
+    });
+    assert.equal(firstRun.remindersSent, 1);
+    assert.equal(duplicateRun.remindersSkipped, 1);
+    assert.equal(reminderDeliveries, 1);
+    assert.equal(
+      await queryOne<{ count: number }>(
+        `SELECT COUNT(*)::int AS count
+         FROM observation_acknowledgement_reminders
+         WHERE participant_id = $1 AND status = 'sent'`,
+        [reminderParticipantId],
+      ).then((row) => row?.count),
+      1,
+    );
+
+    const { observationId: retryId, participantId: retryParticipantId } =
+      await insertAutomationObservation(fixture, {
+        submittedAt: reminderStartedAt,
+      });
+    let retryAttempts = 0;
+    const retryNotifier = async () => {
+      retryAttempts += 1;
+      return retryAttempts === 1
+        ? { success: false, error: "temporary SMTP failure" }
+        : { success: true };
+    };
+    const failedRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [retryId],
+      sendReminder: retryNotifier,
+    });
+    const retryRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [retryId],
+      sendReminder: retryNotifier,
+    });
+    assert.equal(failedRun.errors, 1);
+    assert.equal(retryRun.remindersSent, 1);
+    assert.equal(retryAttempts, 2);
+    assert.equal(
+      await queryOne<{ status: string; error: string | null }>(
+        `SELECT status, error
+         FROM observation_acknowledgement_reminders
+         WHERE participant_id = $1`,
+        [retryParticipantId],
+      ).then((row) => row?.status),
+      "sent",
+    );
+
+    const {
+      observationId: resubmittedId,
+      participantId: resubmittedParticipantId,
+    } = await insertAutomationObservation(fixture, {
+      submittedAt: reminderStartedAt,
+    });
+    let staleDeliveryAttempted = false;
+    const resubmittedRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [resubmittedId],
+      afterReminderClaim: async (observationId) => {
+        await query(
+          `UPDATE observations
+           SET submitted_at = $2, acknowledgement_automation_started_at = $2
+           WHERE id = $1`,
+          [observationId, now],
+        );
+        await query(
+          `UPDATE observation_participants
+           SET acknowledgement_automation_started_at = $2, updated_at = NOW()
+           WHERE observation_id = $1`,
+          [observationId, now],
+        );
+      },
+      sendReminder: async () => {
+        staleDeliveryAttempted = true;
+        return { success: true };
+      },
+    });
+    assert.equal(resubmittedRun.remindersSkipped, 1);
+    assert.equal(staleDeliveryAttempted, false);
+    assert.equal(
+      await queryOne<{ status: string }>(
+        `SELECT status
+         FROM observation_acknowledgement_reminders
+         WHERE participant_id = $1`,
+        [resubmittedParticipantId],
+      ).then((row) => row?.status),
+      "skipped",
+    );
+
+    const { observationId: acknowledgedId } = await insertAutomationObservation(fixture, {
+      submittedAt: reminderStartedAt,
+    });
+    let postAcknowledgementDelivery = false;
+    const acknowledgedRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [acknowledgedId],
+      afterReminderClaim: async (observationId) => {
+        await query(
+          `UPDATE observations
+           SET status = 'acknowledged', acknowledged_at = $2,
+               acknowledgement_method = 'personal'
+           WHERE id = $1`,
+          [observationId, now],
+        );
+        await query(
+          `UPDATE observation_participants
+           SET acknowledged_at = $2, acknowledgement_method = 'personal', updated_at = NOW()
+           WHERE observation_id = $1`,
+          [observationId, now],
+        );
+      },
+      sendReminder: async () => {
+        postAcknowledgementDelivery = true;
+        return { success: true };
+      },
+    });
+    assert.equal(acknowledgedRun.remindersSkipped, 1);
+    assert.equal(postAcknowledgementDelivery, false);
+
+    const {
+      observationId: remindersDisabledId,
+      participantId: remindersDisabledParticipantId,
+    } = await insertAutomationObservation(fixture, {
+      submittedAt: reminderStartedAt,
+    });
+    const remindersDisabledRun =
+      await processObservationAcknowledgementAutomationRuntime(now, {
+        settings: { ...AUTOMATION_SETTINGS, reminderEmailsEnabled: false },
+        observationIds: [remindersDisabledId],
+        sendReminder: async () => {
+          throw new Error("disabled reminders must not be delivered");
+        },
+      });
+    assert.equal(remindersDisabledRun.checked, 1);
+    assert.equal(remindersDisabledRun.remindersSent, 0);
+    assert.equal(
+      await queryOne<{ count: number }>(
+        `SELECT COUNT(*)::int AS count
+         FROM observation_acknowledgement_reminders
+         WHERE participant_id = $1`,
+        [remindersDisabledParticipantId],
+      ).then((row) => row?.count),
+      0,
+    );
+  } finally {
+    if (fixture) await cleanupFixture(fixture);
+  }
+});
+
+test("acknowledgement automation auto-acknowledges once and ignores legacy per-user observation preferences", async () => {
+  let fixture: Fixture | null = null;
+  try {
+    fixture = await insertFixture();
+    const now = new Date("2026-09-15T12:00:00.000Z");
+    const overdueSubmission = new Date("2026-08-15T12:00:00.000Z");
+    const { observationId: automaticId } = await insertAutomationObservation(fixture, {
+      submittedAt: overdueSubmission,
+    });
+    let automaticNotifications = 0;
+    const automaticNotifier = async () => {
+      automaticNotifications += 1;
+      return { success: true };
+    };
+    const firstRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [automaticId],
+      sendAutomaticAcknowledgement: automaticNotifier,
+    });
+    const secondRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [automaticId],
+      sendAutomaticAcknowledgement: automaticNotifier,
+    });
+    assert.equal(firstRun.automaticallyAcknowledged, 1);
+    assert.equal(secondRun.checked, 0);
+    assert.equal(automaticNotifications, 1);
+    const automaticObservation = await queryOne<{
+      status: string;
+      method: string | null;
+      acknowledgedAt: Date | null;
+    }>(
+      `SELECT status, acknowledgement_method AS method,
+              acknowledged_at AS "acknowledgedAt"
+       FROM observations WHERE id = $1`,
+      [automaticId],
+    );
+    assert.equal(automaticObservation?.status, "acknowledged");
+    assert.equal(automaticObservation?.method, "automatic");
+    assert.ok(automaticObservation?.acknowledgedAt);
+    assert.equal(
+      await queryOne<{ count: number }>(
+        `SELECT COUNT(*)::int AS count FROM observation_updates
+         WHERE observation_id = $1 AND event_type = 'participant_auto_acknowledged'`,
+        [automaticId],
+      ).then((row) => row?.count),
+      1,
+    );
+
+    const { observationId: ineligibleAutomaticId } =
+      await insertAutomationObservation(fixture, {
+        submittedAt: overdueSubmission,
+      });
+    let ineligibleNotificationAttempted = false;
+    const ineligibleRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [ineligibleAutomaticId],
+      beforeAutomaticAcknowledgement: async (observationId) => {
+        await query(
+          `UPDATE observations
+           SET status = 'draft', acknowledgement_automation_started_at = NULL
+           WHERE id = $1`,
+          [observationId],
+        );
+        await query(
+          `UPDATE observation_participants
+           SET acknowledgement_automation_started_at = NULL, updated_at = NOW()
+           WHERE observation_id = $1`,
+          [observationId],
+        );
+      },
+      sendAutomaticAcknowledgement: async () => {
+        ineligibleNotificationAttempted = true;
+        return { success: true };
+      },
+    });
+    assert.equal(ineligibleRun.automaticAcknowledgementsSkipped, 1);
+    assert.equal(ineligibleNotificationAttempted, false);
+    assert.equal(
+      await queryOne<{ status: string }>(
+        `SELECT status FROM observations WHERE id = $1`,
+        [ineligibleAutomaticId],
+      ).then((row) => row?.status),
+      "draft",
+    );
+
+    const { observationId: automaticDisabledId } =
+      await insertAutomationObservation(fixture, {
+        submittedAt: overdueSubmission,
+      });
+    const automaticDisabledRun =
+      await processObservationAcknowledgementAutomationRuntime(now, {
+        settings: {
+          ...AUTOMATION_SETTINGS,
+          reminderEmailsEnabled: false,
+          automaticAcknowledgementEnabled: false,
+        },
+        observationIds: [automaticDisabledId],
+        sendAutomaticAcknowledgement: async () => {
+          throw new Error("disabled automatic acknowledgement must not notify");
+        },
+      });
+    assert.equal(automaticDisabledRun.checked, 1);
+    assert.equal(automaticDisabledRun.automaticallyAcknowledged, 0);
+    const automaticDisabledObservation = await queryOne<{
+      status: string;
+      acknowledgedAt: Date | null;
+    }>(
+      `SELECT status, acknowledged_at AS "acknowledgedAt"
+       FROM observations WHERE id = $1`,
+      [automaticDisabledId],
+    );
+    assert.equal(automaticDisabledObservation?.status, "submitted");
+    assert.equal(automaticDisabledObservation?.acknowledgedAt, null);
+
+    const { observationId: preferenceId, participantId: preferenceParticipantId } =
+      await insertAutomationObservation(fixture, {
+        submittedAt: new Date("2026-09-11T12:00:00.000Z"),
+      });
+    await query(
+      `INSERT INTO notification_preferences (user_id, email_enabled, observation_updates)
+       VALUES ($1, false, false)
+       ON CONFLICT (user_id) DO UPDATE
+         SET email_enabled = false, observation_updates = false`,
+      [fixture.staffA.id],
+    );
+    let preferenceDeliveries = 0;
+    const preferenceRun = await processObservationAcknowledgementAutomation(now, {
+      observationIds: [preferenceId],
+      sendReminder: async () => {
+        preferenceDeliveries += 1;
+        return { success: true };
+      },
+    });
+    assert.equal(preferenceRun.remindersSent, 1);
+    assert.equal(preferenceDeliveries, 1);
+    assert.equal(
+      await queryOne<{ status: string }>(
+        `SELECT status FROM observation_acknowledgement_reminders
+         WHERE participant_id = $1`,
+        [preferenceParticipantId],
+      ).then((row) => row?.status),
+      "sent",
+    );
+  } finally {
+    if (fixture) await cleanupFixture(fixture);
   }
 });
 

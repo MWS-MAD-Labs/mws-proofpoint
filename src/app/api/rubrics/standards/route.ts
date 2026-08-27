@@ -29,13 +29,21 @@ export async function POST(request: Request) {
     }
     const next = await queryOne<{ next_order: string; next_code: string }>(
       `SELECT
-                COALESCE(MAX(sort_order) FILTER (WHERE domain_id = $1), 0) + 1 AS next_order,
-                COUNT(*) + 1 AS next_code
-             FROM kpi_standards
-             WHERE template_id = $2`,
+          COALESCE(MAX(sort_order) FILTER (WHERE domain_id = $1), 0) + 1 AS next_order,
+          COALESCE(
+            MAX(
+              CASE
+                WHEN code ~ '^S[0-9]+$' THEN substring(code FROM 2)::integer
+                ELSE 0
+              END
+            ),
+            0
+          ) + 1 AS next_code
+       FROM kpi_standards
+       WHERE template_id = $2`,
       [domain_id, domain.template_id],
     );
-    const order = sort_order || Number(next?.next_order ?? 1);
+    const order = sort_order ?? Number(next?.next_order ?? 1);
     const newStandard = await queryOne(
       `INSERT INTO kpi_standards (domain_id, template_id, name, sort_order, code)
              VALUES ($1, $2, $3, $4, $5)

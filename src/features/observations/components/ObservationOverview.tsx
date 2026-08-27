@@ -10,7 +10,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchObservationSummary } from "../api/queries";
 import { observationKeys } from "../api/queryKeys";
-import { observationHref, observationTitle, personName } from "../utils";
+import {
+  observationHref,
+  observationParticipants,
+  observationTitle,
+  participantSummary,
+} from "../utils";
 import { ObservationCard } from "./ObservationCard";
 import { ObservationError } from "./ObservationError";
 
@@ -28,10 +33,10 @@ export function ObservationOverview() {
   const subtitle = {
     admin: "Monitor observation activity, workflow health, and organisation-wide follow-up.",
     director: "Track organisation-wide progress and records that require follow-up.",
-    manager: "Continue drafts, monitor staff acknowledgement, and review recent work.",
-    staff: "Review observations shared with you and acknowledge pending results.",
+    manager: "Continue drafts, monitor participant acknowledgements, and review recent work.",
+    staff: "Review observations shared with you and acknowledge pending reports.",
   }[role];
-  const pendingStaffItem = summary.data?.needsAttention.find((item) => item.nextAction === "acknowledge");
+  const pendingParticipantItem = summary.data?.needsAttention.find((item) => item.nextAction === "acknowledge");
 
   return (
     <div className="min-h-screen bg-background grid-pattern">
@@ -48,8 +53,8 @@ export function ObservationOverview() {
             {(auth.isAdmin || auth.isManager) && (
               <Button asChild><Link href="/observations/new"><Plus className="mr-2 h-4 w-4" />New observation</Link></Button>
             )}
-            {role === "staff" && pendingStaffItem && (
-              <Button asChild><Link href={observationHref(pendingStaffItem)}><ClipboardCheck className="mr-2 h-4 w-4" />Review pending observation</Link></Button>
+            {role === "staff" && pendingParticipantItem && (
+              <Button asChild><Link href={observationHref(pendingParticipantItem)}><ClipboardCheck className="mr-2 h-4 w-4" />Review pending observation</Link></Button>
             )}
           </div>
         </section>
@@ -81,7 +86,7 @@ export function ObservationOverview() {
                 <CardContent className="min-w-0 space-y-2">
                   {summary.data.recent.length > 0 ? summary.data.recent.map((item) => (
                     <Link key={item.id} href={observationHref(item)} className="flex min-w-0 items-center justify-between gap-4 overflow-hidden rounded-xl border border-border/50 p-4 transition hover:border-primary/40 hover:bg-muted/30">
-                      <div className="min-w-0 flex-1"><p className="truncate font-medium">{personName(item.staff)}</p><p className="mt-1 truncate text-sm text-muted-foreground">{observationTitle(item)}</p></div>
+                      <div className="min-w-0 flex-1"><p className="truncate font-medium">{participantSummary(observationParticipants(item))}</p><p className="mt-1 truncate text-sm text-muted-foreground">{observationTitle(item)}</p></div>
                       <ObservationStatusBadge status={item.status} />
                     </Link>
                   )) : <p className="py-8 text-center text-sm text-muted-foreground">No recent observations yet.</p>}
@@ -100,6 +105,6 @@ function OverviewSkeleton() {
 }
 
 function EmptyOverview({ role }: { role: "admin" | "director" | "manager" | "staff" }) {
-  const copy = role === "manager" ? "Nothing needs your attention. Start a new observation when your next review is ready." : role === "staff" ? "You have no pending acknowledgements. New observer-submitted observations will appear here." : "There are no overdue or unassigned observations requiring follow-up.";
+  const copy = role === "manager" ? "Nothing needs your attention. Start a new observation when your next review is ready." : role === "staff" ? "You have no pending acknowledgements. Newly submitted observations will appear here." : "There are no overdue or unassigned observations requiring follow-up.";
   return <div className="rounded-xl border border-dashed p-8 text-center"><ClipboardCheck className="mx-auto h-9 w-9 text-muted-foreground" /><p className="mt-4 font-medium">You’re all caught up</p><p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{copy}</p>{(role === "admin" || role === "manager") && <Button asChild variant="outline" className="mt-5"><Link href="/observations/new">New observation</Link></Button>}</div>;
 }

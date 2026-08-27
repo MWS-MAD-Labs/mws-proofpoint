@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { Pool } from "pg";
 
 const migrationName = "20260501000000_add_workflow_definitions";
+const baselineMigration = "20260812000000_existing_database_baseline";
+const baselineConfirmation = `rebaseline-${baselineMigration}`;
 const allowedIdTypes = new Set(["text", "uuid"]);
 
 if (!process.env.DATABASE_URL) {
@@ -9,8 +11,12 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-function run(command, args) {
-  const result = spawnSync(command, args, { stdio: "inherit", shell: false });
+function run(command, args, environment = process.env) {
+  const result = spawnSync(command, args, {
+    stdio: "inherit",
+    shell: false,
+    env: environment,
+  });
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
@@ -150,19 +156,59 @@ async function applyWorkflowDefinitionsMigration(pool) {
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 try {
-  const failed = await pool.query(
+  const activeFailures = await pool.query(
     `SELECT migration_name
        FROM _prisma_migrations
-      WHERE migration_name = $1
-        AND finished_at IS NULL
+      WHERE finished_at IS NULL
         AND rolled_back_at IS NULL
-      LIMIT 1`,
-    [migrationName],
+      ORDER BY started_at`,
+  );
+  const activeFailureNames = activeFailures.rows.map(
+    (row) => row.migration_name,
   );
 
-  if (failed.rowCount === 0) {
-    console.log(`No active failed record found for ${migrationName}.`);
+  if (activeFailureNames.includes(baselineMigration)) {
+    if (
+      activeFailureNames.length !== 1 ||
+      activeFailureNames[0] !== baselineMigration
+    ) {
+      throw new Error(
+        `Cannot recover ${baselineMigration} while other active failed migrations exist: ${activeFailureNames.join(", ")}`,
+      );
+    }
+
+    console.log(
+      `Found failed baseline attempt ${baselineMigration}; marking that attempt rolled back before guarded rebaseline.`,
+    );
+    run("prisma", [
+      "migrate",
+      "resolve",
+      "--rolled-back",
+      baselineMigration,
+    ]);
+    run(
+      process.execPath,
+      ["/app/scripts/rebaseline-prisma-migration-history.mjs"],
+      {
+        ...process.env,
+        MIGRATION_HISTORY_REBASE_CONFIRM: baselineConfirmation,
+      },
+    );
+    console.log(
+      `Recovered migration history at ${baselineMigration}; startup will retry forward migrations.`,
+    );
     process.exit(0);
+  }
+
+  if (!activeFailureNames.includes(migrationName)) {
+    console.log(`No recoverable active failed migration found.`);
+    process.exit(0);
+  }
+
+  if (activeFailureNames.length !== 1) {
+    throw new Error(
+      `Cannot recover ${migrationName} while other active failed migrations exist: ${activeFailureNames.join(", ")}`,
+    );
   }
 
   console.log(

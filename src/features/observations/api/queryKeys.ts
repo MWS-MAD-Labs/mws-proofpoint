@@ -7,4 +7,8 @@ export const observationKeys = {
   summary: () => [...observationKeys.all, "summary"] as const,
   detail: (id: string) => [...observationKeys.all, "detail", id] as const,
   filterOptions: () => [...observationKeys.all, "filter-options"] as const,
+  creationStaff: () => [...observationKeys.all, "creation-staff"] as const,
+  creationForms: () => [...observationKeys.all, "creation-forms"] as const,
+  creationFormsFor: (staffIds: string[]) =>
+    [...observationKeys.creationForms(), [...staffIds].sort()] as const,
 };

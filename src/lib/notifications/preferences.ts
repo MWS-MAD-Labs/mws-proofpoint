@@ -59,6 +59,7 @@ export async function getUserNotificationPreference(
   return pref;
 }
 
+
 export async function isNotificationEnabled(
   userId: string,
   type: NotificationType,

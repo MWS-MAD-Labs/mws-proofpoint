@@ -16,10 +16,13 @@ import type {
 
 interface ObservationRow {
   id: string;
-  staffId: string;
+  legacyStaffId: string;
   managerId: string | null;
   templateId: string;
   status: ObservationStatusInput;
+  isParticipant: boolean;
+  participantAcknowledgedAt: Date | string | null;
+  participantAcknowledgementMethod: "personal" | "automatic" | null;
 }
 
 interface IndicatorRow {
@@ -67,14 +70,22 @@ export async function PUT(
     const { id, indicatorId } = await params;
     const observation = await queryOne<ObservationRow>(
       `SELECT
-         id,
-         "staffId",
-         "managerId",
-         template_id AS "templateId",
-         status
-       FROM observations
-       WHERE id = $1`,
-      [id],
+         o.id,
+         o."staffId" AS "legacyStaffId",
+         o."managerId",
+         o.template_id AS "templateId",
+         o.status,
+         EXISTS (
+           SELECT 1 FROM observation_participants actor_op
+           WHERE actor_op.observation_id = o.id AND actor_op.staff_id = $2
+         ) AS "isParticipant",
+         actor_op.acknowledged_at AS "participantAcknowledgedAt",
+         actor_op.acknowledgement_method AS "participantAcknowledgementMethod"
+       FROM observations o
+       LEFT JOIN observation_participants actor_op
+         ON actor_op.observation_id = o.id AND actor_op.staff_id = $2
+       WHERE o.id = $1`,
+      [id, session.user.id],
     );
     if (!observation) {
       return NextResponse.json(
@@ -87,13 +98,15 @@ export async function PUT(
       id: session.user.id,
       roles: (session.user as { roles?: string[] }).roles ?? [],
     };
-    const permissions = getObservationPermissions(user, {
+    const access = {
       status: observation.status,
-      staffId: String(observation.staffId),
-      managerId: observation.managerId
-        ? String(observation.managerId)
-        : null,
-    });
+      managerId: observation.managerId,
+      isParticipant: observation.isParticipant,
+      participantAcknowledgedAt: observation.participantAcknowledgedAt,
+      participantAcknowledgementMethod:
+        observation.participantAcknowledgementMethod,
+    };
+    const permissions = getObservationPermissions(user, access);
     if (!permissions.canEdit) {
       return NextResponse.json(
         {
@@ -141,9 +154,25 @@ export async function PUT(
       const lockedObservation = await client.query<{
         status: ObservationStatusInput;
         managerId: string | null;
+        isParticipant: boolean;
+        participantAcknowledgedAt: Date | string | null;
+        participantAcknowledgementMethod: "personal" | "automatic" | null;
       }>(
-        `SELECT status, "managerId" FROM observations WHERE id = $1 FOR UPDATE`,
-        [id],
+        `SELECT
+           o.status,
+           o."managerId",
+           EXISTS (
+             SELECT 1 FROM observation_participants actor_op
+             WHERE actor_op.observation_id = o.id AND actor_op.staff_id = $2
+           ) AS "isParticipant",
+           actor_op.acknowledged_at AS "participantAcknowledgedAt",
+           actor_op.acknowledgement_method AS "participantAcknowledgementMethod"
+         FROM observations o
+         LEFT JOIN observation_participants actor_op
+           ON actor_op.observation_id = o.id AND actor_op.staff_id = $2
+         WHERE o.id = $1
+         FOR UPDATE OF o`,
+        [id, user.id],
       );
       const locked = lockedObservation.rows[0];
       if (!locked || locked.status !== "draft") {
@@ -151,11 +180,15 @@ export async function PUT(
         error.name = "OBSERVATION_NOT_EDITABLE";
         throw error;
       }
-      const lockedPermissions = getObservationPermissions(user, {
+      const lockedAccess = {
         status: locked.status,
-        staffId: String(observation.staffId),
-        managerId: locked.managerId ? String(locked.managerId) : null,
-      });
+        managerId: locked.managerId,
+        isParticipant: locked.isParticipant,
+        participantAcknowledgedAt: locked.participantAcknowledgedAt,
+        participantAcknowledgementMethod:
+          locked.participantAcknowledgementMethod,
+      };
+      const lockedPermissions = getObservationPermissions(user, lockedAccess);
       if (!lockedPermissions.canEdit) {
         const error = new Error(
           "Only the assigned observer or an administrator can edit this observation.",

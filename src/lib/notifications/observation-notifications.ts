@@ -1,7 +1,32 @@
-// src/lib/notifications/observation-notifications.ts
-import { sendEmail } from "@/lib/email";
+import { sendEmail, type EmailResult } from "@/lib/email";
+import {
+  getObservationNotificationSettings,
+  isObservationNotificationEventEnabled,
+  type ObservationNotificationEvent,
+  type ObservationNotificationSettings,
+} from "@/features/observations/server/notificationSettings";
 
 const BASE_URL = process.env.NEXTAUTH_URL || "http://localhost:3000";
+const CARD_STYLE =
+  "font-family:Nunito Sans,Arial,sans-serif;max-width:600px;color:#241718;background:#FFFFFF;border:1px solid #D8C9C3;border-radius:16px;padding:24px;";
+const BUTTON_STYLE =
+  "display:inline-block;background:#1F2A44;color:white;padding:10px 20px;border-radius:12px;text-decoration:none;font-weight:bold;";
+
+type ObservationEmailSender = typeof sendEmail;
+
+async function sendObservationEmail(
+  event: ObservationNotificationEvent,
+  params: { to: string; subject: string; html: string; text?: string },
+  settings?: ObservationNotificationSettings,
+  sender: ObservationEmailSender = sendEmail,
+): Promise<EmailResult> {
+  const currentSettings =
+    settings ?? (await getObservationNotificationSettings());
+  if (!isObservationNotificationEventEnabled(currentSettings, event)) {
+    return { success: true };
+  }
+  return sender(params);
+}
 
 function esc(str: string | null | undefined): string {
   if (!str) return "";
@@ -13,170 +38,221 @@ function esc(str: string | null | undefined): string {
     .replace(/'/g, "&#39;");
 }
 
+function observationLink(observationId: string): string {
+  return `${BASE_URL}/observations/${encodeURIComponent(observationId)}`;
+}
+
 export async function notifyObservationAssigned(
+  recipientUserId: string,
   managerEmail: string,
   managerName: string,
   staffName: string,
   rubricName: string,
   observationId: string,
 ) {
-  return sendEmail({
-    to: managerEmail,
-    subject: `Observation assigned: ${rubricName}`,
-    html: `<div style="font-family:Nunito Sans,Arial,sans-serif;max-width:600px;color:#241718;background:#FFFFFF;border:1px solid #D8C9C3;border-radius:16px;padding:24px;">
-      <h2>Observation Draft Assigned</h2>
-      <p>Hello <strong>${esc(managerName)}</strong>,</p>
-      <p>An observation draft for <strong>${esc(staffName)}</strong> has been assigned to you.</p>
-      <p><strong>Form:</strong> ${esc(rubricName)}</p>
-      <a href="${BASE_URL}/observations/${encodeURIComponent(observationId)}/edit"
-         style="display:inline-block;background:#1F2A44;color:white;padding:10px 20px;border-radius:12px;text-decoration:none;font-weight:bold;">
-        Start Observation
-      </a>
-      <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification.</p>
-    </div>`,
-  });
+  void recipientUserId;
+  void managerEmail;
+  void managerName;
+  void staffName;
+  void rubricName;
+  void observationId;
+  return { success: true } satisfies EmailResult;
 }
 
 export async function notifyObservationReassigned(
+  recipientUserId: string,
   email: string,
   recipientName: string,
   staffName: string,
   rubricName: string,
   observationId: string,
   assigned: boolean,
+  settings?: ObservationNotificationSettings,
+  sender?: ObservationEmailSender,
 ) {
-  return sendEmail({
+  void recipientUserId;
+  return sendObservationEmail("reassignment", {
     to: email,
     subject: assigned
       ? `Observation reassigned to you: ${rubricName}`
       : `Observation reassigned: ${rubricName}`,
-    html: `<div style="font-family:Nunito Sans,Arial,sans-serif;max-width:600px;color:#241718;background:#FFFFFF;border:1px solid #D8C9C3;border-radius:16px;padding:24px;">
+    html: `<div style="${CARD_STYLE}">
       <h2>${assigned ? "Observation Assigned to You" : "Observation Assignment Changed"}</h2>
       <p>Hello <strong>${esc(recipientName)}</strong>,</p>
       <p>${assigned
         ? `You are now responsible for the observation of <strong>${esc(staffName)}</strong>.`
         : `The observation of <strong>${esc(staffName)}</strong> has been assigned to another observer.`}</p>
       <p><strong>Form:</strong> ${esc(rubricName)}</p>
-      <a href="${BASE_URL}/observations/${encodeURIComponent(observationId)}${assigned ? "/edit" : ""}"
-         style="display:inline-block;background:#1F2A44;color:white;padding:10px 20px;border-radius:12px;text-decoration:none;font-weight:bold;">
-        View Observation
-      </a>
+      <a href="${observationLink(observationId)}${assigned ? "/edit" : ""}" style="${BUTTON_STYLE}">View Observation</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification.</p>
     </div>`,
-  });
+  }, settings, sender);
 }
 
-// ── Notify staff when observer submits (staff needs to acknowledge) ──────────
 export async function notifyObservationSubmitted(
-  staffEmail:     string,
-  staffName:      string,
-  rubricName:     string,
-  observationId: string
+  staffUserId: string,
+  staffEmail: string,
+  staffName: string,
+  managerName: string,
+  observationTitle: string,
+  observationId: string,
+  settings?: ObservationNotificationSettings,
+  sender?: ObservationEmailSender,
 ) {
-  return sendEmail({
-    to:      staffEmail,
-    subject: `Observation Results Ready: ${rubricName}`,
-    html: `<div style="font-family:Nunito Sans,Arial,sans-serif;max-width:600px;color:#241718;background:#FFFFFF;border:1px solid #D8C9C3;border-radius:16px;padding:24px;">
+  void staffUserId;
+  return sendObservationEmail("submission", {
+    to: staffEmail,
+    subject: `Observation Results Ready: ${observationTitle}`,
+    html: `<div style="${CARD_STYLE}">
       <h2>Observation Results Ready for Review</h2>
       <p>Hello <strong>${esc(staffName)}</strong>,</p>
-      <p>Your observer has completed the observation. Please review the results and acknowledge them.</p>
+      <p><strong>${esc(managerName)}</strong> has submitted an observation that is waiting for your acknowledgement.</p>
       <table style="border-collapse:collapse;width:100%;margin:12px 0;">
-        <tr><td style="padding:6px 0;color:#5D4B4C;width:120px;">Rubric</td>
-            <td style="font-weight:bold;">${esc(rubricName)}</td></tr>
+        <tr><td style="padding:6px 0;color:#5D4B4C;width:120px;">Observer</td><td style="font-weight:bold;">${esc(managerName)}</td></tr>
+        <tr><td style="padding:6px 0;color:#5D4B4C;">Observation</td><td style="font-weight:bold;">${esc(observationTitle)}</td></tr>
       </table>
-      <a href="${BASE_URL}/observations/${encodeURIComponent(observationId)}"
-         style="display:inline-block;background:#1F2A44;color:white;padding:10px 20px;border-radius:12px;text-decoration:none;font-weight:bold;">
-        Review and Acknowledge
-      </a>
+      <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">Review and Acknowledge</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
-  });
+  }, settings, sender);
 }
 
-// ── Milestone 5: Notify manager when staff acknowledges ──────────────────────
+export async function notifyObservationAcknowledgementReminder(
+  staffUserId: string,
+  staffEmail: string,
+  staffName: string,
+  managerName: string,
+  observationTitle: string,
+  observationId: string,
+  settings?: ObservationNotificationSettings,
+  sender?: ObservationEmailSender,
+) {
+  void staffUserId;
+  return sendObservationEmail("reminder", {
+    to: staffEmail,
+    subject: `Reminder: observation awaiting acknowledgement — ${observationTitle}`,
+    html: `<div style="${CARD_STYLE}">
+      <h2>Observation Still Awaiting Acknowledgement</h2>
+      <p>Hello <strong>${esc(staffName)}</strong>,</p>
+      <p>This is a reminder that the observation below is still waiting for your acknowledgement.</p>
+      <table style="border-collapse:collapse;width:100%;margin:12px 0;">
+        <tr><td style="padding:6px 0;color:#5D4B4C;width:120px;">Submitted by</td><td style="font-weight:bold;">${esc(managerName)}</td></tr>
+        <tr><td style="padding:6px 0;color:#5D4B4C;">Observation</td><td style="font-weight:bold;">${esc(observationTitle)}</td></tr>
+      </table>
+      <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">Review and Acknowledge</a>
+      <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
+    </div>`,
+  }, settings, sender);
+}
+
 export async function notifyManagerObservationAcknowledged(
-  managerEmail:   string,
-  staffName:      string,
-  managerName:    string,
-  rubricName:     string,
-  observationId: string
+  managerUserId: string,
+  managerEmail: string,
+  staffName: string,
+  managerName: string,
+  observationTitle: string,
+  observationId: string,
+  settings?: ObservationNotificationSettings,
+  sender?: ObservationEmailSender,
+  progress?: { remaining: number },
 ) {
-  return sendEmail({
-    to:      managerEmail,
-    subject: `✅ Staff Acknowledged Observation: ${rubricName}`,
-    html: `<div style="font-family:Nunito Sans,Arial,sans-serif;max-width:600px;color:#241718;background:#FFFFFF;border:1px solid #D8C9C3;border-radius:16px;padding:24px;">
-      <h2>Observation Acknowledged by Staff Member</h2>
+  void managerUserId;
+  return sendObservationEmail("personalAcknowledgement", {
+    to: managerEmail,
+    subject: `Staff Acknowledged Observation: ${observationTitle}`,
+    html: `<div style="${CARD_STYLE}">
+      <h2>Observation Personally Acknowledged</h2>
       <p>Hello <strong>${esc(managerName)}</strong>,</p>
-      <p>Your staff member has acknowledged the observation results you submitted.</p>
-      <table style="border-collapse:collapse;width:100%;margin:12px 0;">
-        <tr><td style="padding:6px 0;color:#5D4B4C;width:120px;">Staff</td>
-            <td style="font-weight:bold;">${esc(staffName)}</td></tr>
-        <tr><td style="padding:6px 0;color:#5D4B4C;">Rubric</td>
-            <td style="font-weight:bold;">${esc(rubricName)}</td></tr>
-        <tr><td style="padding:6px 0;color:#5D4B4C;">Status</td>
-            <td style="font-weight:bold;color:#486142;">Acknowledged ✅</td></tr>
-      </table>
-      <a href="${BASE_URL}/observations/${encodeURIComponent(observationId)}"
-         style="display:inline-block;background:#1F2A44;color:white;padding:10px 20px;border-radius:12px;text-decoration:none;font-weight:bold;">
-        View Details
-      </a>
+      <p><strong>${esc(staffName)}</strong> personally acknowledged the observation results you submitted.</p>
+      ${progress
+        ? `<p><strong>${progress.remaining === 0 ? "All participants have now acknowledged." : `${progress.remaining} participant${progress.remaining === 1 ? "" : "s"} still awaiting acknowledgement.`}</strong></p>`
+        : ""}
+      <p><strong>Observation:</strong> ${esc(observationTitle)}</p>
+      <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">View Details</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
-  });
+  }, settings, sender);
 }
 
-// ── Notify admin when any observation is acknowledged ───────────────────────
 export async function notifyObservationAcknowledged(
-  adminEmail:     string,
-  staffName:      string,
-  managerName:    string,
-  rubricName:     string,
-  observationId: string
+  adminUserId: string,
+  adminEmail: string,
+  staffName: string,
+  managerName: string,
+  observationTitle: string,
+  observationId: string,
+  settings?: ObservationNotificationSettings,
+  sender?: ObservationEmailSender,
 ) {
-  return sendEmail({
-    to:      adminEmail,
-    subject: `Staff Acknowledged Observation: ${rubricName}`,
-    html: `<div style="font-family:Nunito Sans,Arial,sans-serif;max-width:600px;color:#241718;background:#FFFFFF;border:1px solid #D8C9C3;border-radius:16px;padding:24px;">
-      <h2>Observation Acknowledgement Completed</h2>
-      <p>The staff member has acknowledged the observation results.</p>
-      <table style="border-collapse:collapse;width:100%;margin:12px 0;">
-        <tr><td style="padding:6px 0;color:#5D4B4C;width:120px;">Staff</td>
-            <td style="font-weight:bold;">${esc(staffName)}</td></tr>
-        <tr><td style="padding:6px 0;color:#5D4B4C;">Observer</td>
-            <td style="font-weight:bold;">${esc(managerName)}</td></tr>
-        <tr><td style="padding:6px 0;color:#5D4B4C;">Rubric</td>
-            <td style="font-weight:bold;">${esc(rubricName)}</td></tr>
-      </table>
-      <a href="${BASE_URL}/observations/${encodeURIComponent(observationId)}"
-         style="display:inline-block;background:#1F2A44;color:white;padding:10px 20px;border-radius:12px;text-decoration:none;font-weight:bold;">
-        View Details
-      </a>
+  void adminUserId;
+  return sendObservationEmail("personalAcknowledgement", {
+    to: adminEmail,
+    subject: `Staff Acknowledged Observation: ${observationTitle}`,
+    html: `<div style="${CARD_STYLE}">
+      <h2>Observation Personally Acknowledged</h2>
+      <p>An observation participant personally acknowledged the observation results.</p>
+      <p><strong>Participant:</strong> ${esc(staffName)}</p>
+      <p><strong>Observer:</strong> ${esc(managerName)}</p>
+      <p><strong>Observation:</strong> ${esc(observationTitle)}</p>
+      <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">View Details</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
     </div>`,
-  });
+  }, settings, sender);
+}
+
+export async function notifyObservationAutomaticallyAcknowledged(
+  recipientUserId: string,
+  email: string,
+  recipientName: string,
+  staffName: string,
+  managerName: string,
+  observationTitle: string,
+  observationId: string,
+  settings?: ObservationNotificationSettings,
+  sender?: ObservationEmailSender,
+) {
+  void recipientUserId;
+  return sendObservationEmail("automaticAcknowledgement", {
+    to: email,
+    subject: `Observation Automatically Acknowledged: ${observationTitle}`,
+    html: `<div style="${CARD_STYLE}">
+      <h2>Observation Automatically Acknowledged</h2>
+      <p>Hello <strong>${esc(recipientName)}</strong>,</p>
+      <p>Your participation in the observation below was automatically marked as acknowledged because the response deadline passed.</p>
+      <p style="font-weight:bold;color:#8A4B08;">This was not a personal acknowledgement.</p>
+      <table style="border-collapse:collapse;width:100%;margin:12px 0;">
+        <tr><td style="padding:6px 0;color:#5D4B4C;width:120px;">Participant</td><td style="font-weight:bold;">${esc(staffName)}</td></tr>
+        <tr><td style="padding:6px 0;color:#5D4B4C;">Observer</td><td style="font-weight:bold;">${esc(managerName)}</td></tr>
+        <tr><td style="padding:6px 0;color:#5D4B4C;">Observation</td><td style="font-weight:bold;">${esc(observationTitle)}</td></tr>
+      </table>
+      <a href="${observationLink(observationId)}" style="${BUTTON_STYLE}">View Details</a>
+      <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification. Please do not reply to this email.</p>
+    </div>`,
+  }, settings, sender);
 }
 
 export async function notifyManagerObservationReopened(
+  managerUserId: string,
   managerEmail: string,
   managerName: string,
   staffName: string,
   rubricName: string,
   reason: string,
   observationId: string,
+  settings?: ObservationNotificationSettings,
+  sender?: ObservationEmailSender,
 ) {
-  return sendEmail({
+  void managerUserId;
+  return sendObservationEmail("reopen", {
     to: managerEmail,
     subject: `Observation Reopened: ${rubricName}`,
-    html: `<div style="font-family:Nunito Sans,Arial,sans-serif;max-width:600px;color:#241718;background:#FFFFFF;border:1px solid #D8C9C3;border-radius:16px;padding:24px;">
+    html: `<div style="${CARD_STYLE}">
       <h2>Observation Reopened for Revision</h2>
       <p>Hello <strong>${esc(managerName)}</strong>,</p>
       <p>An administrator reopened the observation for <strong>${esc(staffName)}</strong>. The report is now a draft and requires revision before it can be submitted again.</p>
       <p><strong>Reason:</strong> ${esc(reason)}</p>
-      <a href="${BASE_URL}/observations/${encodeURIComponent(observationId)}/edit"
-         style="display:inline-block;background:#1F2A44;color:white;padding:10px 20px;border-radius:12px;text-decoration:none;font-weight:bold;">
-        Continue Editing
-      </a>
+      <a href="${observationLink(observationId)}/edit" style="${BUTTON_STYLE}">Continue Editing</a>
       <p style="color:#6F6061;font-size:12px;margin-top:24px;">This is an automated notification.</p>
     </div>`,
-  });
+  }, settings, sender);
 }

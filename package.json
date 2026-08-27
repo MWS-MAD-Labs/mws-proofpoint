@@ -13,8 +13,13 @@
     "db:push": "prisma db push",
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:rebaseline": "node scripts/rebaseline-prisma-migration-history.mjs",
     "db:migrate:reset": "prisma migrate reset",
+    "db:migrate:status": "prisma migrate status",
+    "db:migrate:check": "prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma",
     "db:studio": "prisma studio",
+    "test:observations": "node --import tsx --test src/features/observations/server/notificationSettings.test.ts src/features/observations/server/observation-domain.test.ts src/lib/notifications/observation-notifications.test.ts src/app/api/admin/observation-notification-settings/route.test.ts",
+    "test:observations:integration": "node scripts/run-observation-integration-tests.mjs",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:milestone1": "tsx prisma/seed-milestone1.ts",
     "db:seed:it-support-appraisal": "tsx scripts/seed-it-support-staff-appraisal.ts"

@@ -4,6 +4,101 @@ import { requireRole } from "@/lib/auth-helpers";
 import { query, queryOne } from "@/lib/db";
 import { randomUUID } from "crypto";
 
+interface AssignmentRow {
+  id: string;
+  departmentRoleId: string;
+  workflowId: string;
+  rubricId: string | null;
+  isActive: boolean;
+  createdAt: string | Date;
+  wf_id: string | null;
+  wf_name: string | null;
+  wf_type: string | null;
+  wf_description: string | null;
+  r_id: string | null;
+  r_name: string | null;
+  r_type: string | null;
+  dr_id: string | null;
+  dr_role: string | null;
+  dr_dept_id: string | null;
+  dept_name: string | null;
+}
+
+interface WorkflowStepRow {
+  id: string;
+  workflow_id: string;
+  step_order: number;
+  actor_role: string;
+  action_type: string;
+  description: string | null;
+}
+
+interface FormattedWorkflowStep {
+  id: string;
+  stepOrder: number;
+  actorRole: string;
+  actionType: string;
+  description: string | null;
+}
+
+interface CreateAssignmentBody {
+  departmentRoleId?: string;
+  workflowId?: string;
+  rubricId?: string | null;
+}
+
+interface UpdateAssignmentBody {
+  id?: string;
+  rubricId?: string | null;
+  isActive?: boolean;
+}
+
+interface IdRow {
+  id: string;
+}
+
+interface WorkflowTypeRow extends IdRow {
+  type: string;
+}
+
+interface RubricTypeRow {
+  id?: string;
+  template_type: string;
+}
+
+interface CreatedAssignmentRow {
+  id: string;
+  departmentRoleId: string;
+  workflowId: string;
+  rubricId: string | null;
+  isActive: boolean;
+  wf_name: string | null;
+  wf_type: string | null;
+  r_name: string | null;
+  r_type: string | null;
+}
+
+interface ExistingAssignmentRow {
+  id: string;
+  rubric_id: string | null;
+  is_active: boolean;
+  wf_type: string | null;
+}
+
+interface UpdatedAssignmentRow {
+  id: string;
+  departmentRoleId: string;
+  workflowId: string;
+  rubricId: string | null;
+  isActive: boolean;
+  wf_id: string | null;
+  wf_name: string | null;
+  wf_type: string | null;
+  r_id: string | null;
+  r_name: string | null;
+  r_type: string | null;
+}
+
 // ── GET ───────────────────────────────────────────────────────────────────────
 export async function GET(req: Request) {
   const { response } = await requireRole("admin");
@@ -18,7 +113,7 @@ export async function GET(req: Request) {
       : "";
     const params = departmentRoleId ? [departmentRoleId] : [];
 
-    const rows = (await query(
+    const rows = await query<AssignmentRow>(
       `SELECT
          rwa.id,
          rwa.department_role_id  AS "departmentRoleId",
@@ -38,17 +133,17 @@ export async function GET(req: Request) {
        ${whereClause}
        ORDER BY rwa.created_at ASC`,
       params,
-    )) as any[];
+    );
 
     const workflowIds = [
-      ...new Set(rows.map((r: any) => r.wf_id).filter(Boolean)),
+      ...new Set(rows.map((row) => row.wf_id).filter((id): id is string => Boolean(id))),
     ];
-    const stepsMap: Record<string, any[]> = {};
+    const stepsMap: Record<string, FormattedWorkflowStep[]> = {};
     if (workflowIds.length > 0) {
-      const steps = (await query(
+      const steps = await query<WorkflowStepRow>(
         `SELECT * FROM workflow_steps WHERE workflow_id = ANY($1) ORDER BY step_order ASC`,
         [workflowIds],
-      )) as any[];
+      );
       for (const s of steps) {
         if (!stepsMap[s.workflow_id]) stepsMap[s.workflow_id] = [];
         stepsMap[s.workflow_id].push({
@@ -61,7 +156,7 @@ export async function GET(req: Request) {
       }
     }
 
-    const assignments = rows.map((r: any) => ({
+    const assignments = rows.map((r) => ({
       id: r.id,
       departmentRoleId: r.departmentRoleId,
       workflowId: r.workflowId,
@@ -105,7 +200,7 @@ export async function POST(req: Request) {
   if (response) return response;
 
   try {
-    const body = await req.json();
+    const body = (await req.json()) as CreateAssignmentBody;
     const { departmentRoleId, workflowId, rubricId } = body;
 
     if (!departmentRoleId || !workflowId) {
@@ -116,10 +211,10 @@ export async function POST(req: Request) {
     }
 
     // Verify dept role exists
-    const deptRole = (await queryOne(
+    const deptRole = await queryOne<IdRow>(
       `SELECT id FROM department_roles WHERE id = $1`,
       [departmentRoleId],
-    )) as any;
+    );
     if (!deptRole)
       return NextResponse.json(
         { error: "Department role not found." },
@@ -127,10 +222,10 @@ export async function POST(req: Request) {
       );
 
     // Verify workflow exists
-    const workflow = (await queryOne(
+    const workflow = await queryOne<WorkflowTypeRow>(
       `SELECT id, type FROM workflow_definitions WHERE id = $1`,
       [workflowId],
-    )) as any;
+    );
     if (!workflow)
       return NextResponse.json(
         { error: "Workflow definition not found." },
@@ -139,10 +234,10 @@ export async function POST(req: Request) {
 
     // Verify rubric and validate type match
     if (rubricId) {
-      const rubric = (await queryOne(
+      const rubric = await queryOne<RubricTypeRow>(
         `SELECT id, template_type FROM rubric_templates WHERE id = $1`,
         [rubricId],
-      )) as any;
+      );
       if (!rubric)
         return NextResponse.json(
           { error: "Rubric template not found." },
@@ -187,7 +282,7 @@ export async function POST(req: Request) {
     );
 
     // Return full assignment
-    const assignment = (await queryOne(
+    const assignment = (await queryOne<CreatedAssignmentRow>(
       `SELECT rwa.id, rwa.department_role_id AS "departmentRoleId",
               rwa.workflow_id AS "workflowId", rwa.rubric_id AS "rubricId",
               rwa.is_active AS "isActive",
@@ -198,7 +293,7 @@ export async function POST(req: Request) {
        LEFT JOIN rubric_templates rt ON rt.id = rwa.rubric_id
        WHERE rwa.id = $1`,
       [id],
-    )) as any;
+    ))!;
 
     return NextResponse.json(
       {
@@ -234,7 +329,7 @@ export async function PUT(req: Request) {
   if (response) return response;
 
   try {
-    const body = await req.json();
+    const body = (await req.json()) as UpdateAssignmentBody;
     const { id, rubricId, isActive } = body;
 
     if (!id)
@@ -243,13 +338,13 @@ export async function PUT(req: Request) {
         { status: 400 },
       );
 
-    const existing = (await queryOne(
+    const existing = await queryOne<ExistingAssignmentRow>(
       `SELECT rwa.id, rwa.rubric_id, rwa.is_active, wd.type AS wf_type
        FROM role_workflow_assignments rwa
        LEFT JOIN workflow_definitions wd ON wd.id = rwa.workflow_id
        WHERE rwa.id = $1`,
       [id],
-    )) as any;
+    );
 
     if (!existing)
       return NextResponse.json(
@@ -259,10 +354,10 @@ export async function PUT(req: Request) {
 
     // Validate rubric type if updating rubric
     if (rubricId) {
-      const rubric = (await queryOne(
+      const rubric = await queryOne<RubricTypeRow>(
         `SELECT template_type FROM rubric_templates WHERE id = $1`,
         [rubricId],
-      )) as any;
+      );
       if (!rubric)
         return NextResponse.json(
           { error: "Rubric template not found." },
@@ -310,7 +405,7 @@ export async function PUT(req: Request) {
       [nextRubricId, nextIsActive, id],
     );
 
-    const updated = (await queryOne(
+    const updated = (await queryOne<UpdatedAssignmentRow>(
       `SELECT rwa.id, rwa.department_role_id AS "departmentRoleId",
               rwa.workflow_id AS "workflowId", rwa.rubric_id AS "rubricId",
               rwa.is_active AS "isActive",
@@ -321,7 +416,7 @@ export async function PUT(req: Request) {
        LEFT JOIN rubric_templates rt ON rt.id = rwa.rubric_id
        WHERE rwa.id = $1`,
       [id],
-    )) as any;
+    ))!;
 
     return NextResponse.json({
       ...updated,
@@ -363,10 +458,10 @@ export async function DELETE(req: Request) {
         { status: 400 },
       );
 
-    const existing = (await queryOne(
+    const existing = await queryOne<IdRow>(
       `SELECT id FROM role_workflow_assignments WHERE id = $1`,
       [id],
-    )) as any;
+    );
     if (!existing)
       return NextResponse.json(
         { error: "Assignment not found." },

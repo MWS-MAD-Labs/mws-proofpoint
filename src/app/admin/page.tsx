@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
+import Link from 'next/link';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { Header } from '@/components/layout/Header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -28,7 +29,8 @@ import {
     Plus,
     Clock,
 
-    FileText
+    FileText,
+    BellRing
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api-client';
@@ -263,7 +265,13 @@ function AdminContent() {
                     <p className="text-muted-foreground">Manage users, departments, and approval workflows.</p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex w-full flex-col gap-3 sm:flex-row md:w-auto md:items-center">
+                    <Button asChild variant="outline" className="w-full sm:w-auto">
+                        <Link href="/admin/notification-settings">
+                            <BellRing className="mr-2 h-4 w-4" />
+                            Notification settings
+                        </Link>
+                    </Button>
                     <div className="relative w-full md:w-64">
                         <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input

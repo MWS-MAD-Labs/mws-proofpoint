@@ -18,13 +18,24 @@ import { randomUUID } from "crypto";
 
 interface SubmitObservationRow {
   id: string;
-  staffId: string;
+  legacyStaffId: string;
   managerId: string | null;
   templateId: string;
   status: ObservationStatus;
-  staffEmail: string;
-  staffName: string | null;
+  isParticipant: boolean;
+  participantAcknowledgedAt: Date | string | null;
+  participantAcknowledgementMethod: "personal" | "automatic" | null;
+  managerName: string | null;
+  managerEmail: string | null;
   rubricName: string | null;
+  title: string | null;
+}
+
+interface SubmitParticipantRow {
+  id: string;
+  staffId: string;
+  email: string;
+  name: string | null;
 }
 
 interface SubmitIndicatorRow {
@@ -81,19 +92,28 @@ export async function PATCH(
     const observation = await queryOne<SubmitObservationRow>(
       `SELECT
          o.id,
-         o."staffId",
+         o."staffId" AS "legacyStaffId",
          o."managerId",
          o.template_id AS "templateId",
          o.status,
-         su.email AS "staffEmail",
-         sp.full_name AS "staffName",
-         rt.name AS "rubricName"
+         EXISTS (
+           SELECT 1 FROM observation_participants actor_op
+           WHERE actor_op.observation_id = o.id AND actor_op.staff_id = $2
+         ) AS "isParticipant",
+         actor_op.acknowledged_at AS "participantAcknowledgedAt",
+         actor_op.acknowledgement_method AS "participantAcknowledgementMethod",
+         mu.email AS "managerEmail",
+         mp.full_name AS "managerName",
+         rt.name AS "rubricName",
+         o.title
        FROM observations o
-       JOIN users su ON su.id = o."staffId"
-       LEFT JOIN profiles sp ON sp.user_id = su.id
+       LEFT JOIN observation_participants actor_op
+         ON actor_op.observation_id = o.id AND actor_op.staff_id = $2
+       LEFT JOIN users mu ON mu.id = o."managerId"
+       LEFT JOIN profiles mp ON mp.user_id = mu.id
        LEFT JOIN rubric_templates rt ON rt.id = o.template_id
        WHERE o.id = $1`,
-      [id],
+      [id, user.id],
     );
 
     if (!observation)
@@ -102,11 +122,15 @@ export async function PATCH(
         { status: 404 },
       );
 
-    const permissions = getObservationPermissions(user, {
+    const access = {
       status: observation.status,
-      staffId: String(observation.staffId),
-      managerId: observation.managerId ? String(observation.managerId) : null,
-    });
+      managerId: observation.managerId,
+      isParticipant: observation.isParticipant,
+      participantAcknowledgedAt: observation.participantAcknowledgedAt,
+      participantAcknowledgementMethod:
+        observation.participantAcknowledgementMethod,
+    };
+    const permissions = getObservationPermissions(user, access);
 
     if (!permissions.canSubmit)
       return NextResponse.json(
@@ -173,14 +197,45 @@ export async function PATCH(
 
     const client = await pool.connect();
     let updated: SubmittedObservationRow;
+    let participants: SubmitParticipantRow[] = [];
     try {
       await client.query("BEGIN");
+      const lockedParent = await client.query<{ status: ObservationStatus }>(
+        `SELECT status FROM observations WHERE id = $1 FOR UPDATE`,
+        [id],
+      );
+      if (lockedParent.rows[0]?.status !== "draft") {
+        throw new Error("Observation status changed before submit.");
+      }
+
+      const participantResult = await client.query<SubmitParticipantRow>(
+        `SELECT
+           op.id,
+           op.staff_id AS "staffId",
+           u.email,
+           p.full_name AS name
+         FROM observation_participants op
+         JOIN users u ON u.id = op.staff_id
+         LEFT JOIN profiles p ON p.user_id = u.id
+         WHERE op.observation_id = $1
+         ORDER BY COALESCE(p.full_name, u.email), u.email, op.staff_id
+         FOR UPDATE OF op`,
+        [id],
+      );
+      participants = participantResult.rows;
+      if (participants.length === 0) {
+        throw new Error("Observation must have at least one participant.");
+      }
+
       const updateResult = await client.query<SubmittedObservationRow>(
         `UPDATE observations
          SET status = 'submitted',
              submitted_at = NOW(),
              acknowledged_at = NULL,
              acknowledgement_response = NULL,
+             acknowledgement_method = NULL,
+             acknowledgement_note = NULL,
+             acknowledgement_automation_started_at = NULL,
              updated_at = NOW()
          WHERE id = $1 AND status = 'draft'
          RETURNING
@@ -193,6 +248,18 @@ export async function PATCH(
       const updatedRow = updateResult.rows[0];
       if (!updatedRow) throw new Error("Observation status changed before submit.");
       updated = updatedRow;
+
+      await client.query(
+        `UPDATE observation_participants
+         SET acknowledged_at = NULL,
+             acknowledgement_response = NULL,
+             acknowledgement_method = NULL,
+             acknowledgement_note = NULL,
+             acknowledgement_automation_started_at = $2,
+             updated_at = NOW()
+         WHERE observation_id = $1`,
+        [id, updated.submittedAt],
+      );
 
       await client.query(
         `INSERT INTO observation_updates
@@ -213,13 +280,34 @@ export async function PATCH(
       client.release();
     }
 
-    // Notify staff
-    await notifyObservationSubmitted(
-      observation.staffEmail,
-      observation.staffName ?? observation.staffEmail,
-      observation.rubricName ?? "Observation",
-      id,
-    ).catch((err: unknown) => console.error("Submit notification error:", err));
+    const managerName =
+      observation.managerName ?? observation.managerEmail ?? "Observer";
+    const observationTitle =
+      observation.title?.trim() || observation.rubricName || "Observation";
+    const notificationResults = await Promise.allSettled(
+      participants.map((participant) =>
+        notifyObservationSubmitted(
+          participant.staffId,
+          participant.email,
+          participant.name ?? participant.email,
+          managerName,
+          observationTitle,
+          id,
+        ),
+      ),
+    );
+    for (const notification of notificationResults) {
+      if (notification.status === "rejected") {
+        console.error("Submit notification error:", notification.reason);
+      }
+    }
+
+    const submittedAccess = {
+      ...access,
+      status: "submitted" as const,
+      participantAcknowledgedAt: null,
+      participantAcknowledgementMethod: null,
+    };
 
     return NextResponse.json({
       id: updated.id,
@@ -228,11 +316,7 @@ export async function PATCH(
       acknowledgedAt: updated.acknowledgedAt
         ? serializeDate(updated.acknowledgedAt)
         : null,
-      permissions: getObservationPermissions(user, {
-        status: "submitted",
-        staffId: String(observation.staffId),
-        managerId: observation.managerId ? String(observation.managerId) : null,
-      }),
+      permissions: getObservationPermissions(user, submittedAccess),
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

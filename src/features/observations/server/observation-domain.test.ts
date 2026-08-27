@@ -2,12 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { canTransitionObservation, normalizeObservationStatus } from "./lifecycle";
 import { getObservationPermissions } from "./permissions";
+import { buildListFilters } from "./queries";
 import {
   calculateObservationProgress,
   findIncompleteRequiredIndicators,
   isObservationAnswerComplete,
 } from "./validation";
 import type { ObservationIndicatorForProgress } from "../types";
+import {
+  getObservationReminderPeriod,
+  isAutomaticAcknowledgementDue,
+} from "./acknowledgementAutomationConfig";
+import { getObservationSchedulerConfig } from "./observationAcknowledgementScheduler";
+import { DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS } from "./notificationSettings";
 import {
   observationReopenSchema,
   parseObservationListQuery,
@@ -32,6 +39,86 @@ import {
 
 const draft = { status: "draft" as const, staffId: "staff", managerId: "manager" };
 
+test("scheduler configuration uses global settings and a fixed startup delay", () => {
+  assert.deepEqual(
+    getObservationSchedulerConfig(DEFAULT_OBSERVATION_NOTIFICATION_SETTINGS),
+    {
+      enabled: true,
+      intervalMs: 60 * 60 * 1000,
+      initialDelayMs: 30 * 1000,
+    },
+  );
+  assert.deepEqual(
+    getObservationSchedulerConfig({
+      notificationsEnabled: true,
+      schedulerEnabled: false,
+      schedulerIntervalMinutes: 15,
+    }),
+    {
+      enabled: false,
+      intervalMs: 15 * 60 * 1000,
+      initialDelayMs: 30 * 1000,
+    },
+  );
+  assert.equal(
+    getObservationSchedulerConfig({
+      notificationsEnabled: false,
+      schedulerEnabled: true,
+      schedulerIntervalMinutes: 15,
+    }).enabled,
+    false,
+  );
+});
+
+test("acknowledgement automation uses explicit configured timing", () => {
+  const submitted = new Date("2026-08-01T00:00:00.000Z");
+  const timing = {
+    firstReminderDays: 3,
+    reminderIntervalDays: 2,
+    automaticAcknowledgementDays: 30,
+  };
+  assert.equal(
+    getObservationReminderPeriod(
+      submitted,
+      new Date("2026-08-03T23:59:59.999Z"),
+      timing,
+    ),
+    null,
+  );
+  assert.equal(
+    getObservationReminderPeriod(
+      submitted,
+      new Date("2026-08-04T00:00:00.000Z"),
+      timing,
+    ),
+    0,
+  );
+  assert.equal(
+    getObservationReminderPeriod(
+      submitted,
+      new Date("2026-08-06T00:00:00.000Z"),
+      timing,
+    ),
+    1,
+  );
+  assert.equal(
+    isAutomaticAcknowledgementDue(
+      submitted,
+      new Date("2026-08-30T23:59:59.999Z"),
+      timing,
+    ),
+    false,
+  );
+  assert.equal(
+    isAutomaticAcknowledgementDue(
+      submitted,
+      new Date("2026-08-31T00:00:00.000Z"),
+      timing,
+    ),
+    true,
+  );
+});
+
 test("draft responses are hidden from staff and directors", () => {
   assert.equal(
     getObservationPermissions({ id: "staff", roles: ["staff"] }, draft)
@@ -41,6 +128,51 @@ test("draft responses are hidden from staff and directors", () => {
   assert.equal(
     getObservationPermissions({ id: "director", roles: ["director"] }, draft)
       .canViewResponses,
+    false,
+  );
+});
+
+test("participant-aware permissions hide drafts and allow only pending acknowledgements", () => {
+  const participantDraft = {
+    status: "draft" as const,
+    managerId: "manager",
+    isParticipant: true,
+    participantAcknowledgedAt: null,
+  };
+  const participantSubmitted = {
+    ...participantDraft,
+    status: "submitted" as const,
+  };
+
+  assert.equal(
+    getObservationPermissions(
+      { id: "participant-b", roles: ["staff"] },
+      participantDraft,
+    ).canViewRecord,
+    false,
+  );
+  assert.equal(
+    getObservationPermissions(
+      { id: "participant-b", roles: ["staff"] },
+      participantSubmitted,
+    ).canAcknowledge,
+    true,
+  );
+  assert.equal(
+    getObservationPermissions(
+      { id: "participant-b", roles: ["staff"] },
+      {
+        ...participantSubmitted,
+        participantAcknowledgedAt: "2026-08-20T00:00:00.000Z",
+      },
+    ).canAcknowledge,
+    false,
+  );
+  assert.equal(
+    getObservationPermissions(
+      { id: "unrelated", roles: ["staff"] },
+      { ...participantSubmitted, isParticipant: false },
+    ).canViewRecord,
     false,
   );
 });
@@ -175,6 +307,46 @@ test("zero-value placeholder rows are incomplete", () => {
     ),
     false,
   );
+});
+
+test("list query accepts participantId and retains the legacy staffId alias", () => {
+  assert.equal(
+    parseObservationListQuery(
+      new URLSearchParams({ participantId: "participant-b" }),
+    ).participantId,
+    "participant-b",
+  );
+  assert.equal(
+    parseObservationListQuery(new URLSearchParams({ staffId: "legacy-staff" }))
+      .staffId,
+    "legacy-staff",
+  );
+});
+
+test("list filters use participant EXISTS predicates without multiplying observations", () => {
+  const params: unknown[] = [];
+  const { whereSql, actionExpression } = buildListFilters(
+    { id: "participant-b", roles: ["staff"] },
+    {
+      q: "Teacher Two",
+      participantId: "participant-b",
+      sort: "updated_desc",
+      page: 1,
+      pageSize: 20,
+    },
+    params,
+  );
+
+  assert.match(whereSql, /EXISTS \(\s*SELECT 1 FROM observation_participants visibility_participant/);
+  assert.match(whereSql, /EXISTS \(\s*SELECT 1\s*FROM observation_participants search_participant/);
+  assert.match(whereSql, /EXISTS \(\s*SELECT 1 FROM observation_participants filtered_participant/);
+  assert.doesNotMatch(whereSql, /JOIN observation_participants/);
+  assert.match(actionExpression, /action_participant\.acknowledged_at IS NULL/);
+  assert.deepEqual(params, [
+    "participant-b",
+    "%Teacher Two%",
+    "participant-b",
+  ]);
 });
 
 test("list query parsing falls back for invalid values", () => {

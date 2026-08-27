@@ -3,12 +3,21 @@ import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
 import { triggerNotification } from "@/lib/notifications";
 
+interface SessionUserWithRoles {
+  roles?: string[];
+}
+
+interface AssessmentActionBody {
+  id?: string;
+  action?: string;
+}
+
 // GET /api/admin/assessments - List all assessments for admin review
 export async function GET(request: Request) {
   try {
     const session = await auth();
     // Check for admin role
-    const roles = (session?.user as any)?.roles || [];
+    const roles = (session?.user as SessionUserWithRoles | undefined)?.roles ?? [];
     if (!roles.includes("admin")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -31,7 +40,7 @@ export async function GET(request: Request) {
             WHERE 1=1
         `;
 
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     // If status filter is provided, use it. Otherwise default to "director_approved" (pending admin review)
     if (status) {
@@ -61,12 +70,12 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   try {
     const session = await auth();
-    const roles = (session?.user as any)?.roles || [];
+    const roles = (session?.user as SessionUserWithRoles | undefined)?.roles ?? [];
     if (!roles.includes("admin")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
+    const body = (await request.json()) as AssessmentActionBody;
     const { id, action } = body;
 
     if (!id || !action) {

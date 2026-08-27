@@ -10,11 +10,12 @@ import { notifyManagerObservationReopened } from "@/lib/notifications/observatio
 
 interface ReopenObservationRow {
   id: string;
-  staffId: string;
+  legacyStaffId: string;
   managerId: string | null;
   status: ObservationStatus;
-  staffEmail: string | null;
-  staffName: string | null;
+  isParticipant: boolean;
+  participantAcknowledgedAt: Date | string | null;
+  participantAcknowledgementMethod: "personal" | "automatic" | null;
   managerEmail: string | null;
   managerName: string | null;
   rubricName: string | null;
@@ -48,22 +49,26 @@ export async function PATCH(
     const observation = await queryOne<ReopenObservationRow>(
       `SELECT
          o.id,
-         o."staffId",
+         o."staffId" AS "legacyStaffId",
          o."managerId",
          o.status,
-         su.email AS "staffEmail",
-         sp.full_name AS "staffName",
+         EXISTS (
+           SELECT 1 FROM observation_participants actor_op
+           WHERE actor_op.observation_id = o.id AND actor_op.staff_id = $2
+         ) AS "isParticipant",
+         actor_op.acknowledged_at AS "participantAcknowledgedAt",
+         actor_op.acknowledgement_method AS "participantAcknowledgementMethod",
          mu.email AS "managerEmail",
          mp.full_name AS "managerName",
          rt.name AS "rubricName"
        FROM observations o
-       LEFT JOIN users su ON su.id = o."staffId"
-       LEFT JOIN profiles sp ON sp.user_id = su.id
+       LEFT JOIN observation_participants actor_op
+         ON actor_op.observation_id = o.id AND actor_op.staff_id = $2
        LEFT JOIN users mu ON mu.id = o."managerId"
        LEFT JOIN profiles mp ON mp.user_id = mu.id
        LEFT JOIN rubric_templates rt ON rt.id = o.template_id
        WHERE o.id = $1`,
-      [id],
+      [id, user.id],
     );
 
     if (!observation) {
@@ -73,7 +78,15 @@ export async function PATCH(
       );
     }
 
-    const permissions = getObservationPermissions(user, observation);
+    const access = {
+      status: observation.status,
+      managerId: observation.managerId,
+      isParticipant: observation.isParticipant,
+      participantAcknowledgedAt: observation.participantAcknowledgedAt,
+      participantAcknowledgementMethod:
+        observation.participantAcknowledgementMethod,
+    };
+    const permissions = getObservationPermissions(user, access);
     if (!permissions.canReopen) {
       return NextResponse.json(
         { error: "Only admins can reopen submitted or completed observations." },
@@ -93,6 +106,9 @@ export async function PATCH(
              submitted_at = NULL,
              acknowledged_at = NULL,
              acknowledgement_response = NULL,
+             acknowledgement_method = NULL,
+             acknowledgement_note = NULL,
+             acknowledgement_automation_started_at = NULL,
              updated_at = NOW()
          WHERE id = $1 AND status = $2
          RETURNING id`,
@@ -101,6 +117,42 @@ export async function PATCH(
       if (!updateResult.rows[0]) {
         throw new Error("Observation status changed before reopen.");
       }
+
+      await client.query(
+        `INSERT INTO observation_updates
+           (id, observation_id, updated_by_id, staff_id, status_from, status_to,
+            event_type, notes, created_at)
+         SELECT
+           gen_random_uuid(),
+           op.observation_id,
+           $2,
+           op.staff_id,
+           $3,
+           'draft',
+           'participant_acknowledgement_archived',
+           CONCAT(
+             'Archived participant acknowledgement before reopen: method=',
+             COALESCE(op.acknowledgement_method, 'unknown'),
+             ', acknowledged_at=',
+             op.acknowledged_at::text
+           ),
+           NOW()
+         FROM observation_participants op
+         WHERE op.observation_id = $1 AND op.acknowledged_at IS NOT NULL`,
+        [id, user.id, observation.status],
+      );
+
+      await client.query(
+        `UPDATE observation_participants
+         SET acknowledged_at = NULL,
+             acknowledgement_response = NULL,
+             acknowledgement_method = NULL,
+             acknowledgement_note = NULL,
+             acknowledgement_automation_started_at = NULL,
+             updated_at = NOW()
+         WHERE observation_id = $1`,
+        [id],
+      );
 
       await client.query(
         `INSERT INTO observation_updates
@@ -123,7 +175,6 @@ export async function PATCH(
     }
 
     const rubricName = observation.rubricName ?? "Observation";
-    const staffName = observation.staffName ?? observation.staffEmail ?? "Staff";
     const managerName =
       observation.managerName ?? observation.managerEmail ?? "Observer";
     const notifications: Promise<unknown>[] = [];
@@ -131,9 +182,10 @@ export async function PATCH(
     if (observation.managerEmail) {
       notifications.push(
         notifyManagerObservationReopened(
+          observation.managerId!,
           observation.managerEmail,
           managerName,
-          staffName,
+          "the observation participants",
           rubricName,
           parsedBody.data.reason,
           id,

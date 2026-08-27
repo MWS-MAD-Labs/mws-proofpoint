@@ -106,6 +106,8 @@ pg_restore --list /secure/path/proofpoint-production-pre-migration.dump >/dev/nu
 
 ### 3. Deploy code and schema
 
+If the target database predates the `20260812000000_existing_database_baseline`, first complete the one-time [Prisma migration history rebaseline](./prisma-migration-history-rebaseline.md) after taking the verified backup above.
+
 Deploy the approved `mws/Staging` revision to the production image/tag, then run:
 
 ```sh

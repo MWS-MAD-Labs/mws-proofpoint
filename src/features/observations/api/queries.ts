@@ -52,10 +52,19 @@ export function fetchObservationCreationStaff() {
   return getJson<ObservationCreationStaff[]>("/api/observations/staff");
 }
 
-export function fetchObservationCreationForms(staffId: string) {
-  return getJson<ObservationCreationForm[]>(
-    `/api/observations/available-forms?staffId=${encodeURIComponent(staffId)}`,
-  );
+export async function fetchObservationCreationForms(
+  staffIds: string[],
+): Promise<ObservationCreationForm[]> {
+  const response = await fetch("/api/observations/available-forms", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ staffIds }),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `Request failed with status ${response.status}`);
+  }
+  return response.json() as Promise<ObservationCreationForm[]>;
 }
 
 export async function fetchObservationManagers(): Promise<ObservationManagerOption[]> {
@@ -71,8 +80,10 @@ export async function fetchObservationManagers(): Promise<ObservationManagerOpti
   }));
 }
 
+export type CreateObservationRequestInput = Omit<CreateObservationInput, "staffId">;
+
 export async function createObservation(
-  input: CreateObservationInput,
+  input: CreateObservationRequestInput,
 ): Promise<CreateObservationResponse> {
   const response = await fetch("/api/observations", {
     method: "POST",
@@ -83,7 +94,26 @@ export async function createObservation(
     const body = (await response.json().catch(() => null)) as { error?: string } | null;
     throw new Error(body?.error || `Request failed with status ${response.status}`);
   }
-  return response.json() as Promise<CreateObservationResponse>;
+  const body = (await response.json()) as CreateObservationResponse & {
+    observation: CreateObservationResponse["observation"] & {
+      scopeType?: NonNullable<
+        CreateObservationResponse["observation"]["scope"]
+      >["type"];
+      className?: string | null;
+      subjectName?: string | null;
+    };
+  };
+  return {
+    ...body,
+    observation: {
+      ...body.observation,
+      scope: body.observation.scope ?? {
+        type: body.observation.scopeType ?? "INDIVIDUAL",
+        className: body.observation.className ?? null,
+        subjectName: body.observation.subjectName ?? null,
+      },
+    },
+  };
 }
 
 export async function updateObservation(

@@ -1,8 +1,11 @@
 import { Pool } from 'pg';
+import { resolveDatabaseUrl } from '@/lib/database-url';
+
+const databaseUrl = resolveDatabaseUrl();
 
 // Create a connection pool for PostgreSQL
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: databaseUrl,
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
