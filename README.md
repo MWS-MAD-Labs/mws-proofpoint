@@ -44,6 +44,7 @@ See the [v0.2.0 release notes](https://github.com/MWS-MAD-Labs/mws-proofpoint/re
 - Decimal scores from `1.0` through `4.0` with weighted calculations.
 - Workflow-aware score comparison: direct self-assessments show Self versus Director, while manager-led appraisals show Manager versus Director.
 - Director score proposals, evidence, comments, approval, and return feedback.
+- Server-side final-score reconciliation before administrative release and result-email delivery.
 - Staff acknowledgement of finalized appraisal results.
 - Immutable workflow snapshots for in-flight appraisals.
 - Lifecycle audit history through `assessment_updates`.
@@ -110,7 +111,9 @@ flowchart TD
 
 Self-assessments are automatically matched or created for eligible staff. Staff complete scores and evidence, after which the configured manager, director, and administrative review path applies to the assessment.
 
-A direct self-assessment is identified by a self-led assessment with no assigned manager. Its approved result uses the employee's self-ratings as the base and applies Director ratings as item-level overrides. Director review screens and print reports label the comparison as Self versus Director, use the same KPI and domain weights at every level, and show only the Director approval signature. Manager-led staff appraisals retain their Manager versus Director comparison and manager/director signature flow.
+A direct self-assessment is identified by a self-led assessment with no assigned manager. Its approved result uses the employee's self-ratings as the base and applies Director ratings as item-level overrides. Director review screens, employee result screens, and print reports label the comparison as Self versus Director, use the same KPI and domain weights at every level, and show only the Director approval signature. Manager-led staff appraisals retain their Manager versus Director comparison and manager/director signature flow.
+
+Administrative release recalculates the canonical final score from stored ratings and rubric weights inside the release transaction, persists the corresponding grade, and only then sends the staff result email. This prevents stale client-calculated scores from appearing on acknowledgment pages or in email notifications.
 
 Legacy assessments without a workflow snapshot retain their established lifecycle for backward compatibility.
 
