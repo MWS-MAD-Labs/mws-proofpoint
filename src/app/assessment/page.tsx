@@ -178,8 +178,24 @@ function AssessmentContent() {
     setIsCreating(false);
   };
 
+  const isDirectSelfAssessment =
+    !assessment?.permissions?.isManagerLed &&
+    assessment?.manager_id === null;
+
+  const finalResultDomains = isDirectSelfAssessment
+    ? domains.map((domain) => ({
+        ...domain,
+        standards: domain.standards.map((standard) => ({
+          ...standard,
+          kpis: standard.kpis.map((kpi) => ({
+            ...kpi,
+            managerScore: kpi.directorScore ?? kpi.score,
+          })),
+        })),
+      }))
+    : domains;
   const weightedScore = calculateWeightedScore(domains, "staff");
-  const finalWeightedScore = calculateWeightedScore(domains, "manager");
+  const finalWeightedScore = calculateWeightedScore(finalResultDomains, "manager");
 
   // Loading State
   if (assessmentId && assessmentLoading) {
@@ -713,8 +729,10 @@ function AssessmentContent() {
                   <ReviewComparisonSection
                     key={domain.id}
                     readonly={true}
-                    managerOnly={Boolean(assessment?.permissions?.isManagerLed)}
+                    managerOnly={Boolean(assessment?.permissions?.isManagerLed || isDirectSelfAssessment)}
+                    directorMode={isDirectSelfAssessment}
                     reviewerLabel="Director"
+                    comparisonLabel={isDirectSelfAssessment ? "Self" : "Manager"}
                     assessmentId={assessment?.id}
                     section={{
                       ...domain,
@@ -725,8 +743,8 @@ function AssessmentContent() {
                           description: k.description || "",
                           staffScore: k.score,
                           staffEvidence: k.evidence,
-                          managerScore: k.managerScore ?? null,
-                          managerEvidence: k.managerEvidence ?? "",
+                          managerScore: isDirectSelfAssessment ? k.score : (k.managerScore ?? null),
+                          managerEvidence: isDirectSelfAssessment ? k.evidence : (k.managerEvidence ?? ""),
                           directorScore: k.directorScore ?? null,
                           directorEvidence: k.directorEvidence ?? "",
                         })),
@@ -748,12 +766,14 @@ function AssessmentContent() {
                     </CardTitle>
                   </div>
                   <CardDescription className="text-base mt-2">
-                    Final feedback from your manager and director.
+                    {isDirectSelfAssessment
+                      ? "Final feedback from your director."
+                      : "Final feedback from your manager and director."}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-8 px-8 pb-10">
                   <div className="space-y-6">
-                    {managerFeedback && (
+                    {!isDirectSelfAssessment && managerFeedback && (
                       <div className="relative">
                         <div className="absolute top-0 left-0 h-full w-1 rounded-full bg-primary/20" />
                         <div className="pl-6 py-2">
@@ -943,7 +963,7 @@ function AssessmentContent() {
             {/* Only show Final Score if authorized */}
             {showComparison && (
               <WeightedScoreDisplay
-                domains={domains}
+                domains={finalResultDomains}
                 score={finalWeightedScore}
                 label="Final Score"
                 type="manager"

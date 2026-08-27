@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { query, queryOne } from "@/lib/db";
+import { pool, query } from "@/lib/db";
 import { triggerNotification } from "@/lib/notifications";
+import { calculateStoredAssessmentFinalResult } from "@/features/assessments/server/final-score";
 
 interface SessionUserWithRoles {
   roles?: string[];
@@ -86,40 +87,83 @@ export async function PUT(request: Request) {
     }
 
     if (action === "release") {
-      const updated = await queryOne(
-        `UPDATE assessments
-                 SET status = 'admin_reviewed',
-                     updated_at = now()
-                 WHERE id = $1
-                 RETURNING *`,
-        [id],
-      );
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const existing = await client.query(
+          "SELECT id FROM assessments WHERE id = $1 FOR UPDATE",
+          [id],
+        );
+        if (existing.rowCount === 0) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({ error: "Assessment not found" }, { status: 404 });
+        }
 
-      // Trigger notification to staff member
-      if (updated) {
+        const finalResult = await calculateStoredAssessmentFinalResult(client, id);
+        if (!finalResult) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            { error: "Unable to calculate the final score from stored ratings" },
+            { status: 400 },
+          );
+        }
+
+        const updatedResult = await client.query(
+          `UPDATE assessments
+           SET status = 'admin_reviewed',
+               final_score = $2,
+               final_grade = $3,
+               updated_at = now()
+           WHERE id = $1
+           RETURNING *`,
+          [id, finalResult.score, finalResult.grade],
+        );
+        await client.query("COMMIT");
+        const updated = updatedResult.rows[0];
+
         triggerNotification({
           assessmentId: id,
           type: "admin_released",
         }).catch((error) => {
           console.error("[API] Admin release notification failed:", error);
         });
-      }
 
-      return NextResponse.json({ data: updated });
+        return NextResponse.json({ data: updated });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
     }
 
     if (action === "release_all") {
-      // Release all assessments with 'director_approved' status
-      const updated = await query<{ id: string }>(
-        `UPDATE assessments
-                 SET status = 'admin_reviewed',
-                     updated_at = now()
-                 WHERE status = 'director_approved'
-                 RETURNING id`,
-      );
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const pending = await client.query<{ id: string }>(
+          "SELECT id FROM assessments WHERE status = 'director_approved' ORDER BY created_at FOR UPDATE",
+        );
+        const updated: Array<{ id: string }> = [];
 
-      // Trigger notifications for all released assessments
-      if (updated && updated.length > 0) {
+        for (const assessment of pending.rows) {
+          const finalResult = await calculateStoredAssessmentFinalResult(client, assessment.id);
+          if (!finalResult) {
+            throw new Error(`Unable to calculate final score for assessment ${assessment.id}`);
+          }
+          await client.query(
+            `UPDATE assessments
+             SET status = 'admin_reviewed',
+                 final_score = $2,
+                 final_grade = $3,
+                 updated_at = now()
+             WHERE id = $1`,
+            [assessment.id, finalResult.score, finalResult.grade],
+          );
+          updated.push({ id: assessment.id });
+        }
+        await client.query("COMMIT");
+
         for (const assessment of updated) {
           triggerNotification({
             assessmentId: assessment.id,
@@ -131,9 +175,14 @@ export async function PUT(request: Request) {
             );
           });
         }
-      }
 
-      return NextResponse.json({ data: updated, count: updated?.length || 0 });
+        return NextResponse.json({ data: updated, count: updated.length });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
