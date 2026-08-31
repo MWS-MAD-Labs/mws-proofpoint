@@ -55,7 +55,9 @@ function getLetterGrade(score: number): {
   description: string;
   bonusPayout: number;
 } {
-  if (score >= 3.9)
+  const roundedScore = Number(score.toFixed(2));
+
+  if (roundedScore >= 3.9)
     return {
       grade: "★",
       label: "Exemplary",
@@ -63,7 +65,7 @@ function getLetterGrade(score: number): {
         "Outstanding performance that exceeds expectations across all domains.",
       bonusPayout: 100,
     };
-  if (score >= 3.6)
+  if (roundedScore >= 3.6)
     return {
       grade: "◆",
       label: "Trail Blazers",
@@ -71,28 +73,28 @@ function getLetterGrade(score: number): {
         "High-performing individuals who go beyond role expectations.",
       bonusPayout: 90,
     };
-  if (score >= 3.4)
+  if (roundedScore >= 3.4)
     return {
       grade: "▲",
       label: "Rising Star",
       description: "Employees showing significant growth and potential.",
       bonusPayout: 80,
     };
-  if (score >= 3.2)
+  if (roundedScore >= 3.2)
     return {
       grade: "●",
       label: "Solid Foundation",
       description: "Reliably meets role expectations.",
       bonusPayout: 65,
     };
-  if (score >= 3.0)
+  if (roundedScore >= 3.0)
     return {
       grade: "◐",
       label: "Developing",
       description: "Entry level grade, expected to progress.",
       bonusPayout: 50,
     };
-  if (score >= 2.8)
+  if (roundedScore >= 2.8)
     return {
       grade: "○",
       label: "Needs Improvement",
