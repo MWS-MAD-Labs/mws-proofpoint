@@ -50,12 +50,14 @@ export function shouldReconcileFinalScore(
 }
 
 export function getGradeFromScore(score: number): string {
-  if (score >= 3.9) return "Exemplary";
-  if (score >= 3.6) return "Trail Blazers";
-  if (score >= 3.4) return "Rising Star";
-  if (score >= 3.2) return "Solid Foundation";
-  if (score >= 3.0) return "Developing Under Guidance";
-  if (score >= 2.8) return "Needs Improvement";
-  if (score >= 2.6) return "Performance Management";
+  const roundedScore = Number(score.toFixed(2));
+
+  if (roundedScore >= 3.9) return "Exemplary";
+  if (roundedScore >= 3.6) return "Trail Blazers";
+  if (roundedScore >= 3.4) return "Rising Star";
+  if (roundedScore >= 3.2) return "Solid Foundation";
+  if (roundedScore >= 3.0) return "Developing Under Guidance";
+  if (roundedScore >= 2.8) return "Needs Improvement";
+  if (roundedScore >= 2.6) return "Performance Management";
   return "Below Threshold";
 }

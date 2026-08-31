@@ -823,13 +823,15 @@ export interface PerformanceDetails {
 }
 
 export function getPerformanceDetails(score: number): PerformanceDetails {
-  if (score >= 3.9) return { grade: "★", label: "Exemplary",               description: "Outstanding performance that exceeds expectations across all domains. Recognizes employees who consistently demonstrate innovation, leadership, and exceptional contributions.", bonusPayout: 100 };
-  if (score >= 3.6) return { grade: "◆", label: "Trail Blazers",           description: "High-performing individuals who go beyond role expectations and actively contribute to team and organizational success. Strong candidates for leadership development.", bonusPayout: 90 };
-  if (score >= 3.4) return { grade: "▲", label: "Rising Star",             description: "Employees showing significant growth and potential. Consistently meets expectations with notable areas of excellence. On track for advancement with continued development.", bonusPayout: 80 };
-  if (score >= 3.2) return { grade: "●", label: "Solid Foundation",        description: "Reliably meets role expectations and demonstrates competence across key performance areas. A stable contributor who forms the backbone of the team.", bonusPayout: 65 };
-  if (score >= 3.0) return { grade: "◐", label: "Developing Under Guidance",description: "Entry level grade. Contract employees are expected to progress to Solid Foundation within 1 year, permanent employees within 2 years, or risk being bumped down to Needs Improvement.", bonusPayout: 50 };
-  if (score >= 2.8) return { grade: "○", label: "Needs Improvement",       description: "This grade can be given a maximum of two times. By the third PA, staff must have progressed to the next grade, or they will be bumped down to Performance Management.", bonusPayout: 40 };
-  if (score >= 2.6) return { grade: "!", label: "Performance Management",  description: "At least 6 months, but no more than 1 year, depending on urgency. If staff does not improve, they will likely be let go from their role in the school.", bonusPayout: 10 };
+  const roundedScore = Number(score.toFixed(2));
+
+  if (roundedScore >= 3.9) return { grade: "★", label: "Exemplary",               description: "Outstanding performance that exceeds expectations across all domains. Recognizes employees who consistently demonstrate innovation, leadership, and exceptional contributions.", bonusPayout: 100 };
+  if (roundedScore >= 3.6) return { grade: "◆", label: "Trail Blazers",           description: "High-performing individuals who go beyond role expectations and actively contribute to team and organizational success. Strong candidates for leadership development.", bonusPayout: 90 };
+  if (roundedScore >= 3.4) return { grade: "▲", label: "Rising Star",             description: "Employees showing significant growth and potential. Consistently meets expectations with notable areas of excellence. On track for advancement with continued development.", bonusPayout: 80 };
+  if (roundedScore >= 3.2) return { grade: "●", label: "Solid Foundation",        description: "Reliably meets role expectations and demonstrates competence across key performance areas. A stable contributor who forms the backbone of the team.", bonusPayout: 65 };
+  if (roundedScore >= 3.0) return { grade: "◐", label: "Developing Under Guidance",description: "Entry level grade. Contract employees are expected to progress to Solid Foundation within 1 year, permanent employees within 2 years, or risk being bumped down to Needs Improvement.", bonusPayout: 50 };
+  if (roundedScore >= 2.8) return { grade: "○", label: "Needs Improvement",       description: "This grade can be given a maximum of two times. By the third PA, staff must have progressed to the next grade, or they will be bumped down to Performance Management.", bonusPayout: 40 };
+  if (roundedScore >= 2.6) return { grade: "!", label: "Performance Management",  description: "At least 6 months, but no more than 1 year, depending on urgency. If staff does not improve, they will likely be let go from their role in the school.", bonusPayout: 10 };
   return            { grade: "—", label: "Below Threshold",                description: "Performance is critically below acceptable standards. Immediate intervention and a formal performance improvement plan are required.", bonusPayout: 0 };
 }
 
