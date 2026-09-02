@@ -47,9 +47,10 @@ interface ReviewComparisonSectionProps {
   managerOnly?: boolean;
   directorMode?: boolean;
   showDirectorComparison?: boolean;
+  changesRequireRevision?: boolean;
 }
 
-export function ReviewComparisonSection({ section, onIndicatorChange, readonly, reviewerLabel = "Manager", comparisonLabel = "Manager", index, managerOnly = false, directorMode = false, showDirectorComparison = false }: ReviewComparisonSectionProps) {
+export function ReviewComparisonSection({ section, onIndicatorChange, readonly, reviewerLabel = "Manager", comparisonLabel = "Manager", index, managerOnly = false, directorMode = false, showDirectorComparison = false, changesRequireRevision = true }: ReviewComparisonSectionProps) {
   const managerScore = average(section, "manager");
   const directorScore = average(section, "director");
   const totalKPIs = section.standards.reduce((total, standard) => total + standard.kpis.length, 0);
@@ -68,7 +69,7 @@ export function ReviewComparisonSection({ section, onIndicatorChange, readonly, 
           </div>
           <div className="mr-3 hidden items-center gap-4 sm:flex">
             {managerScore !== null && <div className="text-right"><p className="font-mono text-lg font-black text-primary">{managerScore.toFixed(2)}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">{comparisonLabel}</p></div>}
-            {(directorMode || showDirectorComparison) && directorScore !== null && <div className="text-right"><p className={cn("font-mono text-lg font-black", directorScore !== managerScore && "text-warning-foreground")}>{directorScore.toFixed(2)}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Director</p></div>}
+            {(directorMode || showDirectorComparison) && directorScore !== null && <div className="text-right"><p className={cn("font-mono text-lg font-black", changesRequireRevision && directorScore !== managerScore && "text-warning-foreground")}>{directorScore.toFixed(2)}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Director</p></div>}
           </div>
         </div>
       </AccordionTrigger>
@@ -91,6 +92,7 @@ export function ReviewComparisonSection({ section, onIndicatorChange, readonly, 
                     managerOnly={managerOnly}
                     directorMode={directorMode}
                     showDirectorComparison={showDirectorComparison}
+                    changesRequireRevision={changesRequireRevision}
                   />
                 ))}
               </div>
