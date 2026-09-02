@@ -1,11 +1,16 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { getObservationSession } from "@/features/observations/server/auth";
+import {
+  dateOnlyToIso,
+  normalizeDateOnly,
+} from "@/features/observations/server/dates";
 import { pool, query, queryOne } from "@/lib/db";
 
 import { parseObservationListQuery } from "@/features/observations/schemas";
 import { queryObservationList } from "@/features/observations/server/queries";
 import type { CreateObservationResponse } from "@/features/observations/types";
+import { utcDateValue } from "@/features/observations/utils";
 
 interface PersonRow {
   id: string;
@@ -65,6 +70,7 @@ function parseDate(value: unknown, field: string, required = false): Date | null
   return date;
 }
 
+
 function parseStaffIds(body: CreateObservationRequest): string[] {
   const hasStaffId = Object.prototype.hasOwnProperty.call(body, "staffId");
   const hasStaffIds = Object.prototype.hasOwnProperty.call(body, "staffIds");
@@ -109,11 +115,6 @@ function parseScope(
   return { scopeType, className, subjectName };
 }
 
-function startOfToday(): Date {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
-}
 
 export async function GET(req: Request) {
   const session = await getObservationSession();
@@ -175,12 +176,12 @@ export async function POST(req: Request) {
     const title = optionalText(body.title, 200);
     const description = optionalText(body.description, 2000);
     const observationDate = parseDate(body.observationDate, "Observation date");
-    const dueAt = parseDate(body.dueAt, "Due date", true)!;
+    const dueAt = normalizeDateOnly(body.dueAt, "Due date", { required: true })!;
     const scope = parseScope(body, staffIds.length);
-    if (dueAt < startOfToday()) {
+    if (dueAt < utcDateValue()) {
       return NextResponse.json({ error: "Due date cannot be in the past." }, { status: 400 });
     }
-    if (observationDate && dueAt < observationDate) {
+    if (observationDate && dueAt < observationDate.toISOString().slice(0, 10)) {
       return NextResponse.json(
         { error: "Due date cannot precede the observation date." },
         { status: 400 },
@@ -299,7 +300,7 @@ export async function POST(req: Request) {
         `INSERT INTO observations
            (id, "staffId", "managerId", template_id, status, title, description,
             observation_date, due_at, scope_type, class_name, subject_name, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())`,
+         VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8::date, $9, $10, $11, NOW(), NOW())`,
         [
           observationId,
           legacyStaffId,
@@ -347,7 +348,7 @@ export async function POST(req: Request) {
         title,
         description,
         observationDate: observationDate?.toISOString() ?? null,
-        dueAt: dueAt.toISOString(),
+        dueAt: dateOnlyToIso(dueAt)!,
         scopeType: scope.scopeType,
         className: scope.className,
         subjectName: scope.subjectName,

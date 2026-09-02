@@ -7,6 +7,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   ArrowLeft,
+  CalendarDays,
   Check,
   CheckCircle2,
   Clock3,
@@ -41,7 +42,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { submitObservation } from "../api/queries";
+import { submitObservation, updateObservation } from "../api/queries";
 import { observationKeys } from "../api/queryKeys";
 import { useObservationSaveState } from "../hooks/useObservationSaveState";
 import type {
@@ -60,6 +61,7 @@ import {
 import {
   formatRelativeDate,
   observationScopeSummary,
+  utcDateValue,
   participantSummary,
 } from "../utils";
 import { getObservationDetailParticipants } from "../detailPresentation";
@@ -81,6 +83,7 @@ const EMPTY_VALUE: DraftValue = {
   selectedOption: "",
 };
 
+
 export function ObservationFormEditor({
   detail,
 }: {
@@ -92,6 +95,7 @@ export function ObservationFormEditor({
   const participants = getObservationDetailParticipants(observation);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [participantsOpen, setParticipantsOpen] = useState(false);
+  const [dueDate, setDueDate] = useState(observation.dueAt?.slice(0, 10) ?? "");
   const [drafts, setDrafts] = useState<DraftValues>(() =>
     Object.fromEntries(
       observation.rubric.sections.flatMap((section) =>
@@ -161,6 +165,19 @@ export function ObservationFormEditor({
       ),
     [drafts, observation.rubric.sections],
   );
+
+  const updateDueDate = useMutation({
+    mutationFn: () => updateObservation(observation.id, { dueAt: dueDate }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: observationKeys.detail(observation.id) }),
+        queryClient.invalidateQueries({ queryKey: observationKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: observationKeys.summary() }),
+      ]);
+      toast.success("Due date updated.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   const submit = useMutation({
     mutationFn: () => submitObservation(observation.id),
@@ -258,8 +275,12 @@ export function ObservationFormEditor({
     );
   }
 
+  const dueDatePassed = Boolean(dueDate && dueDate < utcDateValue());
+  const dueDateChanged = dueDate !== (observation.dueAt?.slice(0, 10) ?? "");
   const canSubmit =
     incomplete.length === 0 &&
+    !dueDatePassed &&
+    !dueDateChanged &&
     !saveState.hasPendingChanges &&
     !submit.isPending;
 
@@ -286,16 +307,47 @@ export function ObservationFormEditor({
             <p className="mt-2 text-sm text-muted-foreground">
               Observing {participantSummary(participants)} · {observationScopeSummary(observation.scope)} · Required responses save automatically.
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-4"
-              onClick={() => setParticipantsOpen(true)}
-            >
-              <UsersRound className="h-4 w-4" />
-              Manage observed teachers
-            </Button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setParticipantsOpen(true)}
+              >
+                <UsersRound className="h-4 w-4" />
+                Manage observed teachers
+              </Button>
+              <div className="flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                <Label htmlFor="draft-due-date" className="sr-only">Due date</Label>
+                <Input
+                  id="draft-due-date"
+                  type="date"
+                  min={utcDateValue()}
+                  value={dueDate}
+                  onChange={(event) => setDueDate(event.target.value)}
+                  className="h-9 w-auto"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!dueDate || !dueDateChanged || dueDatePassed || updateDueDate.isPending}
+                  onClick={() => updateDueDate.mutate()}
+                >
+                  {updateDueDate.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update due date"}
+                </Button>
+              </div>
+            </div>
+            {dueDatePassed && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Due date has passed</AlertTitle>
+                <AlertDescription>
+                  This draft is not overdue, but it cannot be submitted until you select and save a new due date.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
           <div className="min-w-56 rounded-xl bg-muted/40 p-4">
             <div className="flex items-center justify-between text-sm">
@@ -439,6 +491,8 @@ export function ObservationFormEditor({
         failedCount={saveState.failedCount}
         pending={saveState.hasPendingChanges}
         canSubmit={canSubmit}
+        dueDatePassed={dueDatePassed}
+        dueDateChanged={dueDateChanged}
         submitting={submit.isPending}
         onIndicator={scrollTo}
         participantCount={participants.length}
@@ -883,6 +937,8 @@ function ReviewDialog({
   failedCount,
   pending,
   canSubmit,
+  dueDatePassed,
+  dueDateChanged,
   submitting,
   onIndicator,
   participantCount,
@@ -896,6 +952,8 @@ function ReviewDialog({
   failedCount: number;
   pending: boolean;
   canSubmit: boolean;
+  dueDatePassed: boolean;
+  dueDateChanged: boolean;
   submitting: boolean;
   onIndicator: (id: string) => void;
   participantCount: number;
@@ -926,6 +984,24 @@ function ReviewDialog({
           <ReviewMetric label="Optional unanswered" value={optionalUnanswered} />
           <ReviewMetric label="Save failures" value={failedCount} />
         </div>
+        {dueDatePassed && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Update the due date before submitting</AlertTitle>
+            <AlertDescription>
+              A draft is not marked overdue after its due date passes, but submission is blocked until a new due date is saved.
+            </AlertDescription>
+          </Alert>
+        )}
+        {dueDateChanged && !dueDatePassed && (
+          <Alert>
+            <CalendarDays className="h-4 w-4" />
+            <AlertTitle>Save the new due date</AlertTitle>
+            <AlertDescription>
+              Update the due date above before submitting the observation.
+            </AlertDescription>
+          </Alert>
+        )}
         {pending && failedCount === 0 && (
           <Alert>
             <Loader2 className="h-4 w-4 animate-spin" />

@@ -57,6 +57,8 @@ See the [v0.2.0 release notes](https://github.com/MWS-MAD-Labs/mws-proofpoint/re
 - Draft and reopened observation privacy enforced on the server.
 - Submitted observation visibility with read-only staff acknowledgement.
 - Reopen, reassignment, submission, and acknowledgement lifecycle controls.
+- Draft observations remain in progress rather than overdue after their due date; submission requires moving an expired due date forward.
+- Observation due dates are preserved and displayed as timezone-stable calendar dates.
 - Role-scoped lists, search, summary counts, filters, and pagination.
 - Notification support for observation lifecycle events.
 - Configurable acknowledgement reminders after 3 days and every 2 days thereafter.

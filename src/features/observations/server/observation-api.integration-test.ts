@@ -173,15 +173,19 @@ async function insertFixture(): Promise<Fixture> {
   );
 
   const now = new Date();
-  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
   const stale = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000);
   const currentMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 2, 12));
   const observationIds: string[] = [];
 
   const records = [
     {
-      title: `${prefix}-01-overdue-draft`,
+      title: `${prefix}-01-past-due-draft`,
       staffId: staffAId,
       managerId: managerAId,
       status: "draft",
@@ -192,12 +196,12 @@ async function insertFixture(): Promise<Fixture> {
       acknowledgedAt: null,
     },
     {
-      title: `${prefix}-02-submitted`,
+      title: `${prefix}-02-overdue-submitted`,
       staffId: staffAId,
       managerId: managerAId,
       status: "submitted",
       observationDate: now,
-      dueAt: tomorrow,
+      dueAt: yesterday,
       updatedAt: now,
       submittedAt: now,
       acknowledgedAt: null,
@@ -417,17 +421,25 @@ test("Phase 1 list and summary queries enforce role scope, filters, pagination, 
     assert.equal(staffBList.pagination.total, 1);
     assert.ok(adminList.data.every((item) => !("answers" in item)));
     assert.equal(
-      managerList.data.find((item) => item.title?.includes("overdue-draft"))?.progress
+      managerList.data.find((item) => item.title?.includes("past-due-draft"))?.progress
         ?.requiredAnswered,
       1,
     );
     assert.equal(
-      staffList.data.some((item) => item.title?.includes("overdue-draft")),
+      staffList.data.some((item) => item.title?.includes("past-due-draft")),
       false,
     );
     assert.equal(
-      directorList.data.find((item) => item.title?.includes("overdue-draft"))?.progress,
+      directorList.data.find((item) => item.title?.includes("past-due-draft"))?.progress,
       null,
+    );
+    assert.equal(
+      adminList.data.find((item) => item.title?.includes("past-due-draft"))?.isOverdue,
+      false,
+    );
+    assert.equal(
+      adminList.data.find((item) => item.title?.includes("overdue-submitted"))?.isOverdue,
+      true,
     );
 
     const filterCases: Array<[string, Record<string, unknown>, number]> = [
@@ -526,11 +538,12 @@ test("Phase 1 list and summary queries enforce role scope, filters, pagination, 
       awaitingAcknowledgement: 1,
       completed: 8,
       actionRequired: 1,
+      overdue: 1,
       completedThisMonth: 8,
     });
     assert.equal(
       [...staffSummary.needsAttention, ...staffSummary.recent].some((item) =>
-        item.title?.includes("overdue-draft"),
+        item.title?.includes("past-due-draft"),
       ),
       false,
     );
@@ -547,6 +560,42 @@ test("Phase 1 list and summary queries enforce role scope, filters, pagination, 
         ],
       );
     }
+
+    setObservationTestActor(fixture.managerA);
+    const expiredSubmitResponse = await submitObservationRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${fixture.observationIds[0]}/submit`,
+        "PATCH",
+      ) as Parameters<typeof submitObservationRoute>[0],
+      { params: Promise.resolve({ id: fixture.observationIds[0] }) },
+    );
+    assert.equal(expiredSubmitResponse.status, 409);
+    assert.equal(
+      (await responseBody<{ code?: string }>(expiredSubmitResponse)).code,
+      "DUE_DATE_PASSED",
+    );
+
+    const futureDueAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const updateDueDateResponse = await updateObservationRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${fixture.observationIds[0]}`,
+        "PATCH",
+        { dueAt: futureDueAt },
+      ) as Parameters<typeof updateObservationRoute>[0],
+      { params: Promise.resolve({ id: fixture.observationIds[0] }) },
+    );
+    assert.equal(updateDueDateResponse.status, 200);
+
+    const validSubmitResponse = await submitObservationRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${fixture.observationIds[0]}/submit`,
+        "PATCH",
+      ) as Parameters<typeof submitObservationRoute>[0],
+      { params: Promise.resolve({ id: fixture.observationIds[0] }) },
+    );
+    assert.equal(validSubmitResponse.status, 200);
   } finally {
     if (fixture) await cleanupFixture(fixture);
   }
@@ -1180,6 +1229,28 @@ test("Phase 6 routes enforce creation rules, privacy, lifecycle, reassignment, a
       createdResponse,
     );
     fixture.observationIds.push(created.observation.id);
+
+    const expectedDueAt = `${dueAt.slice(0, 10)}T00:00:00.000Z`;
+    const metadataUpdateResponse = await updateObservationRoute(
+      jsonRequest(
+        `http://localhost/api/observations/${created.observation.id}`,
+        "PATCH",
+        { description: "Updated without changing the due date" },
+      ) as Parameters<typeof updateObservationRoute>[0],
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(metadataUpdateResponse.status, 200);
+
+    const preservedDueDateResponse = await getObservationRoute(
+      new NextRequest(`http://localhost/api/observations/${created.observation.id}`),
+      { params: Promise.resolve({ id: created.observation.id }) },
+    );
+    assert.equal(preservedDueDateResponse.status, 200);
+    assert.equal(
+      (await responseBody<{ observation: { dueAt: string | null } }>(preservedDueDateResponse))
+        .observation.dueAt,
+      expectedDueAt,
+    );
 
     for (const invalidBody of [null, [], { managerId: null }, { managerId: 123 }]) {
       const invalidUpdateResponse = await updateObservationRoute(

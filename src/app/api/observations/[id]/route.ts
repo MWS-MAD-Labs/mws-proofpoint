@@ -8,6 +8,10 @@ import { pool, query, queryOne } from "@/lib/db";
 import { getObservationPermissions } from "@/features/observations/server/permissions";
 import { normalizeObservationStatus } from "@/features/observations/server/lifecycle";
 import { calculateObservationProgress } from "@/features/observations/server/validation";
+import {
+  dateOnlyToIso,
+  normalizeDateOnly,
+} from "@/features/observations/server/dates";
 import { randomUUID } from "crypto";
 import { notifyObservationReassigned } from "@/lib/notifications/observation-notifications";
 import type {
@@ -34,7 +38,7 @@ interface ObservationRow {
   createdAt: Date | string;
   updatedAt: Date | string;
   observationDate: Date | string | null;
-  dueAt: Date | string | null;
+  dueAt: string | null;
   reopenedAt: Date | string | null;
   submittedAt: Date | string | null;
   acknowledgedAt: Date | string | null;
@@ -172,7 +176,7 @@ interface ObservationPatchRow {
   title: string | null;
   description: string | null;
   observationDate: Date | string | null;
-  dueAt: Date | string | null;
+  dueAt: string | null;
   scopeType: ObservationScopeType;
   className: string | null;
   subjectName: string | null;
@@ -380,7 +384,7 @@ export async function PATCH(
         `SELECT
            o.id, o."managerId", o.template_id AS "templateId", o.status,
            o.title, o.description, o.observation_date AS "observationDate",
-           o.due_at AS "dueAt",
+           o.due_at::date::text AS "dueAt",
            COALESCE(o.scope_type, 'INDIVIDUAL')::text AS "scopeType",
            o.class_name AS "className", o.subject_name AS "subjectName",
            rt.name AS "rubricName", mu.email AS "managerEmail",
@@ -583,11 +587,13 @@ export async function PATCH(
           ? new Date(observation.observationDate)
           : null;
       const dueAt = body.dueAt !== undefined
-        ? patchDate(body.dueAt, "Due date")
-        : observation.dueAt
-          ? new Date(observation.dueAt)
-          : null;
-      if (observationDate && dueAt && dueAt < observationDate) {
+        ? normalizeDateOnly(body.dueAt, "Due date")
+        : observation.dueAt;
+      if (
+        observationDate &&
+        dueAt &&
+        dueAt < observationDate.toISOString().slice(0, 10)
+      ) {
         await client.query("ROLLBACK");
         return NextResponse.json(
           { error: "Due date cannot precede the observation date." },
@@ -623,7 +629,7 @@ export async function PATCH(
       await client.query(
         `UPDATE observations
          SET "staffId" = $2, "managerId" = $3, title = $4, description = $5,
-             observation_date = $6, due_at = $7, scope_type = $8,
+             observation_date = $6, due_at = $7::date, scope_type = $8,
              class_name = $9, subject_name = $10, updated_at = NOW()
          WHERE id = $1`,
         [
@@ -849,7 +855,7 @@ export async function GET(
          o.created_at      AS "createdAt",
          o.updated_at      AS "updatedAt",
          o.observation_date AS "observationDate",
-         o.due_at          AS "dueAt",
+         o.due_at::date::text AS "dueAt",
          o.reopened_at     AS "reopenedAt",
          o.submitted_at    AS "submittedAt",
          o.acknowledged_at AS "acknowledgedAt",
@@ -1152,7 +1158,7 @@ export async function GET(
       createdAt: serializeDate(observation.createdAt),
       updatedAt: serializeDate(observation.updatedAt),
       observationDate: serializeNullableDate(observation.observationDate),
-      dueAt: serializeNullableDate(observation.dueAt),
+      dueAt: dateOnlyToIso(observation.dueAt),
       reopenedAt: serializeNullableDate(observation.reopenedAt),
       submittedAt: serializeNullableDate(observation.submittedAt),
       acknowledgedAt:
