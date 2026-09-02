@@ -28,11 +28,13 @@ import {
     FolderTree,
     Plus,
     Clock,
+    RotateCcw,
 
     FileText,
     BellRing
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { api } from '@/lib/api-client';
 
 import { useToast } from '@/hooks/use-toast';
@@ -108,6 +110,8 @@ function AdminContent() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('users');
+    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+    const [actionPending, setActionPending] = useState(false);
 
     // Modal states
     const [userModalOpen, setUserModalOpen] = useState(false);
@@ -121,6 +125,7 @@ function AdminContent() {
     // Delete confirmation
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [itemToDelete, setItemToDelete] = useState<{ type: 'user' | 'department'; item: User | Department; permanent?: boolean } | null>(null);
+    const [bulkUserAction, setBulkUserAction] = useState<{ userIds: string[]; permanent: boolean } | null>(null);
 
 
     const fetchData = useCallback(async () => {
@@ -160,38 +165,93 @@ function AdminContent() {
         void fetchData();
     }, [fetchData]);
 
+    useEffect(() => {
+        setSelectedUserIds([]);
+    }, [searchTerm]);
+
     const filteredUsers = users.filter(u =>
         u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         u.email?.toLowerCase().includes(searchTerm.toLowerCase())
     );
+    const filteredUserIds = filteredUsers.map(user => user.id);
+    const allFilteredUsersSelected = filteredUserIds.length > 0 && filteredUserIds.every(id => selectedUserIds.includes(id));
+    const someFilteredUsersSelected = filteredUserIds.some(id => selectedUserIds.includes(id));
+    const selectedSuspendedUserIds = users
+        .filter(user => selectedUserIds.includes(user.id) && user.status === 'suspended')
+        .map(user => user.id);
 
+    const toggleAllFilteredUsers = (checked: boolean) => {
+        setSelectedUserIds(current => checked
+            ? [...new Set([...current, ...filteredUserIds])]
+            : current.filter(id => !filteredUserIds.includes(id))
+        );
+    };
 
     const handleDeleteConfirm = async () => {
-        if (!itemToDelete) return;
+        if (!itemToDelete && !bulkUserAction) return;
 
+        setActionPending(true);
         let result;
-        if (itemToDelete.type === 'user') {
+        if (bulkUserAction) {
+            result = await api.deleteUsers(bulkUserAction.userIds, bulkUserAction.permanent);
+        } else if (itemToDelete?.type === 'user') {
             result = await api.deleteUser((itemToDelete.item as User).id, itemToDelete.permanent);
         } else {
-            result = await api.deleteDepartment((itemToDelete.item as Department).id);
+            result = await api.deleteDepartment((itemToDelete?.item as Department).id);
         }
 
         if (result.error) {
             toast({
-                title: "Error",
-                description: String(result.error),
+                title: "Action failed",
+                description: result.error.message,
                 variant: "destructive",
             });
         } else {
+            const userCount = bulkUserAction?.userIds.length ?? 1;
             toast({
                 title: "Success",
-                description: `${itemToDelete.type === 'user' ? (itemToDelete.permanent ? 'User permanently deleted' : 'User suspended') : 'Department deleted'} successfully.`,
+                description: bulkUserAction
+                    ? `${userCount} user${userCount === 1 ? '' : 's'} ${bulkUserAction.permanent ? 'deleted' : 'suspended'} successfully.`
+                    : `${itemToDelete?.type === 'user' ? (itemToDelete.permanent ? 'User deleted' : 'User suspended') : 'Department deleted'} successfully.`,
             });
-            fetchData();
+            setSelectedUserIds([]);
+            await fetchData();
         }
 
+        setActionPending(false);
         setDeleteConfirmOpen(false);
         setItemToDelete(null);
+        setBulkUserAction(null);
+    };
+
+    const handleReactivateUser = async (user: User) => {
+        setActionPending(true);
+        const result = await api.updateUser(user.id, { status: 'active' });
+        if (result.error) {
+            toast({ title: 'Unable to reactivate user', description: result.error.message, variant: 'destructive' });
+        } else {
+            toast({ title: 'User reactivated', description: `${user.full_name || user.email} can access the system again.` });
+            await fetchData();
+        }
+        setActionPending(false);
+    };
+
+    const handleBulkReactivate = async () => {
+        if (selectedSuspendedUserIds.length === 0) return;
+
+        setActionPending(true);
+        const result = await api.updateUsersStatus(selectedSuspendedUserIds, 'active');
+        if (result.error) {
+            toast({ title: 'Unable to reactivate users', description: result.error.message, variant: 'destructive' });
+        } else {
+            toast({
+                title: 'Users reactivated',
+                description: `${selectedSuspendedUserIds.length} user${selectedSuspendedUserIds.length === 1 ? '' : 's'} can access the system again.`,
+            });
+            setSelectedUserIds([]);
+            await fetchData();
+        }
+        setActionPending(false);
     };
 
     const getRoleBadge = (roles: unknown) => {
@@ -343,24 +403,65 @@ function AdminContent() {
                     <Card className="glass-panel border-border/30 overflow-hidden">
                         <div className="h-1 bg-gradient-to-r from-destructive/30 via-destructive to-destructive/30" />
                         <CardHeader>
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                     <CardTitle className="flex items-center gap-2">
                                         <Settings2 className="h-5 w-5 text-destructive" />
                                         User Management
                                     </CardTitle>
-                                    <CardDescription>Manage user accounts, roles, and department assignments</CardDescription>
+                                    <CardDescription>Manage user accounts, roles, status, and department assignments</CardDescription>
                                 </div>
-                                <Button
-                                    className="glow-primary"
-                                    onClick={() => {
-                                        setEditingUser(null);
-                                        setUserModalOpen(true);
-                                    }}
-                                >
-                                    <UserPlus className="h-4 w-4 mr-2" />
-                                    Add User
-                                </Button>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {selectedUserIds.length > 0 && (
+                                        <>
+                                            <span className="text-sm font-medium text-muted-foreground">{selectedUserIds.length} selected</span>
+                                            {selectedSuspendedUserIds.length > 0 && (
+                                                <Button
+                                                    variant="outline"
+                                                    disabled={actionPending}
+                                                    onClick={() => void handleBulkReactivate()}
+                                                >
+                                                    <RotateCcw className="mr-2 h-4 w-4" />
+                                                    Reactivate ({selectedSuspendedUserIds.length})
+                                                </Button>
+                                            )}
+                                            <Button
+                                                variant="outline"
+                                                disabled={actionPending}
+                                                onClick={() => {
+                                                    setBulkUserAction({ userIds: selectedUserIds, permanent: false });
+                                                    setItemToDelete(null);
+                                                    setDeleteConfirmOpen(true);
+                                                }}
+                                            >
+                                                <Clock className="mr-2 h-4 w-4" />
+                                                Suspend
+                                            </Button>
+                                            <Button
+                                                variant="destructive"
+                                                disabled={actionPending}
+                                                onClick={() => {
+                                                    setBulkUserAction({ userIds: selectedUserIds, permanent: true });
+                                                    setItemToDelete(null);
+                                                    setDeleteConfirmOpen(true);
+                                                }}
+                                            >
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                Delete
+                                            </Button>
+                                        </>
+                                    )}
+                                    <Button
+                                        className="glow-primary"
+                                        onClick={() => {
+                                            setEditingUser(null);
+                                            setUserModalOpen(true);
+                                        }}
+                                    >
+                                        <UserPlus className="h-4 w-4 mr-2" />
+                                        Add User
+                                    </Button>
+                                </div>
                             </div>
                         </CardHeader>
                         <CardContent>
@@ -380,7 +481,15 @@ function AdminContent() {
                                     <Table>
                                         <TableHeader className="bg-muted/50">
                                             <TableRow>
+                                                <TableHead className="w-12">
+                                                    <Checkbox
+                                                        aria-label="Select all visible users"
+                                                        checked={allFilteredUsersSelected ? true : someFilteredUsersSelected ? 'indeterminate' : false}
+                                                        onCheckedChange={(checked) => toggleAllFilteredUsers(checked === true)}
+                                                    />
+                                                </TableHead>
                                                 <TableHead className="w-[250px]">User</TableHead>
+                                                <TableHead>Status</TableHead>
                                                 <TableHead>NIY</TableHead>
                                                 <TableHead>Job Title</TableHead>
                                                 <TableHead>Department</TableHead>
@@ -390,7 +499,21 @@ function AdminContent() {
                                         </TableHeader>
                                         <TableBody>
                                             {filteredUsers.map((user) => (
-                                                <TableRow key={user.id} className="hover:bg-muted/30 transition-colors">
+                                                <TableRow
+                                                    key={user.id}
+                                                    data-state={selectedUserIds.includes(user.id) ? 'selected' : undefined}
+                                                    className={user.status === 'suspended' ? 'bg-warning-soft/30 hover:bg-warning-soft/50' : 'hover:bg-muted/30 transition-colors'}
+                                                >
+                                                    <TableCell>
+                                                        <Checkbox
+                                                            aria-label={`Select ${user.full_name || user.email}`}
+                                                            checked={selectedUserIds.includes(user.id)}
+                                                            onCheckedChange={(checked) => setSelectedUserIds(current => checked === true
+                                                                ? [...current, user.id]
+                                                                : current.filter(id => id !== user.id)
+                                                            )}
+                                                        />
+                                                    </TableCell>
                                                     <TableCell className="font-medium">
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
@@ -404,6 +527,17 @@ function AdminContent() {
                                                                 </span>
                                                             </div>
                                                         </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge
+                                                            variant="outline"
+                                                            className={user.status === 'suspended'
+                                                                ? 'border-warning/50 bg-warning-soft text-warning-foreground'
+                                                                : 'border-success/50 bg-success-soft text-success'
+                                                            }
+                                                        >
+                                                            {user.status === 'suspended' ? 'Suspended' : 'Active'}
+                                                        </Badge>
                                                     </TableCell>
                                                     <TableCell>
                                                         <code className="text-xs bg-muted px-2 py-1 rounded">
@@ -443,19 +577,32 @@ function AdminContent() {
                                                                     Edit User
                                                                 </DropdownMenuItem>
                                                                 <DropdownMenuSeparator className="bg-border/50" />
-                                                                <DropdownMenuItem
-                                                                    className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer rounded-md font-semibold"
-                                                                    onClick={() => {
-                                                                        setItemToDelete({ type: 'user', item: user, permanent: false });
-                                                                        setDeleteConfirmOpen(true);
-                                                                    }}
-                                                                >
-                                                                    <Clock className="h-4 w-4 mr-2" />
-                                                                    Suspend User
-                                                                </DropdownMenuItem>
+                                                                {user.status === 'suspended' ? (
+                                                                    <DropdownMenuItem
+                                                                        className="cursor-pointer rounded-md font-semibold text-success focus:bg-success-soft focus:text-success"
+                                                                        disabled={actionPending}
+                                                                        onClick={() => void handleReactivateUser(user)}
+                                                                    >
+                                                                        <RotateCcw className="h-4 w-4 mr-2" />
+                                                                        Reactivate User
+                                                                    </DropdownMenuItem>
+                                                                ) : (
+                                                                    <DropdownMenuItem
+                                                                        className="cursor-pointer rounded-md font-semibold text-warning-foreground focus:bg-warning-soft focus:text-warning-foreground"
+                                                                        onClick={() => {
+                                                                            setBulkUserAction(null);
+                                                                            setItemToDelete({ type: 'user', item: user, permanent: false });
+                                                                            setDeleteConfirmOpen(true);
+                                                                        }}
+                                                                    >
+                                                                        <Clock className="h-4 w-4 mr-2" />
+                                                                        Suspend User
+                                                                    </DropdownMenuItem>
+                                                                )}
                                                                 <DropdownMenuItem
                                                                     className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer rounded-md font-bold"
                                                                     onClick={() => {
+                                                                        setBulkUserAction(null);
                                                                         setItemToDelete({ type: 'user', item: user, permanent: true });
                                                                         setDeleteConfirmOpen(true);
                                                                     }}
@@ -513,7 +660,7 @@ function AdminContent() {
                                     roleAssignments={roleAssignments}
                                     onCreateDepartment={() => { setEditingDept(null); setDeptModalOpen(true); }}
                                     onEditDepartment={(department) => { setEditingDept(department); setDeptModalOpen(true); }}
-                                    onDeleteDepartment={(department) => { setItemToDelete({ type: "department", item: department }); setDeleteConfirmOpen(true); }}
+                                    onDeleteDepartment={(department) => { setBulkUserAction(null); setItemToDelete({ type: "department", item: department }); setDeleteConfirmOpen(true); }}
                                     onManageRole={manageRoleAssignment}
                                     onEditUser={(userId) => {
                                         const user = users.find((candidate) => candidate.id === userId);
@@ -562,29 +709,52 @@ function AdminContent() {
             />
 
             {/* Delete Confirmation */}
-            <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+            <AlertDialog
+                open={deleteConfirmOpen}
+                onOpenChange={(open) => {
+                    setDeleteConfirmOpen(open);
+                    if (!open && !actionPending) {
+                        setItemToDelete(null);
+                        setBulkUserAction(null);
+                    }
+                }}
+            >
                 <AlertDialogContent className="glass-panel-strong">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2">
                             <AlertTriangle className="h-5 w-5 text-destructive" />
-                            Confirm {itemToDelete?.type === 'user' ? (itemToDelete.permanent ? 'Permanent Deletion' : 'Suspension') : 'Deletion'}
+                            {bulkUserAction
+                                ? `Confirm Bulk ${bulkUserAction.permanent ? 'Deletion' : 'Suspension'}`
+                                : `Confirm ${itemToDelete?.type === 'user' ? (itemToDelete.permanent ? 'Permanent Deletion' : 'Suspension') : 'Deletion'}`
+                            }
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                            {itemToDelete?.type === 'user'
-                                ? itemToDelete.permanent
-                                    ? `Are you sure you want to PERMANENTLY DELETE ${(itemToDelete.item as User).full_name || 'this user'}? This will remove all their data and cannot be undone.`
-                                    : `Are you sure you want to suspend ${(itemToDelete.item as User).full_name || 'this user'}? They will no longer be able to access the system.`
-                                : `Are you sure you want to delete the "${(itemToDelete?.item as Department)?.name}" department? This action cannot be undone.`
+                            {bulkUserAction
+                                ? bulkUserAction.permanent
+                                    ? `Delete ${bulkUserAction.userIds.length} selected user accounts? Their sign-in details and profile information will be permanently anonymized, while required historical records are retained. This cannot be undone.`
+                                    : `Suspend ${bulkUserAction.userIds.length} selected user accounts? They will no longer be able to access the system until an administrator reactivates them.`
+                                : itemToDelete?.type === 'user'
+                                    ? itemToDelete.permanent
+                                        ? `Permanently delete ${(itemToDelete.item as User).full_name || 'this user'}? Their sign-in details and profile information will be anonymized, while required historical records are retained. This cannot be undone.`
+                                        : `Suspend ${(itemToDelete.item as User).full_name || 'this user'}? They will no longer be able to access the system until an administrator reactivates them.`
+                                    : `Are you sure you want to delete the "${(itemToDelete?.item as Department)?.name}" department? This action cannot be undone.`
                             }
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel disabled={actionPending}>Cancel</AlertDialogCancel>
                         <AlertDialogAction
                             onClick={handleDeleteConfirm}
+                            disabled={actionPending}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
-                            {itemToDelete?.type === 'user' ? (itemToDelete.permanent ? 'Delete Permanently' : 'Suspend User') : 'Delete Department'}
+                            {actionPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {bulkUserAction
+                                ? `${bulkUserAction.permanent ? 'Delete' : 'Suspend'} ${bulkUserAction.userIds.length} Users`
+                                : itemToDelete?.type === 'user'
+                                    ? (itemToDelete.permanent ? 'Delete Permanently' : 'Suspend User')
+                                    : 'Delete Department'
+                            }
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

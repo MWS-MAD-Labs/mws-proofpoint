@@ -294,7 +294,7 @@ class ApiClient {
     full_name?: string;
     niy?: string;
     job_title?: string;
-    department_id?: string;
+    department_id?: string | null;
     roles?: string[];
   }): Promise<ApiResponse<unknown>> {
     return this.request("/admin/users", { method: "POST", body: JSON.stringify(data) });
@@ -304,7 +304,7 @@ class ApiClient {
     full_name?: string;
     niy?: string;
     job_title?: string;
-    department_id?: string;
+    department_id?: string | null;
     roles?: string[];
     password?: string;
     status?: string;
@@ -312,8 +312,22 @@ class ApiClient {
     return this.request("/admin/users", { method: "PUT", body: JSON.stringify({ id, ...data }) });
   }
 
+  async updateUsersStatus(userIds: string[], status: "active"): Promise<ApiResponse<unknown>> {
+    return this.request("/admin/users", {
+      method: "PUT",
+      body: JSON.stringify({ userIds, status }),
+    });
+  }
+
   async deleteUser(userId: string, permanent = false): Promise<ApiResponse<unknown>> {
     return this.request(`/admin/users?userId=${userId}${permanent ? "&permanent=true" : ""}`, { method: "DELETE" });
+  }
+
+  async deleteUsers(userIds: string[], permanent = false): Promise<ApiResponse<unknown>> {
+    return this.request("/admin/users", {
+      method: "DELETE",
+      body: JSON.stringify({ userIds, permanent }),
+    });
   }
 
   // Admin - Departments (extended)

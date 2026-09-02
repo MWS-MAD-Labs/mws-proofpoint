@@ -4,6 +4,7 @@ import Google from "next-auth/providers/google";
 import bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import { pool, queryOne } from "@/lib/db";
+import { refreshAuthToken } from "@/lib/auth-token";
 
 interface DbCredentialUser {
   id: string;
@@ -55,7 +56,7 @@ async function getAuthUserById(userId: string) {
          FROM users u
          LEFT JOIN profiles p ON p.user_id = u.id
          LEFT JOIN user_roles ur ON ur.user_id = u.id
-         WHERE u.id = $1
+         WHERE u.id = $1 AND u.status = 'active'
          GROUP BY u.id, p.full_name, p.department_id`,
     [userId],
   );
@@ -75,7 +76,7 @@ async function getAuthUserByEmail(email: string) {
          FROM users u
          LEFT JOIN profiles p ON p.user_id = u.id
          LEFT JOIN user_roles ur ON ur.user_id = u.id
-         WHERE LOWER(u.email) = LOWER($1)
+         WHERE LOWER(u.email) = LOWER($1) AND u.status = 'active'
          GROUP BY u.id, p.full_name, p.department_id`,
     [email],
   );
@@ -181,7 +182,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         // Find user by email
         const user = await queryOne<DbCredentialUser>(
-          "SELECT id, email, password_hash FROM users WHERE LOWER(email) = LOWER($1)",
+          "SELECT id, email, password_hash FROM users WHERE LOWER(email) = LOWER($1) AND status = 'active'", 
           [email],
         );
 
@@ -253,7 +254,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       console.log("SignIn Callback: Successful for", googleEmail);
       return true;
     },
-    async jwt({ token, user, account }) {
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
         token.roles = (user as { roles?: string[] }).roles ?? [];
@@ -262,19 +263,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
 
       const tokenEmail = typeof token.email === "string" ? token.email : null;
-      const shouldHydrateToken =
-        (!token.id || account?.provider === "google") && !!tokenEmail;
-
-      if (shouldHydrateToken) {
-        const dbUser = await getAuthUserByEmail(tokenEmail);
-        if (dbUser) {
-          token.id = dbUser.id;
-          token.roles = dbUser.roles ?? [];
-          token.departmentId = dbUser.department_id ?? null;
-        }
-      }
-
-      return token;
+      return refreshAuthToken(
+        token,
+        async () => {
+          const dbUser = token.id
+            ? await getAuthUserById(String(token.id))
+            : tokenEmail
+              ? await getAuthUserByEmail(tokenEmail)
+              : null;
+          return dbUser
+            ? {
+                id: dbUser.id,
+                roles: dbUser.roles,
+                departmentId: dbUser.department_id,
+              }
+            : null;
+        },
+        (error) => console.error("Unable to refresh authenticated user; retaining current session token:", error),
+      );
     },
     async session({ session, token }) {
       if (session.user) {

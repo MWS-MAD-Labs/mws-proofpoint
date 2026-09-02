@@ -6,6 +6,12 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
 import type { Prisma } from "@prisma/client";
+import {
+  buildUserProfileUpdate,
+  normalizeUserIds,
+  validateBulkReactivationStatus,
+  validateUserActionTargets,
+} from "./user-updates";
 
 interface SessionUserWithRoles {
   roles?: string[];
@@ -139,22 +145,42 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
 
     const body = await request.json();
-    const { id, full_name, niy, job_title, department_id, roles, password, status } = body;
+    const { id, userIds, full_name, niy, job_title, department_id, roles, password, status } = body;
+    const bulkUserIds = normalizeUserIds(userIds);
+
+    if (bulkUserIds.length > 0) {
+      const statusError = validateBulkReactivationStatus(status);
+      if (statusError)
+        return NextResponse.json({ error: statusError.error }, { status: statusError.status });
+
+      const existingUsers = await prisma.user.findMany({
+        where: { id: { in: bulkUserIds }, status: { not: "deleted" } },
+        select: { id: true },
+      });
+      const targetError = validateUserActionTargets(
+        bulkUserIds,
+        existingUsers.map((user) => user.id),
+      );
+      if (targetError)
+        return NextResponse.json({ error: targetError.error }, { status: targetError.status });
+
+      const result = await prisma.user.updateMany({
+        where: { id: { in: bulkUserIds }, status: "suspended" },
+        data: { status: "active" },
+      });
+      return NextResponse.json({
+        message: `${result.count} user${result.count === 1 ? "" : "s"} reactivated`,
+        count: result.count,
+      });
+    }
 
     if (!id)
       return NextResponse.json({ error: "User ID required" }, { status: 400 });
 
-    const finalDeptId = (department_id === "" || department_id === "none") ? null : department_id ?? null;
-
     await prisma.$transaction(async (tx) => {
       await tx.profile.updateMany({
         where: { userId: id },
-        data: {
-          fullName:     full_name ?? undefined,
-          niy:          niy       ?? undefined,
-          jobTitle:     job_title ?? undefined,
-          departmentId: finalDeptId,
-        },
+        data: buildUserProfileUpdate({ full_name, niy, job_title, department_id }),
       });
 
       if (password) {
@@ -201,25 +227,77 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
 
     const { searchParams } = new URL(request.url);
-    const userId   = searchParams.get("userId");
+    const userId = searchParams.get("userId");
     const permanent = searchParams.get("permanent") === "true";
+    const body = await request.json().catch(() => null) as { userIds?: unknown; permanent?: unknown } | null;
+    const userIds = userId ? [userId] : normalizeUserIds(body?.userIds);
+    const shouldDeletePermanently = body?.permanent === true || permanent;
+    const requestError = validateUserActionTargets(userIds, userIds, {
+      currentUserId: adminCheck.session.user.id,
+      preventSelfAction: true,
+    });
+    if (requestError)
+      return NextResponse.json({ error: requestError.error }, { status: requestError.status });
 
-    if (!userId)
-      return NextResponse.json({ error: "User ID required" }, { status: 400 });
+    const existingUsers = await prisma.user.findMany({
+      where: { id: { in: userIds }, status: { not: "deleted" } },
+      select: { id: true },
+    });
+    const existingUserIds = existingUsers.map((user) => user.id);
 
-    if (userId === adminCheck.session.user.id)
-      return NextResponse.json({ error: "Cannot delete yourself" }, { status: 400 });
+    const targetError = validateUserActionTargets(userIds, existingUserIds);
+    if (targetError)
+      return NextResponse.json({ error: targetError.error }, { status: targetError.status });
 
-    if (permanent) {
-      await prisma.user.delete({ where: { id: userId } });
-      return NextResponse.json({ message: "User permanently deleted" });
-    } else {
-      await prisma.user.update({ where: { id: userId }, data: { status: "suspended" } });
-      return NextResponse.json({ message: "User suspended" });
+    if (shouldDeletePermanently) {
+      const passwordHash = await bcrypt.hash(randomUUID(), 10);
+
+      await prisma.$transaction(async (tx) => {
+        await tx.userRole.deleteMany({ where: { userId: { in: existingUserIds } } });
+        await tx.departmentRoleMembership.deleteMany({ where: { userId: { in: existingUserIds } } });
+
+        for (const id of existingUserIds) {
+          const deletedEmail = `deleted-${id}@deleted.invalid`;
+          await tx.profile.updateMany({
+            where: { userId: id },
+            data: {
+              email: deletedEmail,
+              fullName: null,
+              niy: null,
+              jobTitle: null,
+              departmentId: null,
+              avatarUrl: null,
+            },
+          });
+          await tx.user.update({
+            where: { id },
+            data: {
+              email: deletedEmail,
+              passwordHash,
+              status: "deleted",
+              emailVerified: false,
+            },
+          });
+        }
+      });
+
+      return NextResponse.json({
+        message: existingUserIds.length === 1 ? "User permanently deleted" : `${existingUserIds.length} users permanently deleted`,
+        count: existingUserIds.length,
+      });
     }
+
+    await prisma.user.updateMany({
+      where: { id: { in: existingUserIds } },
+      data: { status: "suspended" },
+    });
+    return NextResponse.json({
+      message: existingUserIds.length === 1 ? "User suspended" : `${existingUserIds.length} users suspended`,
+      count: existingUserIds.length,
+    });
   } catch (error) {
     console.error("Delete user error:", error);
-    return NextResponse.json({ error: "Failed to delete user" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to update the selected accounts" }, { status: 500 });
   }
 }
 

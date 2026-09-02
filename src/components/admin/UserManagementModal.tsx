@@ -111,7 +111,7 @@ export function UserManagementModal({
         setSaving(true);
 
         try {
-            const finalDeptId = formData.department_id === 'none' ? undefined : formData.department_id;
+            const finalDeptId = formData.department_id === 'none' ? null : formData.department_id;
 
             if (isEditMode && user) {
                 const { error: updateError } = await api.updateUser(user.id, {
