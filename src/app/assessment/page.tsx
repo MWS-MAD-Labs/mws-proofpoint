@@ -731,6 +731,7 @@ function AssessmentContent() {
                     readonly={true}
                     managerOnly={Boolean(assessment?.permissions?.isManagerLed || isDirectSelfAssessment)}
                     directorMode={isDirectSelfAssessment}
+                    changesRequireRevision={!isDirectSelfAssessment}
                     reviewerLabel="Director"
                     comparisonLabel={isDirectSelfAssessment ? "Self" : "Manager"}
                     assessmentId={assessment?.id}

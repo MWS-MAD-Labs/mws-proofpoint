@@ -119,16 +119,18 @@ function DirectorContent() {
     !assessment?.permissions?.isManagerLed &&
     assessment?.manager_id === null;
 
-  const directorChanges = domains.flatMap((domain) =>
-    domain.standards.flatMap((standard) =>
-      standard.kpis.filter((kpi) => {
-        const submittedScore = isDirectSelfAssessment ? kpi.score : kpi.managerScore;
-        return kpi.directorScore !== null &&
-          kpi.directorScore !== undefined &&
-          kpi.directorScore !== submittedScore;
-      }),
-    ),
-  );
+  const directorChanges = isDirectSelfAssessment
+    ? []
+    : domains.flatMap((domain) =>
+        domain.standards.flatMap((standard) =>
+          standard.kpis.filter(
+            (kpi) =>
+              kpi.directorScore !== null &&
+              kpi.directorScore !== undefined &&
+              kpi.directorScore !== kpi.managerScore,
+          ),
+        ),
+      );
   const directorChangesHaveFeedback = directorChanges.every(
     (kpi) => typeof kpi.directorEvidence === "string" && kpi.directorEvidence.trim(),
   );
@@ -767,6 +769,7 @@ function DirectorContent() {
                   readonly={isReadOnly}
                   managerOnly={Boolean(assessment?.permissions?.isManagerLed || isDirectSelfAssessment)}
                   directorMode={true}
+                  changesRequireRevision={!isDirectSelfAssessment}
                   reviewerLabel="Director"
                   comparisonLabel={isDirectSelfAssessment ? "Self" : "Manager"}
                   assessmentId={assessment?.id}
@@ -943,14 +946,18 @@ function DirectorContent() {
               <Alert className="bg-success/5 border-success/10">
                 <ShieldCheck className="h-4 w-4 text-success" />
                 <AlertTitle className="text-sm font-semibold">
-                  {isDirectorReviewAndApproval
-                    ? "Director Review & Approval"
-                    : "Director Approval"}
+                  {isDirectSelfAssessment
+                    ? "Director Final Assessment"
+                    : isDirectorReviewAndApproval
+                      ? "Director Review & Approval"
+                      : "Director Approval"}
                 </AlertTitle>
                 <AlertDescription className="text-xs">
-                  {directorChanges.length > 0
-                    ? "Score changes require a return for manager revision. Add feedback only to the changed items, then return the appraisal."
-                    : "Compare the manager's appraisal and approve it, or propose changes and return it for revision."}
+                  {isDirectSelfAssessment
+                    ? "Adjust the self-assessment scores if needed, then approve to finalize the appraisal."
+                    : directorChanges.length > 0
+                      ? "Score changes require a return for manager revision. Add feedback only to the changed items, then return the appraisal."
+                      : "Compare the manager's appraisal and approve it, or propose changes and return it for revision."}
                 </AlertDescription>
               </Alert>
             </div>
