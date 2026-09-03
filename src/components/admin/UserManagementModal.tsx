@@ -12,20 +12,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
 import { api } from '@/lib/api-client';
 
-interface Department {
-    id: string;
-    name: string;
+interface OrganizationAssignment {
+    department_role_id: string;
+    department_id: string | null;
+    department_name: string | null;
+    role: string;
 }
 
 interface User {
@@ -34,8 +29,7 @@ interface User {
     full_name: string | null;
     niy: string | null;
     job_title: string | null;
-    department_id: string | null;
-    department_name: string | null;
+    assignments: OrganizationAssignment[];
     roles: string[];
     status: string;
 }
@@ -44,17 +38,13 @@ interface UserManagementModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     user?: User | null; // null = create mode, User = edit mode
-    departments: Department[];
     onSuccess: () => void;
 }
-
-const AVAILABLE_ROLES = ['admin', 'staff', 'manager', 'director'] as const;
 
 export function UserManagementModal({
     open,
     onOpenChange,
     user,
-    departments,
     onSuccess,
 }: UserManagementModalProps) {
     const isEditMode = !!user;
@@ -65,8 +55,6 @@ export function UserManagementModal({
         full_name: '',
         niy: '',
         job_title: '',
-        department_id: 'none',
-        roles: ['staff'] as string[],
     });
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
@@ -79,8 +67,6 @@ export function UserManagementModal({
                 full_name: user.full_name || '',
                 niy: user.niy || '',
                 job_title: user.job_title || '',
-                department_id: user.department_id || 'none',
-                roles: user.roles?.length ? user.roles : ['staff'],
             });
         } else {
             setFormData({
@@ -89,21 +75,11 @@ export function UserManagementModal({
                 full_name: '',
                 niy: '',
                 job_title: '',
-                department_id: 'none',
-                roles: ['staff'],
             });
         }
         setError('');
     }, [user, open]);
 
-    const handleRoleToggle = (role: string) => {
-        setFormData(prev => ({
-            ...prev,
-            roles: prev.roles.includes(role)
-                ? prev.roles.filter(r => r !== role)
-                : [...prev.roles, role],
-        }));
-    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -111,15 +87,11 @@ export function UserManagementModal({
         setSaving(true);
 
         try {
-            const finalDeptId = formData.department_id === 'none' ? undefined : formData.department_id;
-
             if (isEditMode && user) {
                 const { error: updateError } = await api.updateUser(user.id, {
                     full_name: formData.full_name || undefined,
                     niy: formData.niy || undefined,
                     job_title: formData.job_title || undefined,
-                    department_id: finalDeptId,
-                    roles: formData.roles,
                     password: formData.password || undefined,
                 });
                 if (updateError) throw updateError;
@@ -133,8 +105,6 @@ export function UserManagementModal({
                     full_name: formData.full_name || undefined,
                     niy: formData.niy || undefined,
                     job_title: formData.job_title || undefined,
-                    department_id: finalDeptId,
-                    roles: formData.roles,
                 });
                 if (createError) throw createError;
             }
@@ -157,8 +127,8 @@ export function UserManagementModal({
                     </DialogTitle>
                     <DialogDescription>
                         {isEditMode
-                            ? 'Update user information and role assignments.'
-                            : 'Add a new user to the system with their initial configuration.'}
+                            ? 'Update account and personal profile information.'
+                            : 'Add a new account. Department access is assigned after creation.'}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -231,44 +201,23 @@ export function UserManagementModal({
                         </div>
 
                         <div className="grid gap-2">
-                            <Label htmlFor="department">Department</Label>
-                            <Select
-                                value={formData.department_id}
-                                onValueChange={value => setFormData(prev => ({ ...prev, department_id: value }))}
-                            >
-                                <SelectTrigger className="glass-panel">
-                                    <SelectValue placeholder="Select department" />
-                                </SelectTrigger>
-                                <SelectContent className="glass-panel-strong">
-                                    <SelectItem value="none">No Department</SelectItem>
-                                    {departments.map(dept => (
-                                        <SelectItem key={dept.id} value={dept.id}>
-                                            {dept.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="grid gap-2">
-                            <Label>Roles</Label>
-                            <div className="flex flex-wrap gap-4 p-3 rounded-md border border-border/50 bg-muted/20">
-                                {AVAILABLE_ROLES.map(role => (
-                                    <label
-                                        key={role}
-                                        className="flex items-center gap-2 cursor-pointer text-sm"
-                                    >
-                                        <Checkbox
-                                            checked={formData.roles.includes(role)}
-                                            onCheckedChange={() => handleRoleToggle(role)}
-                                        />
-                                        <span className="capitalize">{role}</span>
-                                    </label>
-                                ))}
+                            <Label>Department and role assignments</Label>
+                            <div className="rounded-md border border-border/50 bg-muted/20 p-3">
+                                {user?.assignments?.length ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {user.assignments.map((assignment) => (
+                                            <Badge key={assignment.department_role_id} variant="secondary" className="capitalize">
+                                                {assignment.department_name ?? 'Global'} · {assignment.role}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm italic text-muted-foreground">No organizational assignments.</p>
+                                )}
+                                <p className="mt-3 text-xs text-muted-foreground">
+                                    Assignments are managed from Administration → Departments. A user can belong to more than one department.
+                                </p>
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                                Users can have multiple roles. Admin can be combined with other roles.
-                            </p>
                         </div>
                     </div>
 

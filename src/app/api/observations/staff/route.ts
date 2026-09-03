@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getObservationSession } from "@/features/observations/server/auth";
 import { query } from "@/lib/db";
+import { managerStaffScopeExistsSql } from "@/lib/organization-access";
 import type { ObservationCreationStaff } from "@/features/observations/types";
 
 interface StaffRow {
@@ -31,22 +32,29 @@ export async function GET() {
          u.id,
          u.email,
          p.full_name AS "fullName",
-         p.department_id AS "departmentId",
-         d.name AS "departmentName",
-         array_agg(DISTINCT all_roles.role::text ORDER BY all_roles.role::text)
-           FILTER (WHERE all_roles.role IS NOT NULL) AS roles
+         staff_department.department_id::text AS "departmentId",
+         staff_department.department_name AS "departmentName",
+         COALESCE((
+           SELECT array_agg(DISTINCT assigned_role.role::text ORDER BY assigned_role.role::text)
+             FROM department_role_memberships assigned_membership
+             JOIN department_roles assigned_role ON assigned_role.id = assigned_membership.department_role_id
+            WHERE assigned_membership.user_id = u.id
+         ), ARRAY[]::text[]) AS roles
        FROM users u
-       JOIN user_roles staff_role
-         ON staff_role.user_id = u.id AND staff_role.role = 'staff'
-       LEFT JOIN user_roles all_roles ON all_roles.user_id = u.id
        LEFT JOIN profiles p ON p.user_id = u.id
-       LEFT JOIN departments d ON d.id = p.department_id
+       JOIN LATERAL (
+         SELECT staff_role.department_id, d.name AS department_name
+           FROM department_role_memberships staff_membership
+           JOIN department_roles staff_role ON staff_role.id = staff_membership.department_role_id
+           JOIN departments d ON d.id = staff_role.department_id
+          WHERE staff_membership.user_id = u.id
+            AND staff_role.role::text = 'staff'
+            AND ($1::boolean = true OR ${managerStaffScopeExistsSql("u.id", "$2")})
+          ORDER BY d.name, staff_role.department_id
+          LIMIT 1
+       ) staff_department ON true
        WHERE u.status = 'active'
-         AND ($1::boolean = true OR p.department_id = (
-           SELECT department_id FROM profiles WHERE user_id = $2
-         ))
          AND ($1::boolean = true OR u.id <> $2)
-       GROUP BY u.id, u.email, p.full_name, p.department_id, d.name
        ORDER BY p.full_name ASC NULLS LAST, u.email ASC`,
       [isAdmin, session.user.id],
     );

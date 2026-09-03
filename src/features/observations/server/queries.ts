@@ -1,4 +1,5 @@
 import { query } from "@/lib/db";
+import { dateOnlyToIso } from "./dates";
 import {
   observationListQuerySchema,
   type ObservationListQuery,
@@ -44,7 +45,7 @@ interface ObservationListRow {
   created_at: Date | string;
   updated_at: Date | string;
   observation_date: Date | string | null;
-  due_at: Date | string | null;
+  due_at: string | null;
   submitted_at: Date | string | null;
   acknowledged_at: Date | string | null;
   scope_type: "INDIVIDUAL" | "CLASS" | "SUBJECT";
@@ -92,6 +93,8 @@ const statusExpression = `CASE
   WHEN o.status::text IN ('reviewed', 'submitted', 'acknowledged') THEN 'submitted'
   ELSE o.status::text
 END`;
+
+const overdueExpression = `COALESCE(((${statusExpression}) = 'submitted' AND o.due_at::date < (NOW() AT TIME ZONE 'UTC')::date), false)`;
 
 function toIso(value: Date | string | null): string | null {
   if (value === null) return null;
@@ -159,7 +162,7 @@ function buildActionRequiredExpression(
   actorParam: string | null,
 ): string {
   if (actor.roles.includes("admin")) {
-    return `((${statusExpression}) <> 'acknowledged' AND o.due_at < NOW()) OR o."managerId" IS NULL`;
+    return `(${overdueExpression}) OR o."managerId" IS NULL`;
   }
   if (actor.roles.includes("manager")) {
     const managerActions = `(o."managerId" = ${actorParam} AND (${statusExpression}) = 'draft')
@@ -179,14 +182,14 @@ function buildActionRequiredExpression(
           WHERE action_participant.observation_id = o.id
             AND action_participant.staff_id = ${actorParam}
         )
-        AND (${statusExpression}) <> 'acknowledged'
-        AND o.due_at < NOW()
+        AND (${statusExpression}) = 'submitted'
+        AND o.due_at::date < (NOW() AT TIME ZONE 'UTC')::date
       )`;
     }
     return managerActions;
   }
   if (actor.roles.includes("director")) {
-    return `((${statusExpression}) <> 'acknowledged' AND o.due_at < NOW())`;
+    return overdueExpression;
   }
   return `(EXISTS (
     SELECT 1 FROM observation_participants action_participant
@@ -231,10 +234,13 @@ export function buildListFilters(
       OR EXISTS (
         SELECT 1
         FROM observation_participants search_department_participant
-        JOIN profiles search_department_profile
-          ON search_department_profile.user_id = search_department_participant.staff_id
+        JOIN department_role_memberships search_department_membership
+          ON search_department_membership.user_id = search_department_participant.staff_id
+        JOIN department_roles search_department_role
+          ON search_department_role.id = search_department_membership.department_role_id
+         AND search_department_role.role::text = 'staff'
         JOIN departments search_department
-          ON search_department.id = search_department_profile.department_id
+          ON search_department.id = search_department_role.department_id
         WHERE search_department_participant.observation_id = o.id
           AND search_department.name ILIKE ${param}
       )
@@ -262,10 +268,13 @@ export function buildListFilters(
     clauses.push(`EXISTS (
       SELECT 1
       FROM observation_participants department_participant
-      JOIN profiles department_profile
-        ON department_profile.user_id = department_participant.staff_id
+      JOIN department_role_memberships department_membership
+        ON department_membership.user_id = department_participant.staff_id
+      JOIN department_roles department_role
+        ON department_role.id = department_membership.department_role_id
+       AND department_role.role::text = 'staff'
       WHERE department_participant.observation_id = o.id
-        AND department_profile.department_id = $${params.length}
+        AND department_role.department_id = $${params.length}
     )`);
   }
   if (input.rubricId) {
@@ -280,8 +289,9 @@ export function buildListFilters(
     );
   }
   if (input.overdue) {
-    const expression = `((${statusExpression}) <> 'acknowledged' AND o.due_at < NOW())`;
-    clauses.push(input.overdue === "true" ? expression : `NOT ${expression}`);
+    clauses.push(
+      input.overdue === "true" ? overdueExpression : `NOT ${overdueExpression}`,
+    );
   }
   if (input.from) {
     params.push(input.from);
@@ -368,7 +378,7 @@ function mapListItem(actor: ObservationActor, row: ObservationListRow): Observat
     createdAt: toIso(row.created_at)!,
     updatedAt: toIso(row.updated_at)!,
     observationDate: toIso(row.observation_date),
-    dueAt: toIso(row.due_at),
+    dueAt: dateOnlyToIso(row.due_at),
     submittedAt: toIso(row.submitted_at),
     acknowledgedAt: toIso(row.acknowledged_at),
     scope: {
@@ -429,12 +439,12 @@ export async function queryObservationList(
          o.created_at,
          o.updated_at,
          o.observation_date,
-         o.due_at,
+         o.due_at::date::text AS due_at,
          o.submitted_at,
          COALESCE(o.scope_type, 'INDIVIDUAL')::text AS scope_type,
          o.class_name,
          o.subject_name,
-         ((${statusExpression}) <> 'acknowledged' AND o.due_at < NOW()) AS is_overdue,
+         (${overdueExpression}) AS is_overdue,
          (((${statusExpression}) = 'draft' AND o.updated_at < NOW() - INTERVAL '${OBSERVATION_STALE_DAYS} days')
            OR ((${statusExpression}) = 'submitted' AND o.submitted_at < NOW() - INTERVAL '${OBSERVATION_STALE_DAYS} days')) AS is_stale,
          (${actionExpression}) AS action_required
@@ -465,15 +475,23 @@ export async function queryObservationList(
              op.staff_id,
              pu.email,
              pp.full_name,
-             pp.department_id,
-             pd.name AS department_name,
+             participant_department.department_id,
+             participant_department.department_name,
              op.acknowledged_at,
              op.acknowledgement_method,
              COALESCE(NULLIF(BTRIM(pp.full_name), ''), pu.email) AS sort_name
            FROM observation_participants op
            JOIN users pu ON pu.id = op.staff_id
            LEFT JOIN profiles pp ON pp.user_id = pu.id
-           LEFT JOIN departments pd ON pd.id = pp.department_id
+           LEFT JOIN LATERAL (
+             SELECT dr.department_id, d.name AS department_name
+               FROM department_role_memberships drm
+               JOIN department_roles dr ON dr.id = drm.department_role_id
+               JOIN departments d ON d.id = dr.department_id
+              WHERE drm.user_id = pu.id AND dr.role::text = 'staff'
+              ORDER BY d.name, dr.department_id
+              LIMIT 1
+           ) participant_department ON true
            WHERE op.observation_id = o.id
          ) ordered
        ) participant_data ON participant_data.participant_count > 0
@@ -560,7 +578,7 @@ export async function queryObservationList(
        COUNT(*) FILTER (WHERE (${statusExpression}) = 'submitted') AS awaiting_acknowledgement,
        COUNT(*) FILTER (WHERE (${statusExpression}) = 'acknowledged') AS completed,
        COUNT(*) FILTER (WHERE ${summaryActionExpression}) AS action_required,
-       COUNT(*) FILTER (WHERE (${statusExpression}) <> 'acknowledged' AND o.due_at < NOW()) AS overdue,
+       COUNT(*) FILTER (WHERE ${overdueExpression}) AS overdue,
        COUNT(*) FILTER (WHERE
          ((${statusExpression}) = 'draft' AND o.updated_at < NOW() - INTERVAL '${OBSERVATION_STALE_DAYS} days')
          OR ((${statusExpression}) = 'submitted' AND o.submitted_at < NOW() - INTERVAL '${OBSERVATION_STALE_DAYS} days')

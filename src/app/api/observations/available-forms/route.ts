@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getObservationSession } from "@/features/observations/server/auth";
 import { query, queryOne } from "@/lib/db";
+import { managerStaffScopeExistsSql } from "@/lib/organization-access";
 import type { ObservationCreationForm } from "@/features/observations/types";
 
 interface StaffAccessRow {
@@ -52,9 +53,13 @@ async function availableForms(value: unknown) {
     `SELECT
        u.id,
        u.status = 'active' AS "isActive",
-       bool_or(ur.role = 'staff') AS "hasStaffRole"
+       EXISTS (
+         SELECT 1
+           FROM department_role_memberships drm
+           JOIN department_roles dr ON dr.id = drm.department_role_id
+          WHERE drm.user_id = u.id AND dr.role::text = 'staff' AND dr.department_id IS NOT NULL
+       ) AS "hasStaffRole"
      FROM users u
-     LEFT JOIN user_roles ur ON ur.user_id = u.id
      WHERE u.id = ANY($1::uuid[])
      GROUP BY u.id, u.status`,
     [staffIds],
@@ -73,11 +78,7 @@ async function availableForms(value: unknown) {
     const outOfScope = await queryOne<{ count: number }>(
       `SELECT COUNT(*)::int AS count
        FROM UNNEST($1::uuid[]) AS selected(staff_id)
-       LEFT JOIN profiles staff_profile ON staff_profile.user_id = selected.staff_id
-       WHERE staff_profile.department_id IS NULL
-          OR staff_profile.department_id IS DISTINCT FROM (
-            SELECT manager_profile.department_id FROM profiles manager_profile WHERE manager_profile.user_id = $2
-          )`,
+       WHERE NOT ${managerStaffScopeExistsSql("selected.staff_id", "$2")}`,
       [staffIds, session.user.id],
     );
     if (!outOfScope || outOfScope.count > 0) {
@@ -94,11 +95,11 @@ async function availableForms(value: unknown) {
      ), eligible_assignments AS (
        SELECT DISTINCT selected.staff_id, rt.id AS rubric_id, wd.id AS workflow_id
        FROM selected_staff selected
-       JOIN profiles sp ON sp.user_id = selected.staff_id
-       JOIN user_roles sur ON sur.user_id = selected.staff_id
+       JOIN department_role_memberships drm ON drm.user_id = selected.staff_id
        JOIN department_roles dr
-         ON dr.role = sur.role
-        AND (dr.department_id = sp.department_id OR dr.department_id IS NULL)
+         ON dr.id = drm.department_role_id
+        AND dr.role::text = 'staff'
+        AND dr.department_id IS NOT NULL
        JOIN role_workflow_assignments rwa
          ON rwa.department_role_id = dr.id AND rwa.is_active = true
        JOIN rubric_templates rt

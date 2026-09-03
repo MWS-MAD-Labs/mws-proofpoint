@@ -6,15 +6,25 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
 import type { Prisma } from "@prisma/client";
+import {
+  buildUserProfileUpdate,
+  normalizeUserIds,
+  validateBulkReactivationStatus,
+  validateUserActionTargets,
+} from "./user-updates";
 
 interface SessionUserWithRoles {
   roles?: string[];
 }
 
-type UserWithProfileAndRoles = Prisma.UserGetPayload<{
+type UserWithOrganizationAssignments = Prisma.UserGetPayload<{
   include: {
-    profile: { include: { department: true } };
-    roles: true;
+    profile: true;
+    departmentRoleMemberships: {
+      include: {
+        departmentRole: { include: { department: true } };
+      };
+    };
   };
 }>;
 
@@ -41,8 +51,12 @@ export async function GET(request: Request) {
       const user = await prisma.user.findUnique({
         where: { id: userId },
         include: {
-          profile: { include: { department: true } },
-          roles: true,
+          profile: true,
+          departmentRoleMemberships: {
+            include: {
+              departmentRole: { include: { department: true } },
+            },
+          },
         },
       });
       if (!user) return NextResponse.json({ data: null });
@@ -52,8 +66,12 @@ export async function GET(request: Request) {
     const users = await prisma.user.findMany({
       where: { status: { not: "deleted" } },
       include: {
-        profile: { include: { department: true } },
-        roles: true,
+        profile: true,
+        departmentRoleMemberships: {
+          include: {
+            departmentRole: { include: { department: true } },
+          },
+        },
       },
       orderBy: { profile: { fullName: "asc" } },
     });
@@ -73,7 +91,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
 
     const body = await request.json();
-    const { email, password, full_name, niy, job_title, department_id, roles } = body;
+    const { email, password, full_name, niy, job_title } = body;
 
     if (!email || !password)
       return NextResponse.json({ error: "Email and password required" }, { status: 400 });
@@ -84,7 +102,6 @@ export async function POST(request: Request) {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const rolesArray = sanitizeRoles(roles);
 
     const newUser = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -104,24 +121,23 @@ export async function POST(request: Request) {
           fullName:     full_name     ?? null,
           niy:          niy           ?? null,
           jobTitle:     job_title     ?? null,
-          departmentId: department_id ?? null,
         },
       });
 
-      for (const role of rolesArray) {
-  await tx.$executeRawUnsafe(
-    `INSERT INTO user_roles (id, user_id, role, created_at)
-     VALUES ($1, $2, $3::app_role, NOW())`,
-    randomUUID(), user.id, role
-  );
-}
 
       return user;
     });
 
     const created = await prisma.user.findUnique({
       where: { id: newUser.id },
-      include: { profile: { include: { department: true } }, roles: true },
+      include: {
+        profile: true,
+        departmentRoleMemberships: {
+          include: {
+            departmentRole: { include: { department: true } },
+          },
+        },
+      },
     });
 
     return NextResponse.json({ data: formatUser(created!) }, { status: 201 });
@@ -139,22 +155,42 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
 
     const body = await request.json();
-    const { id, full_name, niy, job_title, department_id, roles, password, status } = body;
+    const { id, userIds, full_name, niy, job_title, password, status } = body;
+    const bulkUserIds = normalizeUserIds(userIds);
+
+    if (bulkUserIds.length > 0) {
+      const statusError = validateBulkReactivationStatus(status);
+      if (statusError)
+        return NextResponse.json({ error: statusError.error }, { status: statusError.status });
+
+      const existingUsers = await prisma.user.findMany({
+        where: { id: { in: bulkUserIds }, status: { not: "deleted" } },
+        select: { id: true },
+      });
+      const targetError = validateUserActionTargets(
+        bulkUserIds,
+        existingUsers.map((user) => user.id),
+      );
+      if (targetError)
+        return NextResponse.json({ error: targetError.error }, { status: targetError.status });
+
+      const result = await prisma.user.updateMany({
+        where: { id: { in: bulkUserIds }, status: "suspended" },
+        data: { status: "active" },
+      });
+      return NextResponse.json({
+        message: `${result.count} user${result.count === 1 ? "" : "s"} reactivated`,
+        count: result.count,
+      });
+    }
 
     if (!id)
       return NextResponse.json({ error: "User ID required" }, { status: 400 });
 
-    const finalDeptId = (department_id === "" || department_id === "none") ? null : department_id ?? null;
-
     await prisma.$transaction(async (tx) => {
       await tx.profile.updateMany({
         where: { userId: id },
-        data: {
-          fullName:     full_name ?? undefined,
-          niy:          niy       ?? undefined,
-          jobTitle:     job_title ?? undefined,
-          departmentId: finalDeptId,
-        },
+        data: buildUserProfileUpdate({ full_name, niy, job_title }),
       });
 
       if (password) {
@@ -166,24 +202,18 @@ export async function PUT(request: Request) {
         await tx.user.update({ where: { id }, data: { status } });
       }
 
-      if (roles) {
-        const rolesArray = sanitizeRoles(roles);
-        if (rolesArray.length > 0) {
-          await tx.userRole.deleteMany({ where: { userId: id } });
-for (const role of rolesArray) {
-  await tx.$executeRawUnsafe(
-    `INSERT INTO user_roles (id, user_id, role, created_at)
-     VALUES ($1, $2, $3::app_role, NOW())`,
-    randomUUID(), id, role
-  );
-}
-        }
-      }
     });
 
     const updated = await prisma.user.findUnique({
       where: { id },
-      include: { profile: { include: { department: true } }, roles: true },
+      include: {
+        profile: true,
+        departmentRoleMemberships: {
+          include: {
+            departmentRole: { include: { department: true } },
+          },
+        },
+      },
     });
 
     return NextResponse.json({ data: formatUser(updated!) });
@@ -201,53 +231,118 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
 
     const { searchParams } = new URL(request.url);
-    const userId   = searchParams.get("userId");
+    const userId = searchParams.get("userId");
     const permanent = searchParams.get("permanent") === "true";
+    const body = await request.json().catch(() => null) as { userIds?: unknown; permanent?: unknown } | null;
+    const userIds = userId ? [userId] : normalizeUserIds(body?.userIds);
+    const shouldDeletePermanently = body?.permanent === true || permanent;
+    const requestError = validateUserActionTargets(userIds, userIds, {
+      currentUserId: adminCheck.session.user.id,
+      preventSelfAction: true,
+    });
+    if (requestError)
+      return NextResponse.json({ error: requestError.error }, { status: requestError.status });
 
-    if (!userId)
-      return NextResponse.json({ error: "User ID required" }, { status: 400 });
+    const existingUsers = await prisma.user.findMany({
+      where: { id: { in: userIds }, status: { not: "deleted" } },
+      select: { id: true },
+    });
+    const existingUserIds = existingUsers.map((user) => user.id);
 
-    if (userId === adminCheck.session.user.id)
-      return NextResponse.json({ error: "Cannot delete yourself" }, { status: 400 });
+    const targetError = validateUserActionTargets(userIds, existingUserIds);
+    if (targetError)
+      return NextResponse.json({ error: targetError.error }, { status: targetError.status });
 
-    if (permanent) {
-      await prisma.user.delete({ where: { id: userId } });
-      return NextResponse.json({ message: "User permanently deleted" });
-    } else {
-      await prisma.user.update({ where: { id: userId }, data: { status: "suspended" } });
-      return NextResponse.json({ message: "User suspended" });
+    if (shouldDeletePermanently) {
+      const passwordHash = await bcrypt.hash(randomUUID(), 10);
+
+      await prisma.$transaction(async (tx) => {
+        await tx.userRole.deleteMany({ where: { userId: { in: existingUserIds } } });
+        await tx.departmentRoleMembership.deleteMany({ where: { userId: { in: existingUserIds } } });
+
+        for (const id of existingUserIds) {
+          const deletedEmail = `deleted-${id}@deleted.invalid`;
+          await tx.profile.updateMany({
+            where: { userId: id },
+            data: {
+              email: deletedEmail,
+              fullName: null,
+              niy: null,
+              jobTitle: null,
+              departmentId: null,
+              avatarUrl: null,
+            },
+          });
+          await tx.user.update({
+            where: { id },
+            data: {
+              email: deletedEmail,
+              passwordHash,
+              status: "deleted",
+              emailVerified: false,
+            },
+          });
+        }
+      });
+
+      return NextResponse.json({
+        message: existingUserIds.length === 1 ? "User permanently deleted" : `${existingUserIds.length} users permanently deleted`,
+        count: existingUserIds.length,
+      });
     }
+
+    await prisma.user.updateMany({
+      where: { id: { in: existingUserIds } },
+      data: { status: "suspended" },
+    });
+    return NextResponse.json({
+      message: existingUserIds.length === 1 ? "User suspended" : `${existingUserIds.length} users suspended`,
+      count: existingUserIds.length,
+    });
   } catch (error) {
     console.error("Delete user error:", error);
-    return NextResponse.json({ error: "Failed to delete user" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to update the selected accounts" }, { status: 500 });
   }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const VALID_ROLES = ["admin", "staff", "manager", "director", "supervisor"];
+function formatUser(user: UserWithOrganizationAssignments) {
+  const assignments = user.departmentRoleMemberships
+    .filter(({ departmentRole }) =>
+      (["admin", "director"].includes(departmentRole.role) && departmentRole.departmentId === null) ||
+      (["manager", "supervisor", "staff"].includes(departmentRole.role) && departmentRole.departmentId !== null),
+    )
+    .map(({ departmentRole }) => ({
+      department_role_id: departmentRole.id,
+      department_id: departmentRole.departmentId,
+      department_name: departmentRole.department?.name ?? null,
+      role: departmentRole.role,
+    }))
+    .sort((left, right) =>
+      (left.department_name ?? "").localeCompare(right.department_name ?? "") ||
+      left.role.localeCompare(right.role),
+    );
+  const departments = Array.from(
+    new Map(
+      assignments
+        .filter((assignment) => assignment.department_id)
+        .map((assignment) => [assignment.department_id!, {
+          id: assignment.department_id!,
+          name: assignment.department_name ?? "Unnamed department",
+        }]),
+    ).values(),
+  );
 
-function sanitizeRoles(roles: unknown): string[] {
-  let arr: string[] = ["staff"];
-  if (Array.isArray(roles)) {
-    arr = roles.map((r) => String(r).trim().toLowerCase()).filter(Boolean);
-  } else if (typeof roles === "string" && roles.length > 0) {
-    arr = roles.replace(/[{}]/g, "").split(",").map((r) => r.trim().toLowerCase()).filter(Boolean);
-  }
-  const filtered = arr.filter((r) => VALID_ROLES.includes(r));
-  return filtered.length > 0 ? filtered : ["staff"];
-}
-
-function formatUser(user: UserWithProfileAndRoles) {
   return {
-    id:              user.id,
-    email:           user.email,
-    status:          user.status,
-    created_at:      user.createdAt,
-    full_name:       user.profile?.fullName     ?? null,
-    niy:             user.profile?.niy          ?? null,
-    job_title:       user.profile?.jobTitle     ?? null,
-    department_id:   user.profile?.departmentId ?? null,
-    department_name: user.profile?.department?.name ?? null,
-    roles:           user.roles?.map((role) => role.role) ?? [],
+    id: user.id,
+    email: user.email,
+    status: user.status,
+    created_at: user.createdAt,
+    full_name: user.profile?.fullName ?? null,
+    niy: user.profile?.niy ?? null,
+    job_title: user.profile?.jobTitle ?? null,
+    assignments,
+    departments,
+    roles: Array.from(new Set(assignments.map((assignment) => assignment.role))),
   };
 }

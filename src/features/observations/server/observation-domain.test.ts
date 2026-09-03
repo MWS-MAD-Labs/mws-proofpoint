@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { canTransitionObservation, normalizeObservationStatus } from "./lifecycle";
 import { getObservationPermissions } from "./permissions";
+import { dateOnlyToIso, normalizeDateOnly } from "./dates";
 import { buildListFilters } from "./queries";
 import {
   calculateObservationProgress,
@@ -9,6 +10,7 @@ import {
   isObservationAnswerComplete,
 } from "./validation";
 import type { ObservationIndicatorForProgress } from "../types";
+import { formatObservationDate, utcDateValue } from "../utils";
 import {
   getObservationReminderPeriod,
   isAutomaticAcknowledgementDue,
@@ -38,6 +40,22 @@ import {
 } from "../api/queries";
 
 const draft = { status: "draft" as const, staffId: "staff", managerId: "manager" };
+
+test("date-only values normalize, serialize, and display without timezone shifts", () => {
+  assert.equal(normalizeDateOnly("2026-09-05", "Due date"), "2026-09-05");
+  assert.equal(
+    normalizeDateOnly("2026-09-05T23:59:59.000Z", "Due date"),
+    "2026-09-05",
+  );
+  assert.equal(dateOnlyToIso("2026-09-05"), "2026-09-05T00:00:00.000Z");
+  assert.equal(dateOnlyToIso(null), null);
+  assert.equal(formatObservationDate("2026-09-05T00:00:00.000Z"), "5 Sep 2026");
+  assert.equal(
+    utcDateValue(new Date("2026-09-05T23:59:59.000Z")),
+    "2026-09-05",
+  );
+  assert.throws(() => normalizeDateOnly("2026-02-30", "Due date"));
+});
 
 test("scheduler configuration uses global settings and a fixed startup delay", () => {
   assert.deepEqual(
@@ -347,6 +365,26 @@ test("list filters use participant EXISTS predicates without multiplying observa
     "%Teacher Two%",
     "participant-b",
   ]);
+});
+
+test("overdue filters include submitted observations only", () => {
+  const params: unknown[] = [];
+  const { whereSql } = buildListFilters(
+    { id: "admin", roles: ["admin"] },
+    {
+      q: "",
+      overdue: "true",
+      sort: "updated_desc",
+      page: 1,
+      pageSize: 20,
+    },
+    params,
+  );
+
+  assert.match(whereSql, /= 'submitted'/);
+  assert.match(whereSql, /due_at::date < \(NOW\(\) AT TIME ZONE 'UTC'\)::date/);
+  assert.match(whereSql, /COALESCE/);
+  assert.doesNotMatch(whereSql, /<> 'acknowledged'/);
 });
 
 test("list query parsing falls back for invalid values", () => {

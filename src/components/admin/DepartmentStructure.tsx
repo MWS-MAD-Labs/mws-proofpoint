@@ -140,6 +140,7 @@ export function DepartmentStructure({
   const renderBranch = (department: DepartmentStructureDepartment, depth = 0): React.ReactNode => {
     const children = childrenByParent.get(department.id) ?? [];
     const managers = department.role_holders.filter((holder) => holder.role === "manager");
+    const supervisors = department.role_holders.filter((holder) => holder.role === "supervisor");
     const staff = department.role_holders.filter((holder) => holder.role === "staff");
     const isSelected = selected?.id === department.id;
     const isMatch = matchingIds.has(department.id);
@@ -169,7 +170,7 @@ export function DepartmentStructure({
             <span className="min-w-0 flex-1 truncate text-sm font-medium">{department.name}</span>
             {isMatch && <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Search match" />}
             <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{children.length} child{children.length === 1 ? "" : "ren"}</span>
-            <span className="hidden shrink-0 text-xs text-muted-foreground md:inline">M {managers.length} · S {staff.length}</span>
+            <span className="hidden shrink-0 text-xs text-muted-foreground md:inline">M {managers.length} · V {supervisors.length} · S {staff.length}</span>
           </button>
         </div>
         {hasChildren && expanded.has(department.id) && <div className="mt-1">{children.map((child) => renderBranch(child, depth + 1))}</div>}
@@ -180,6 +181,7 @@ export function DepartmentStructure({
   const globalAssignments = roleAssignments.filter((assignment) => assignment.department_id === null && ["director", "admin"].includes(assignment.role));
   const children = selected ? childrenByParent.get(selected.id) ?? [] : [];
   const managers = selected?.role_holders.filter((holder) => holder.role === "manager") ?? [];
+  const supervisors = selected?.role_holders.filter((holder) => holder.role === "supervisor") ?? [];
   const staff = selected?.role_holders.filter((holder) => holder.role === "staff") ?? [];
 
   return (
@@ -219,12 +221,16 @@ export function DepartmentStructure({
                 </div>
               </CardHeader>
               <CardContent className="space-y-6 pt-6">
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-4">
                   <Stat label="Immediate children" value={String(children.length)} />
                   <Stat label="Managers" value={String(managers.length)} />
+                  <Stat label="Supervisors" value={String(supervisors.length)} />
                   <Stat label="Staff" value={String(staff.length)} />
                 </div>
                 <RolePanel title="Managers" role="manager" people={managers} department={selected} onManageRole={onManageRole} onEditUser={onEditUser} />
+                {roleAssignments.some((assignment) => assignment.department_id === selected.id && assignment.role === "supervisor") && (
+                  <RolePanel title="Supervisors" role="supervisor" people={supervisors} department={selected} onManageRole={onManageRole} onEditUser={onEditUser} />
+                )}
                 <RolePanel title="Staff" role="staff" people={staff} department={selected} onManageRole={onManageRole} onEditUser={onEditUser} />
                 <section>
                   <div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">Immediate child departments</h3><span className="text-sm text-muted-foreground">{children.length}</span></div>

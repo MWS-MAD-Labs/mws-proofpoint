@@ -19,7 +19,10 @@ export async function GET() {
         // Get departments with parent info and user count
         const departments = await query(
             `SELECT d.*, p.name as parent_name,
-                    (SELECT COUNT(*) FROM profiles WHERE department_id = d.id) as user_count,
+                    (SELECT COUNT(DISTINCT drm.user_id)
+                       FROM department_role_memberships drm
+                       JOIN department_roles dr ON dr.id = drm.department_role_id
+                      WHERE dr.department_id = d.id) as user_count,
                     CASE 
                         WHEN d.parent_id IS NULL THEN 'root'
                         WHEN EXISTS (SELECT 1 FROM departments child WHERE child.parent_id = d.id) THEN 'department'
@@ -95,8 +98,9 @@ export async function POST(request: Request) {
             await client.query(
                 `INSERT INTO department_roles (department_id, role, name, created_at, updated_at)
                  VALUES ($1, 'manager', $2, NOW(), NOW()),
-                        ($1, 'staff', $3, NOW(), NOW())`,
-                [newDept.id, `${name} manager`, `${name} staff`]
+                        ($1, 'supervisor', $3, NOW(), NOW()),
+                        ($1, 'staff', $4, NOW(), NOW())`,
+                [newDept.id, `${name} manager`, `${name} supervisor`, `${name} staff`]
             );
 
             await client.query("COMMIT");
@@ -177,12 +181,13 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: "Department ID required" }, { status: 400 });
         }
 
-        // A user's profile department is separate from department role assignments.
         const assignedUsers = await query<{ fullName: string | null; email: string }>(
-            `SELECT p.full_name AS "fullName", u.email
-               FROM profiles p
-               JOIN users u ON u.id = p.user_id
-              WHERE p.department_id = $1
+            `SELECT DISTINCT p.full_name AS "fullName", u.email
+               FROM department_role_memberships drm
+               JOIN department_roles dr ON dr.id = drm.department_role_id
+               JOIN users u ON u.id = drm.user_id
+               LEFT JOIN profiles p ON p.user_id = u.id
+              WHERE dr.department_id = $1
               ORDER BY p.full_name NULLS LAST, u.email`,
             [id]
         );
@@ -194,7 +199,7 @@ export async function DELETE(request: Request) {
                 .join(", ");
             const remaining = assignedUsers.length - 3;
             return NextResponse.json({
-                error: `Cannot delete department because ${assignedUsers.length} user profile(s) still use it: ${preview}${remaining > 0 ? ` and ${remaining} more` : ""}. Edit those users and change their Department first.`
+                error: `Cannot delete department because ${assignedUsers.length} user(s) still have role assignments in it: ${preview}${remaining > 0 ? ` and ${remaining} more` : ""}. Remove those assignments from the Department page first.`
             }, { status: 400 });
         }
 

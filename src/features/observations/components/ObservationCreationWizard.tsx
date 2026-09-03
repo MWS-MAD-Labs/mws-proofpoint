@@ -52,6 +52,7 @@ import {
   fetchObservationCreationStaff,
 } from "../api/queries";
 import { observationKeys } from "../api/queryKeys";
+import { utcDateValue } from "../utils";
 import type {
   ObservationCreationForm,
   ObservationCreationStaff,
@@ -70,10 +71,6 @@ function participantLabel(staff: ObservationCreationStaff[]): string {
   return `${staff.length} staff members`;
 }
 
-function localDateValue(date = new Date()): string {
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
-}
 
 function displayDate(value: string): string {
   if (!value) return "Not set";
@@ -206,7 +203,7 @@ export function ObservationCreationWizard() {
     if (step === 1 && !selectedForm) message = "Select a common observation form to continue.";
     if (step === 2) {
       if (!dueAt) message = "Due date is required.";
-      else if (dueAt < localDateValue()) message = "Due date cannot be in the past.";
+      else if (dueAt < utcDateValue()) message = "Due date cannot be in the past.";
       else if (observationDate && dueAt < observationDate) {
         message = "Due date cannot precede the observation date.";
       } else if (selectedStaff.length > 1 && scopeType === "INDIVIDUAL") {
@@ -240,7 +237,7 @@ export function ObservationCreationWizard() {
       observationDate: observationDate
         ? new Date(`${observationDate}T12:00:00`).toISOString()
         : undefined,
-      dueAt: new Date(`${dueAt}T23:59:59`).toISOString(),
+      dueAt,
       scopeType,
       className: className.trim() || undefined,
       subjectName: subjectName.trim() || undefined,
@@ -519,7 +516,7 @@ function DetailsStep({ title, description, observationDate, dueAt, scopeType, cl
         <div className="space-y-2 md:col-span-2"><Label htmlFor="title">Title <span className="text-muted-foreground">(optional)</span></Label><Input id="title" value={title} onChange={(event) => onTitleChange(event.target.value)} maxLength={200} placeholder="Defaults to form name and selected staff" /><p className="text-xs text-muted-foreground">{title.length}/200</p></div>
         <div className="space-y-2 md:col-span-2"><Label htmlFor="description">Description or purpose <span className="text-muted-foreground">(optional)</span></Label><Textarea id="description" value={description} onChange={(event) => onDescriptionChange(event.target.value)} maxLength={2000} rows={4} placeholder="Add context, focus areas, or the purpose of this observation..." /><p className="text-xs text-muted-foreground">{description.length}/2000</p></div>
         <div className="space-y-2"><Label htmlFor="observation-date">Observation date <span className="text-muted-foreground">(recommended)</span></Label><Input id="observation-date" type="date" value={observationDate} onChange={(event) => onObservationDateChange(event.target.value)} /></div>
-        <div className="space-y-2"><Label htmlFor="due-date">Due date</Label><Input id="due-date" type="date" min={localDateValue()} value={dueAt} onChange={(event) => onDueAtChange(event.target.value)} required /></div>
+        <div className="space-y-2"><Label htmlFor="due-date">Due date</Label><Input id="due-date" type="date" min={utcDateValue()} value={dueAt} onChange={(event) => onDueAtChange(event.target.value)} required /></div>
         <div className="space-y-2 md:col-span-2">
           <Label htmlFor="scope-type">Observation scope</Label>
           <select id="scope-type" value={scopeType} onChange={(event) => onScopeTypeChange(event.target.value as ScopeType)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">

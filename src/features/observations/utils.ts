@@ -80,8 +80,14 @@ export function observationScopeSummary(scope: ObservationScope | undefined): st
   return `${type}: ${observationScopeLabel(scope)}`;
 }
 
+export function utcDateValue(date = new Date()): string {
+  return date.toISOString().slice(0, 10);
+}
+
 export function formatObservationDate(value: string | null): string {
-  return value ? format(new Date(value), "d MMM yyyy") : "Not scheduled";
+  return value
+    ? format(new Date(`${value.slice(0, 10)}T12:00:00`), "d MMM yyyy")
+    : "Not scheduled";
 }
 
 export function formatExactDate(value: string): string {

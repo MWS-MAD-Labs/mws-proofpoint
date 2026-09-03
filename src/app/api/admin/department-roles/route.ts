@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { query, queryOne } from "@/lib/db";
+import { pool, query, queryOne } from "@/lib/db";
+import {
+    canonicalRoleScopeSql,
+    isCanonicalRoleAssignment,
+    rebuildUserRoleProjection,
+} from "@/lib/organization-access";
 
 // Helper to check if user is admin
 async function requireAdmin() {
@@ -34,7 +39,8 @@ export async function GET(request: Request) {
                  FROM department_roles dr
                  LEFT JOIN departments d ON dr.department_id = d.id
                  LEFT JOIN rubric_templates rt ON dr.default_template_id = rt.id
-                 WHERE dr.id = $1`,
+                 WHERE dr.id = $1
+                   AND ${canonicalRoleScopeSql("dr")}`,
                 [id]
             );
             return NextResponse.json({ data: deptRole });
@@ -48,6 +54,7 @@ export async function GET(request: Request) {
                  LEFT JOIN departments d ON dr.department_id = d.id
                  LEFT JOIN rubric_templates rt ON dr.default_template_id = rt.id
                  WHERE dr.department_id = $1
+                   AND ${canonicalRoleScopeSql("dr")}
                  ORDER BY dr.role`,
                 [departmentId]
             );
@@ -60,6 +67,7 @@ export async function GET(request: Request) {
              FROM department_roles dr
              LEFT JOIN departments d ON dr.department_id = d.id
              LEFT JOIN rubric_templates rt ON dr.default_template_id = rt.id
+             WHERE ${canonicalRoleScopeSql("dr")}
              ORDER BY dr.updated_at DESC`
         );
         return NextResponse.json({ data: allRoles });
@@ -84,9 +92,24 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Role required" }, { status: 400 });
         }
 
-        // department_id can be null for global roles
-        const finalDeptId = (department_id === "" || department_id === "none") ? null : department_id;
+        const finalDeptId = (department_id === "" || department_id === "none" || department_id == null)
+            ? null
+            : department_id;
+        const normalizedRole = String(role).trim().toLowerCase();
         const normalizedName = typeof name === "string" && name.trim() ? name.trim() : null;
+        if (!["admin", "director", "manager", "supervisor", "staff"].includes(normalizedRole)) {
+            return NextResponse.json({ error: "Unsupported role" }, { status: 400 });
+        }
+        if (!isCanonicalRoleAssignment(normalizedRole, finalDeptId)) {
+            return NextResponse.json(
+                {
+                    error: ["admin", "director"].includes(normalizedRole)
+                        ? "Admin and director roles must be global."
+                        : "Manager, supervisor, and staff roles require a department.",
+                },
+                { status: 400 },
+            );
+        }
 
         const newRole = await queryOne(
             `WITH inserted AS (
@@ -98,7 +121,7 @@ export async function POST(request: Request) {
              FROM inserted i
              LEFT JOIN departments d ON i.department_id = d.id
              LEFT JOIN rubric_templates rt ON i.default_template_id = rt.id`,
-            [finalDeptId, role, default_template_id ?? null, normalizedName]
+            [finalDeptId, normalizedRole, default_template_id ?? null, normalizedName]
         );
 
         return NextResponse.json({ data: newRole }, { status: 201 });
@@ -160,8 +183,47 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: "Department role ID required" }, { status: 400 });
         }
 
-        await query(`DELETE FROM department_roles WHERE id = $1`, [id]);
-        return NextResponse.json({ message: "Department role deleted" });
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+            const roleResult = await client.query<{ role: string; departmentId: string | null }>(
+                `SELECT role::text AS role, department_id::text AS "departmentId"
+                   FROM department_roles
+                  WHERE id = $1
+                  FOR UPDATE`,
+                [id],
+            );
+            const role = roleResult.rows[0];
+            if (!role) {
+                await client.query("ROLLBACK");
+                return NextResponse.json({ error: "Department role not found" }, { status: 404 });
+            }
+            if (role.departmentId === null && ["admin", "director"].includes(role.role)) {
+                await client.query("ROLLBACK");
+                return NextResponse.json(
+                    { error: "Global admin and director role definitions cannot be deleted." },
+                    { status: 400 },
+                );
+            }
+
+            const memberResult = await client.query<{ userId: string }>(
+                `SELECT user_id::text AS "userId"
+                   FROM department_role_memberships
+                  WHERE department_role_id = $1`,
+                [id],
+            );
+            const affectedUserIds = memberResult.rows.map((member) => member.userId);
+
+            await client.query(`DELETE FROM department_roles WHERE id = $1`, [id]);
+            await rebuildUserRoleProjection(client, affectedUserIds);
+            await client.query("COMMIT");
+            return NextResponse.json({ message: "Department role deleted" });
+        } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+        } finally {
+            client.release();
+        }
     } catch (error) {
         console.error("Delete department role error:", error);
         return NextResponse.json({ error: "Failed to delete department role" }, { status: 500 });

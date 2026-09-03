@@ -29,6 +29,7 @@ interface SubmitObservationRow {
   managerEmail: string | null;
   rubricName: string | null;
   title: string | null;
+  isDueDatePassed: boolean;
 }
 
 interface SubmitParticipantRow {
@@ -56,6 +57,39 @@ interface SubmittedObservationRow {
   status: ObservationStatus;
   submittedAt: Date | string;
   acknowledgedAt: Date | string | null;
+}
+
+interface SubmitRouteError extends Error {
+  isSubmitRouteError: true;
+  statusCode: number;
+  code: "DUE_DATE_PASSED";
+}
+
+const DUE_DATE_PASSED_CODE = "DUE_DATE_PASSED" as const;
+const DUE_DATE_PASSED_MESSAGE =
+  "The due date has passed. Update the due date before submitting this observation.";
+
+function makeDueDatePassedError(): SubmitRouteError {
+  return Object.assign(new Error(DUE_DATE_PASSED_MESSAGE), {
+    isSubmitRouteError: true as const,
+    statusCode: 409,
+    code: DUE_DATE_PASSED_CODE,
+  });
+}
+
+function isSubmitRouteError(error: unknown): error is SubmitRouteError {
+  return (
+    error instanceof Error &&
+    "isSubmitRouteError" in error &&
+    error.isSubmitRouteError === true
+  );
+}
+
+function dueDatePassedResponse() {
+  return NextResponse.json(
+    { error: DUE_DATE_PASSED_MESSAGE, code: DUE_DATE_PASSED_CODE },
+    { status: 409 },
+  );
 }
 
 function questionType(value: string | null): ObservationQuestionType {
@@ -105,7 +139,11 @@ export async function PATCH(
          mu.email AS "managerEmail",
          mp.full_name AS "managerName",
          rt.name AS "rubricName",
-         o.title
+         o.title,
+         COALESCE(
+           o.due_at::date < (NOW() AT TIME ZONE 'UTC')::date,
+           false
+         ) AS "isDueDatePassed"
        FROM observations o
        LEFT JOIN observation_participants actor_op
          ON actor_op.observation_id = o.id AND actor_op.staff_id = $2
@@ -144,6 +182,8 @@ export async function PATCH(
       );
 
     assertObservationTransition("draft", "submitted");
+
+    if (observation.isDueDatePassed) return dueDatePassedResponse();
 
     const indicatorRows = await query<SubmitIndicatorRow>(
       `SELECT
@@ -200,12 +240,26 @@ export async function PATCH(
     let participants: SubmitParticipantRow[] = [];
     try {
       await client.query("BEGIN");
-      const lockedParent = await client.query<{ status: ObservationStatus }>(
-        `SELECT status FROM observations WHERE id = $1 FOR UPDATE`,
+      const lockedParent = await client.query<{
+        status: ObservationStatus;
+        isDueDatePassed: boolean;
+      }>(
+        `SELECT
+           status,
+           COALESCE(
+             due_at::date < (NOW() AT TIME ZONE 'UTC')::date,
+             false
+           ) AS "isDueDatePassed"
+         FROM observations
+         WHERE id = $1
+         FOR UPDATE`,
         [id],
       );
       if (lockedParent.rows[0]?.status !== "draft") {
         throw new Error("Observation status changed before submit.");
+      }
+      if (lockedParent.rows[0].isDueDatePassed) {
+        throw makeDueDatePassedError();
       }
 
       const participantResult = await client.query<SubmitParticipantRow>(
@@ -319,6 +373,12 @@ export async function PATCH(
       permissions: getObservationPermissions(user, submittedAccess),
     });
   } catch (error: unknown) {
+    if (isSubmitRouteError(error)) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.statusCode },
+      );
+    }
     const message = error instanceof Error ? error.message : String(error);
     console.error("PATCH /api/observations/[id]/submit error:", error);
     return NextResponse.json({ error: message }, { status: 500 });

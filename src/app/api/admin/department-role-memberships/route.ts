@@ -2,8 +2,9 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { pool, query } from "@/lib/db";
+import { rebuildUserRoleProjection } from "@/lib/organization-access";
 
-const MANAGEABLE_ROLES = new Set(["admin", "director", "manager", "staff"]);
+const MANAGEABLE_ROLES = new Set(["admin", "director", "manager", "supervisor", "staff"]);
 
 interface AssignmentRow {
   departmentRoleId: string;
@@ -80,7 +81,7 @@ export async function GET() {
          LEFT JOIN department_role_memberships drm ON drm.department_role_id = dr.id
          LEFT JOIN users u ON u.id = drm.user_id AND u.status <> 'deleted'
          LEFT JOIN profiles p ON p.user_id = u.id
-        WHERE (dr.department_id IS NOT NULL AND dr.role::text IN ('manager', 'staff'))
+        WHERE (dr.department_id IS NOT NULL AND dr.role::text IN ('manager', 'supervisor', 'staff'))
            OR (dr.department_id IS NULL AND dr.role::text IN ('director', 'admin'))
         ORDER BY d.name NULLS FIRST, dr.role, p.full_name NULLS LAST, u.email`,
     );
@@ -141,7 +142,7 @@ export async function PUT(request: Request) {
         await client.query("ROLLBACK");
         return NextResponse.json({ error: "This global role cannot be managed here." }, { status: 400 });
       }
-      if (role.departmentId !== null && !["manager", "staff"].includes(role.role)) {
+      if (role.departmentId !== null && !["manager", "supervisor", "staff"].includes(role.role)) {
         await client.query("ROLLBACK");
         return NextResponse.json({ error: "This department role cannot be managed here." }, { status: 400 });
       }
@@ -182,15 +183,6 @@ export async function PUT(request: Request) {
         `DELETE FROM department_role_memberships WHERE department_role_id::text = $1`,
         [departmentRoleId],
       );
-      const roleTypeResult = await client.query<{ roleType: string }>(
-        `SELECT format_type(a.atttypid, a.atttypmod) AS "roleType"
-           FROM pg_attribute a
-          WHERE a.attrelid = 'user_roles'::regclass
-            AND a.attname = 'role'
-            AND NOT a.attisdropped`,
-      );
-      const roleType = roleTypeResult.rows[0]?.roleType;
-      if (!roleType) throw new Error("Unable to determine user role type.");
 
       for (const userId of userIds) {
         await client.query(
@@ -199,33 +191,10 @@ export async function PUT(request: Request) {
            VALUES ($1, $2, $3, NOW(), NOW())`,
           [randomUUID(), departmentRoleId, userId],
         );
-        await client.query(
-          `INSERT INTO user_roles (id, user_id, role, created_at)
-           VALUES ($1, $2, $3::${roleType}, NOW())
-           ON CONFLICT (user_id, role) DO NOTHING`,
-          [randomUUID(), userId, role.role],
-        );
       }
 
-      const removedUserIds = previousUserIds.filter((id) => !userIds.includes(id));
-      for (const userId of removedUserIds) {
-        const remainingResult = await client.query<{ required: boolean }>(
-          `SELECT EXISTS (
-             SELECT 1
-               FROM department_role_memberships drm
-               JOIN department_roles dr ON dr.id = drm.department_role_id
-              WHERE drm.user_id::text = $1
-                AND dr.role::text = $2
-           ) AS required`,
-          [userId, role.role],
-        );
-        if (!remainingResult.rows[0]?.required) {
-          await client.query(
-            `DELETE FROM user_roles WHERE user_id::text = $1 AND role::text = $2`,
-            [userId, role.role],
-          );
-        }
-      }
+      const affectedUserIds = Array.from(new Set([...previousUserIds, ...userIds]));
+      await rebuildUserRoleProjection(client, affectedUserIds);
 
       await client.query("COMMIT");
     } catch (error) {
