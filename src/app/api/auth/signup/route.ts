@@ -51,14 +51,9 @@ export async function POST(request: Request) {
       [randomUUID(), newUser.id, normalizedEmail, fullName ?? null],
     );
 
-    // Assign default staff role
-    await query("INSERT INTO user_roles (id, user_id, role) VALUES ($1, $2, 'staff')", [
-      randomUUID(),
-      newUser.id,
-    ]);
 
     return NextResponse.json(
-      { message: "User created successfully", userId: newUser.id },
+      { message: "User created successfully and is awaiting a department assignment", userId: newUser.id },
       { status: 201 },
     );
   } catch (error) {

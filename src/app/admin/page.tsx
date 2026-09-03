@@ -74,14 +74,20 @@ import {
     type DepartmentRoleAssignment,
 } from '@/components/admin/DepartmentRoleAssignmentDialog';
 
+interface OrganizationAssignment {
+    department_role_id: string;
+    department_id: string | null;
+    department_name: string | null;
+    role: string;
+}
+
 interface User {
     id: string;
     email: string;
     full_name: string | null;
     niy: string | null;
     job_title: string | null;
-    department_id: string | null;
-    department_name: string | null;
+    assignments: OrganizationAssignment[];
     roles: string[];
     status: string;
 }
@@ -141,8 +147,8 @@ function AdminContent() {
         } else if (usersRes.data) {
             setUsers((usersRes.data as User[]).map(user => ({
                 ...user,
-                roles: user.roles || ['staff'],
-                department_name: user.department_name || 'Unassigned'
+                assignments: user.assignments || [],
+                roles: user.roles || [],
             })));
         }
 
@@ -253,41 +259,6 @@ function AdminContent() {
         }
         setActionPending(false);
     };
-
-    const getRoleBadge = (roles: unknown) => {
-        let safeRoles: string[] = [];
-
-        if (Array.isArray(roles)) {
-            safeRoles = roles.filter(r => typeof r === 'string');
-        } else if (typeof roles === 'string' && roles.length > 0) {
-            // Handle cases where roles might be returned as a string (e.g., CSV)
-            safeRoles = roles.replace(/[{}]/g, '').split(',').map(r => r.trim()).filter(Boolean);
-        }
-
-        if (safeRoles.length === 0) {
-            safeRoles = ['staff'];
-        }
-
-        return (
-            <div className="flex flex-wrap gap-1">
-                {safeRoles.map((role: string) => (
-                    <Badge
-                        key={role}
-                        variant={role === 'admin' ? 'default' : 'secondary'}
-                        className={
-                            role === 'admin' ? 'bg-destructive-soft text-destructive border-destructive/40 hover:bg-destructive-soft' :
-                                role === 'director' ? 'bg-success-soft text-success border-success/40 hover:bg-success-soft' :
-                                    role === 'manager' ? 'bg-warning-soft text-warning-foreground border-warning/40 hover:bg-warning-soft' :
-                                        'bg-primary-soft text-primary border-primary/40 hover:bg-primary-soft'
-                        }
-                    >
-                        {role.charAt(0).toUpperCase() + role.slice(1)}
-                    </Badge>
-                ))}
-            </div>
-        );
-    };
-
 
 
     const findRoleAssignment = (departmentId: string | null, role: string) =>
@@ -409,7 +380,7 @@ function AdminContent() {
                                         <Settings2 className="h-5 w-5 text-destructive" />
                                         User Management
                                     </CardTitle>
-                                    <CardDescription>Manage user accounts, roles, status, and department assignments</CardDescription>
+                                    <CardDescription>Manage accounts and review department-based role assignments</CardDescription>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
                                     {selectedUserIds.length > 0 && (
@@ -492,8 +463,7 @@ function AdminContent() {
                                                 <TableHead>Status</TableHead>
                                                 <TableHead>NIY</TableHead>
                                                 <TableHead>Job Title</TableHead>
-                                                <TableHead>Department</TableHead>
-                                                <TableHead>Roles</TableHead>
+                                                <TableHead>Department assignments</TableHead>
                                                 <TableHead className="text-right">Actions</TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -550,12 +520,22 @@ function AdminContent() {
                                                         </span>
                                                     </TableCell>
                                                     <TableCell>
-                                                        <div className="flex items-center gap-2 text-sm text-foreground italic">
-                                                            <Building className="h-4 w-4 text-muted-foreground" />
-                                                            {user.department_name}
-                                                        </div>
+                                                        {user.assignments.length ? (
+                                                            <div className="flex max-w-md flex-wrap gap-1">
+                                                                {user.assignments.map((assignment) => (
+                                                                    <Badge
+                                                                        key={assignment.department_role_id}
+                                                                        variant={assignment.role === 'admin' ? 'default' : 'secondary'}
+                                                                        className="capitalize"
+                                                                    >
+                                                                        {assignment.department_name ?? 'Global'} · {assignment.role}
+                                                                    </Badge>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-sm italic text-muted-foreground">No organizational assignment</span>
+                                                        )}
                                                     </TableCell>
-                                                    <TableCell>{getRoleBadge(user.roles)}</TableCell>
                                                     <TableCell className="text-right">
                                                         <DropdownMenu>
                                                             <DropdownMenuTrigger asChild>
@@ -688,7 +668,6 @@ function AdminContent() {
                 open={userModalOpen}
                 onOpenChange={setUserModalOpen}
                 user={editingUser}
-                departments={departments}
                 onSuccess={fetchData}
             />
 

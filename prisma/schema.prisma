@@ -94,6 +94,30 @@ model UserRole {
   @@map("user_roles")
 }
 
+model UserRolePreMembershipMigration {
+  id         String?   @db.Uuid
+  userId     String?   @map("user_id") @db.Uuid
+  role       AppRole?
+  createdAt  DateTime? @map("created_at") @db.Timestamptz(6)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
+
+  @@ignore
+  @@map("user_roles_pre_membership_migration")
+}
+
+model UnmappedUserRoleAfterMembershipMigration {
+  id                 String?   @db.Uuid
+  userId             String?   @map("user_id") @db.Uuid
+  role               AppRole?
+  createdAt          DateTime? @map("created_at") @db.Timestamptz(6)
+  legacyDepartmentId String?   @map("legacy_department_id") @db.Uuid
+  unmappedReason     String?   @map("unmapped_reason")
+  recordedAt         DateTime? @map("recorded_at") @db.Timestamptz(6)
+
+  @@ignore
+  @@map("unmapped_user_roles_after_membership_migration")
+}
+
 model RubricTemplate {
   id                  String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name                String

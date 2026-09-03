@@ -5,6 +5,7 @@ import bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import { pool, queryOne } from "@/lib/db";
 import { refreshAuthToken } from "@/lib/auth-token";
+import { canonicalRoleScopeSql } from "@/lib/organization-access";
 
 interface DbCredentialUser {
   id: string;
@@ -16,7 +17,7 @@ interface DbAuthUser {
   id: string;
   email: string;
   full_name: string | null;
-  department_id: string | null;
+  department_ids: string[] | null;
   roles: string[] | null;
 }
 
@@ -26,6 +27,7 @@ interface AppAuthUser {
   name: string | null;
   roles: string[];
   departmentId: string | null;
+  departmentIds: string[];
 }
 
 function normalizeEmail(email: string) {
@@ -38,7 +40,8 @@ function mapDbUserToAuthUser(user: DbAuthUser): AppAuthUser {
     email: user.email,
     name: user.full_name ?? null,
     roles: user.roles ?? [],
-    departmentId: user.department_id ?? null,
+    departmentId: user.department_ids?.length === 1 ? user.department_ids[0] : null,
+    departmentIds: user.department_ids ?? [],
   };
 }
 
@@ -48,16 +51,22 @@ async function getAuthUserById(userId: string) {
             u.id,
             u.email,
             p.full_name,
-            p.department_id,
             COALESCE(
-                ARRAY_AGG(DISTINCT ur.role::text) FILTER (WHERE ur.role IS NOT NULL),
+                ARRAY_AGG(DISTINCT dr.department_id::text) FILTER (WHERE dr.department_id IS NOT NULL),
+                ARRAY[]::text[]
+            ) AS department_ids,
+            COALESCE(
+                ARRAY_AGG(DISTINCT dr.role::text) FILTER (WHERE dr.role IS NOT NULL),
                 ARRAY[]::text[]
             ) AS roles
          FROM users u
          LEFT JOIN profiles p ON p.user_id = u.id
-         LEFT JOIN user_roles ur ON ur.user_id = u.id
+         LEFT JOIN department_role_memberships drm ON drm.user_id = u.id
+         LEFT JOIN department_roles dr
+           ON dr.id = drm.department_role_id
+          AND ${canonicalRoleScopeSql("dr")}
          WHERE u.id = $1 AND u.status = 'active'
-         GROUP BY u.id, p.full_name, p.department_id`,
+         GROUP BY u.id, p.full_name`,
     [userId],
   );
 }
@@ -68,16 +77,22 @@ async function getAuthUserByEmail(email: string) {
             u.id,
             u.email,
             p.full_name,
-            p.department_id,
             COALESCE(
-                ARRAY_AGG(DISTINCT ur.role::text) FILTER (WHERE ur.role IS NOT NULL),
+                ARRAY_AGG(DISTINCT dr.department_id::text) FILTER (WHERE dr.department_id IS NOT NULL),
+                ARRAY[]::text[]
+            ) AS department_ids,
+            COALESCE(
+                ARRAY_AGG(DISTINCT dr.role::text) FILTER (WHERE dr.role IS NOT NULL),
                 ARRAY[]::text[]
             ) AS roles
          FROM users u
          LEFT JOIN profiles p ON p.user_id = u.id
-         LEFT JOIN user_roles ur ON ur.user_id = u.id
+         LEFT JOIN department_role_memberships drm ON drm.user_id = u.id
+         LEFT JOIN department_roles dr
+           ON dr.id = drm.department_role_id
+          AND ${canonicalRoleScopeSql("dr")}
          WHERE LOWER(u.email) = LOWER($1) AND u.status = 'active'
-         GROUP BY u.id, p.full_name, p.department_id`,
+         GROUP BY u.id, p.full_name`,
     [email],
   );
 }
@@ -126,12 +141,6 @@ async function upsertGoogleUserByEmail(email: string, fullName: string | null) {
       [randomUUID(), userId, normalizedEmail, fullName],
     );
 
-    await client.query(
-      `INSERT INTO user_roles (id, user_id, role)
-             VALUES ($1, $2, 'staff')
-             ON CONFLICT (user_id, role) DO NOTHING`,
-      [randomUUID(), userId],
-    );
 
     console.log("Upserting Google user:", { email: normalizedEmail, fullName });
     await client.query("COMMIT");
@@ -250,6 +259,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       user.name = mappedUser.name;
       user.roles = mappedUser.roles;
       user.departmentId = mappedUser.departmentId;
+      user.departmentIds = mappedUser.departmentIds;
 
       console.log("SignIn Callback: Successful for", googleEmail);
       return true;
@@ -259,7 +269,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.id = user.id;
         token.roles = (user as { roles?: string[] }).roles ?? [];
         token.departmentId =
-          (user as { departmentId?: string }).departmentId ?? null;
+          (user as { departmentId?: string | null }).departmentId ?? null;
+        token.departmentIds =
+          (user as { departmentIds?: string[] }).departmentIds ?? [];
       }
 
       const tokenEmail = typeof token.email === "string" ? token.email : null;
@@ -275,7 +287,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             ? {
                 id: dbUser.id,
                 roles: dbUser.roles,
-                departmentId: dbUser.department_id,
+                departmentId: dbUser.department_ids?.length === 1 ? dbUser.department_ids[0] : null,
+                departmentIds: dbUser.department_ids ?? [],
               }
             : null;
         },
@@ -287,7 +300,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.id = token.id as string;
         (session.user as { roles?: string[] }).roles = token.roles as string[];
         (session.user as { departmentId?: string | null }).departmentId =
-          token.departmentId as string | null;
+          (token.departmentId as string | null | undefined) ?? null;
+        (session.user as { departmentIds?: string[] }).departmentIds =
+          (token.departmentIds as string[] | undefined) ?? [];
       }
       return session;
     },

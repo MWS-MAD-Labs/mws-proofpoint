@@ -30,12 +30,20 @@ export async function GET(request: Request) {
             SELECT a.*,
                    sp.full_name as staff_name,
                    sp.niy as staff_niy,
-                   d.name as staff_department,
+                   staff_department.department_name as staff_department,
                    mp.full_name as manager_name,
                    dp.full_name as director_name
             FROM assessments a
             LEFT JOIN profiles sp ON a.staff_id = sp.user_id
-            LEFT JOIN departments d ON sp.department_id = d.id
+            LEFT JOIN LATERAL (
+              SELECT d.name AS department_name
+                FROM department_role_memberships drm
+                JOIN department_roles dr ON dr.id = drm.department_role_id
+                JOIN departments d ON d.id = dr.department_id
+               WHERE drm.user_id = a.staff_id AND dr.role::text = 'staff'
+               ORDER BY d.name, dr.department_id
+               LIMIT 1
+            ) staff_department ON true
             LEFT JOIN profiles mp ON a.manager_id = mp.user_id
             LEFT JOIN profiles dp ON a.director_id = dp.user_id
             WHERE 1=1

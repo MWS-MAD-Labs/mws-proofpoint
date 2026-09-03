@@ -234,10 +234,13 @@ export function buildListFilters(
       OR EXISTS (
         SELECT 1
         FROM observation_participants search_department_participant
-        JOIN profiles search_department_profile
-          ON search_department_profile.user_id = search_department_participant.staff_id
+        JOIN department_role_memberships search_department_membership
+          ON search_department_membership.user_id = search_department_participant.staff_id
+        JOIN department_roles search_department_role
+          ON search_department_role.id = search_department_membership.department_role_id
+         AND search_department_role.role::text = 'staff'
         JOIN departments search_department
-          ON search_department.id = search_department_profile.department_id
+          ON search_department.id = search_department_role.department_id
         WHERE search_department_participant.observation_id = o.id
           AND search_department.name ILIKE ${param}
       )
@@ -265,10 +268,13 @@ export function buildListFilters(
     clauses.push(`EXISTS (
       SELECT 1
       FROM observation_participants department_participant
-      JOIN profiles department_profile
-        ON department_profile.user_id = department_participant.staff_id
+      JOIN department_role_memberships department_membership
+        ON department_membership.user_id = department_participant.staff_id
+      JOIN department_roles department_role
+        ON department_role.id = department_membership.department_role_id
+       AND department_role.role::text = 'staff'
       WHERE department_participant.observation_id = o.id
-        AND department_profile.department_id = $${params.length}
+        AND department_role.department_id = $${params.length}
     )`);
   }
   if (input.rubricId) {
@@ -469,15 +475,23 @@ export async function queryObservationList(
              op.staff_id,
              pu.email,
              pp.full_name,
-             pp.department_id,
-             pd.name AS department_name,
+             participant_department.department_id,
+             participant_department.department_name,
              op.acknowledged_at,
              op.acknowledgement_method,
              COALESCE(NULLIF(BTRIM(pp.full_name), ''), pu.email) AS sort_name
            FROM observation_participants op
            JOIN users pu ON pu.id = op.staff_id
            LEFT JOIN profiles pp ON pp.user_id = pu.id
-           LEFT JOIN departments pd ON pd.id = pp.department_id
+           LEFT JOIN LATERAL (
+             SELECT dr.department_id, d.name AS department_name
+               FROM department_role_memberships drm
+               JOIN department_roles dr ON dr.id = drm.department_role_id
+               JOIN departments d ON d.id = dr.department_id
+              WHERE drm.user_id = pu.id AND dr.role::text = 'staff'
+              ORDER BY d.name, dr.department_id
+              LIMIT 1
+           ) participant_department ON true
            WHERE op.observation_id = o.id
          ) ordered
        ) participant_data ON participant_data.participant_count > 0

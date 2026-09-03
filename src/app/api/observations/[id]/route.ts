@@ -5,6 +5,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getObservationSession } from "@/features/observations/server/auth";
 import { pool, query, queryOne } from "@/lib/db";
+import { managerStaffScopeExistsSql } from "@/lib/organization-access";
 import { getObservationPermissions } from "@/features/observations/server/permissions";
 import { normalizeObservationStatus } from "@/features/observations/server/lifecycle";
 import { calculateObservationProgress } from "@/features/observations/server/validation";
@@ -415,8 +416,7 @@ export async function PATCH(
 
       const currentParticipantsResult = await client.query<PatchParticipantRow>(
         `SELECT
-           u.id, u.email, p.full_name AS "fullName",
-           p.department_id AS "departmentId"
+           u.id, u.email, p.full_name AS "fullName"
          FROM observation_participants op
          JOIN users u ON u.id = op.staff_id
          LEFT JOIN profiles p ON p.user_id = u.id
@@ -468,14 +468,17 @@ export async function PATCH(
         const participantResult = await client.query<PatchParticipantRow>(
           `SELECT
              u.id, u.email, p.full_name AS "fullName",
-             p.department_id AS "departmentId",
              u.status = 'active' AS "isActive",
-             COALESCE(bool_or(ur.role = 'staff'), false) AS "hasStaffRole"
+             EXISTS (
+               SELECT 1
+                 FROM department_role_memberships drm
+                 JOIN department_roles dr ON dr.id = drm.department_role_id
+                WHERE drm.user_id = u.id AND dr.role::text = 'staff' AND dr.department_id IS NOT NULL
+             ) AS "hasStaffRole"
            FROM users u
            LEFT JOIN profiles p ON p.user_id = u.id
-           LEFT JOIN user_roles ur ON ur.user_id = u.id
            WHERE u.id = ANY($1::uuid[])
-           GROUP BY u.id, u.email, u.status, p.full_name, p.department_id
+           GROUP BY u.id, u.email, u.status, p.full_name
            ORDER BY LOWER(COALESCE(NULLIF(BTRIM(p.full_name), ''), u.email)), LOWER(u.email), u.id`,
           [staffIds],
         );
@@ -504,11 +507,11 @@ export async function PATCH(
            ), eligible_staff AS (
              SELECT DISTINCT selected.staff_id
              FROM selected_staff selected
-             JOIN profiles sp ON sp.user_id = selected.staff_id
-             JOIN user_roles sur ON sur.user_id = selected.staff_id
+             JOIN department_role_memberships drm ON drm.user_id = selected.staff_id
              JOIN department_roles dr
-               ON dr.role = sur.role
-              AND (dr.department_id = sp.department_id OR dr.department_id IS NULL)
+               ON dr.id = drm.department_role_id
+              AND dr.role::text = 'staff'
+              AND dr.department_id IS NOT NULL
              JOIN role_workflow_assignments rwa
                ON rwa.department_role_id = dr.id AND rwa.is_active = true
              JOIN rubric_templates rt
@@ -538,14 +541,22 @@ export async function PATCH(
         ? await client.query<ManagerPatchRow>(
             `SELECT
                u.id, u.email, p.full_name AS "fullName",
-               p.department_id AS "departmentId",
-               COALESCE(bool_or(ur.role IN ('manager', 'admin')), false) AS eligible,
-               COALESCE(bool_or(ur.role = 'admin'), false) AS "isAdmin"
+               EXISTS (
+                 SELECT 1
+                   FROM department_role_memberships drm
+                   JOIN department_roles dr ON dr.id = drm.department_role_id
+                  WHERE drm.user_id = u.id AND dr.role::text IN ('manager', 'admin')
+               ) AS eligible,
+               EXISTS (
+                 SELECT 1
+                   FROM department_role_memberships drm
+                   JOIN department_roles dr ON dr.id = drm.department_role_id
+                  WHERE drm.user_id = u.id AND dr.role::text = 'admin' AND dr.department_id IS NULL
+               ) AS "isAdmin"
              FROM users u
              LEFT JOIN profiles p ON p.user_id = u.id
-             LEFT JOIN user_roles ur ON ur.user_id = u.id
              WHERE u.id = $1 AND u.status = 'active'
-             GROUP BY u.id, u.email, p.full_name, p.department_id`,
+             GROUP BY u.id, u.email, p.full_name`,
             [managerId],
           )
         : null;
@@ -557,20 +568,20 @@ export async function PATCH(
           { status: 400 },
         );
       }
-      if (
-        !resultingManager.isAdmin &&
-        (!resultingManager.departmentId ||
-          participants.some(
-            (participant) =>
-              !participant.departmentId ||
-              participant.departmentId !== resultingManager.departmentId,
-          ))
-      ) {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "Managers can only observe participants in their department." },
-          { status: 403 },
+      if (!resultingManager.isAdmin) {
+        const outOfScope = await client.query<{ count: number }>(
+          `SELECT COUNT(*)::int AS count
+             FROM UNNEST($1::uuid[]) AS selected(staff_id)
+            WHERE NOT ${managerStaffScopeExistsSql("selected.staff_id", "$2")}`,
+          [staffIds, resultingManager.id],
         );
+        if ((outOfScope.rows[0]?.count ?? 0) > 0) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            { error: "Managers can only observe participants assigned as staff in a department they manage." },
+            { status: 403 },
+          );
+        }
       }
       if (body.managerId !== undefined) newManager = resultingManager;
 
@@ -882,8 +893,8 @@ export async function GET(
          u.id,
          u.email,
          p.full_name AS "fullName",
-         p.department_id AS "departmentId",
-         d.name AS "departmentName",
+         participant_department.department_id::text AS "departmentId",
+         participant_department.department_name AS "departmentName",
          op.acknowledged_at AS "acknowledgedAt",
          op.acknowledgement_method AS "acknowledgementMethod",
          op.acknowledgement_response AS "acknowledgementResponse",
@@ -891,7 +902,15 @@ export async function GET(
        FROM observation_participants op
        JOIN users u ON u.id = op.staff_id
        LEFT JOIN profiles p ON p.user_id = u.id
-       LEFT JOIN departments d ON d.id = p.department_id
+       LEFT JOIN LATERAL (
+         SELECT dr.department_id, d.name AS department_name
+           FROM department_role_memberships drm
+           JOIN department_roles dr ON dr.id = drm.department_role_id
+           JOIN departments d ON d.id = dr.department_id
+          WHERE drm.user_id = u.id AND dr.role::text = 'staff'
+          ORDER BY d.name, dr.department_id
+          LIMIT 1
+       ) participant_department ON true
        WHERE op.observation_id = $1
        ORDER BY LOWER(COALESCE(NULLIF(BTRIM(p.full_name), ''), u.email)), LOWER(u.email), u.id`,
       [id],

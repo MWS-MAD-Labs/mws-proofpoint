@@ -6,6 +6,7 @@ import {
   normalizeDateOnly,
 } from "@/features/observations/server/dates";
 import { pool, query, queryOne } from "@/lib/db";
+import { managerStaffScopeExistsSql } from "@/lib/organization-access";
 
 import { parseObservationListQuery } from "@/features/observations/schemas";
 import { queryObservationList } from "@/features/observations/server/queries";
@@ -188,16 +189,27 @@ export async function POST(req: Request) {
       );
     }
 
+    if (staffIds.includes(user.id.toLowerCase())) {
+      return NextResponse.json(
+        { error: "You cannot create an observation for yourself." },
+        { status: 400 },
+      );
+    }
+
     const participants = await query<PersonRow>(
       `SELECT
-         u.id, u.email, p.full_name AS "fullName", p.department_id AS "departmentId",
+         u.id, u.email, p.full_name AS "fullName",
          u.status = 'active' AS "isActive",
-         bool_or(ur.role = 'staff') AS "hasStaffRole"
+         EXISTS (
+           SELECT 1
+             FROM department_role_memberships drm
+             JOIN department_roles dr ON dr.id = drm.department_role_id
+            WHERE drm.user_id = u.id AND dr.role::text = 'staff' AND dr.department_id IS NOT NULL
+         ) AS "hasStaffRole"
        FROM users u
        LEFT JOIN profiles p ON p.user_id = u.id
-       LEFT JOIN user_roles ur ON ur.user_id = u.id
        WHERE u.id = ANY($1::uuid[])
-       GROUP BY u.id, u.email, u.status, p.full_name, p.department_id
+       GROUP BY u.id, u.email, u.status, p.full_name
        ORDER BY LOWER(COALESCE(NULLIF(p.full_name, ''), u.email)), LOWER(u.email), u.id`,
       [staffIds],
     );
@@ -213,22 +225,11 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    if (staffIds.includes(user.id.toLowerCase())) {
-      return NextResponse.json(
-        { error: "You cannot create an observation for yourself." },
-        { status: 400 },
-      );
-    }
-
     if (!isAdmin) {
       const outOfScope = await queryOne<{ count: number }>(
         `SELECT COUNT(*)::int AS count
          FROM UNNEST($1::uuid[]) AS selected(staff_id)
-         LEFT JOIN profiles staff_profile ON staff_profile.user_id = selected.staff_id
-         WHERE staff_profile.department_id IS NULL
-            OR staff_profile.department_id IS DISTINCT FROM (
-              SELECT manager_profile.department_id FROM profiles manager_profile WHERE manager_profile.user_id = $2
-            )`,
+         WHERE NOT ${managerStaffScopeExistsSql("selected.staff_id", "$2")}`,
         [staffIds, user.id],
       );
       if (!outOfScope || outOfScope.count > 0) {
@@ -242,10 +243,14 @@ export async function POST(req: Request) {
     const manager = await queryOne<PersonRow>(
       `SELECT
          u.id, u.email, p.full_name AS "fullName",
-         bool_or(ur.role IN ('manager', 'admin')) AS "hasManagerRole"
+         EXISTS (
+           SELECT 1
+             FROM department_role_memberships drm
+             JOIN department_roles dr ON dr.id = drm.department_role_id
+            WHERE drm.user_id = u.id AND dr.role::text IN ('manager', 'admin')
+         ) AS "hasManagerRole"
        FROM users u
        LEFT JOIN profiles p ON p.user_id = u.id
-       LEFT JOIN user_roles ur ON ur.user_id = u.id
        WHERE u.id = $1 AND u.status = 'active'
        GROUP BY u.id, u.email, p.full_name`,
       [user.id],
@@ -263,11 +268,11 @@ export async function POST(req: Request) {
        )
        SELECT rt.id, rt.name, rwa.workflow_id AS "workflowId"
        FROM selected_staff selected
-       JOIN profiles sp ON sp.user_id = selected.staff_id
-       JOIN user_roles sur ON sur.user_id = selected.staff_id
+       JOIN department_role_memberships drm ON drm.user_id = selected.staff_id
        JOIN department_roles dr
-         ON dr.role = sur.role
-        AND (dr.department_id = sp.department_id OR dr.department_id IS NULL)
+         ON dr.id = drm.department_role_id
+        AND dr.role::text = 'staff'
+        AND dr.department_id IS NOT NULL
        JOIN role_workflow_assignments rwa
          ON rwa.department_role_id = dr.id AND rwa.is_active = true
        JOIN rubric_templates rt

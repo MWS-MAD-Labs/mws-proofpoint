@@ -20,7 +20,12 @@ export interface AssignableUser {
   id: string;
   email: string;
   full_name: string | null;
-  department_name: string | null;
+  assignments: Array<{
+    department_role_id: string;
+    department_id: string | null;
+    department_name: string | null;
+    role: string;
+  }>;
   status: string;
 }
 
@@ -67,9 +72,13 @@ export function DepartmentRoleAssignmentDialog({
       .filter((user) => user.status !== "deleted")
       .filter((user) => {
         if (!term) return true;
-        return [user.full_name, user.email, user.department_name]
-          .filter(Boolean)
-          .some((value) => value!.toLowerCase().includes(term));
+        return [
+          user.full_name,
+          user.email,
+          ...user.assignments.flatMap((assignment) => [assignment.department_name, assignment.role]),
+        ]
+          .filter((value): value is string => Boolean(value))
+          .some((value) => value.toLowerCase().includes(term));
       })
       .sort((left, right) =>
         (left.full_name || left.email).localeCompare(right.full_name || right.email),
@@ -188,7 +197,9 @@ export function DepartmentRoleAssignmentDialog({
                     </div>
                     <p className="truncate text-xs text-muted-foreground">
                       {user.email}
-                      {user.department_name ? ` · ${user.department_name}` : " · Unassigned"}
+                      {user.assignments.length
+                        ? ` · ${user.assignments.map((assignment) => `${assignment.department_name ?? "Global"} (${assignment.role})`).join(", ")}`
+                        : " · No organizational assignment"}
                     </p>
                   </div>
                   {checked && <Check className="h-4 w-4 text-primary" />}

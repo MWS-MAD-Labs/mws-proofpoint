@@ -41,11 +41,19 @@ export async function isManagerOfDepartment(
   departmentId: string,
 ) {
   if (!user?.id || !(user.roles ?? []).includes("manager")) return false;
-  if (user.departmentId === departmentId) return true;
 
-  // The current DepartmentRole schema stores role grants at the department level rather than per user.
-  // This query is intentionally conservative and supports primary-profile manager ownership today.
-  return false;
+  const membership = await queryOne<{ allowed: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+         FROM department_role_memberships drm
+         JOIN department_roles dr ON dr.id = drm.department_role_id
+        WHERE drm.user_id = $1
+          AND dr.role::text = 'manager'
+          AND dr.department_id = $2
+     ) AS allowed`,
+    [user.id, departmentId],
+  );
+  return membership?.allowed ?? false;
 }
 
 export async function canReadStrategicPlan(

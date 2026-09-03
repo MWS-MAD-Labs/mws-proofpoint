@@ -146,6 +146,42 @@ async function insertFixture(): Promise<Fixture> {
   }
 
   await query(
+    `INSERT INTO department_roles (id, department_id, role, name, created_at, updated_at)
+     VALUES
+       ($1, $2, 'manager', $3, NOW(), NOW()),
+       ($4, $2, 'staff', $5, NOW(), NOW()),
+       ($6, $7, 'manager', $8, NOW(), NOW()),
+       ($9, $7, 'staff', $10, NOW(), NOW()),
+       ($11, NULL, 'director', $12, NOW(), NOW()),
+       ($13, NULL, 'admin', $14, NOW(), NOW())`,
+    [
+      randomUUID(), departmentAId, `${prefix}-manager-a-role`,
+      randomUUID(), `${prefix}-staff-a-role`,
+      randomUUID(), departmentBId, `${prefix}-manager-b-role`,
+      randomUUID(), `${prefix}-staff-b-role`,
+      randomUUID(), `${prefix}-director-role`,
+      randomUUID(), `${prefix}-admin-role`,
+    ],
+  );
+  await query(
+    `INSERT INTO department_role_memberships (id, department_role_id, user_id, created_at, updated_at)
+     SELECT gen_random_uuid()::text, dr.id, assigned.user_id, NOW(), NOW()
+       FROM (VALUES
+         ($1::uuid, $2::uuid, 'manager'::text),
+         ($3::uuid, $2::uuid, 'staff'::text),
+         ($4::uuid, $5::uuid, 'manager'::text),
+         ($6::uuid, $5::uuid, 'staff'::text),
+         ($7::uuid, NULL::uuid, 'director'::text),
+         ($8::uuid, NULL::uuid, 'admin'::text)
+       ) assigned(user_id, department_id, role)
+       JOIN department_roles dr
+         ON dr.department_id IS NOT DISTINCT FROM assigned.department_id
+        AND dr.role::text = assigned.role
+        AND dr.name LIKE $9`,
+    [managerAId, departmentAId, staffAId, managerBId, departmentBId, staffBId, directorId, adminId, `${prefix}%`],
+  );
+
+  await query(
     `INSERT INTO rubric_templates
        (id, name, description, department_id, is_global, is_active, created_by,
         created_at, updated_at, template_type)
@@ -630,6 +666,9 @@ async function insertWorkflowFixture(): Promise<WorkflowFixture> {
   const workflowBId = randomUUID();
   const departmentRoleAId = randomUUID();
   const departmentRoleBId = randomUUID();
+  const managerRoleAId = randomUUID();
+  const managerRoleBId = randomUUID();
+  const adminRoleId = randomUUID();
   const sectionAId = randomUUID();
   const sectionBId = randomUUID();
   const requiredIndicatorId = randomUUID();
@@ -667,7 +706,13 @@ async function insertWorkflowFixture(): Promise<WorkflowFixture> {
       `INSERT INTO profiles
          (id, user_id, email, full_name, department_id, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
-      [randomUUID(), userId, email, `${prefix}-${role}`, departmentId],
+      [
+        randomUUID(),
+        userId,
+        email,
+        `${prefix}-${role}`,
+        userId === managerAId ? null : departmentId,
+      ],
     );
     await query(
       `INSERT INTO user_roles (id, user_id, role)
@@ -681,7 +726,10 @@ async function insertWorkflowFixture(): Promise<WorkflowFixture> {
        (id, department_id, role, name, created_at, updated_at)
      VALUES
        ($1, $2, 'staff', $3, NOW(), NOW()),
-       ($4, $5, 'staff', $6, NOW(), NOW())`,
+       ($4, $5, 'staff', $6, NOW(), NOW()),
+       ($7, $2, 'manager', $8, NOW(), NOW()),
+       ($9, $5, 'manager', $10, NOW(), NOW()),
+       ($11, NULL, 'admin', $12, NOW(), NOW())`,
     [
       departmentRoleAId,
       departmentAId,
@@ -689,6 +737,31 @@ async function insertWorkflowFixture(): Promise<WorkflowFixture> {
       departmentRoleBId,
       departmentBId,
       `${prefix}-staff-role-b`,
+      managerRoleAId,
+      `${prefix}-manager-role-a`,
+      managerRoleBId,
+      `${prefix}-manager-role-b`,
+      adminRoleId,
+      `${prefix}-admin-role`,
+    ],
+  );
+  await query(
+    `INSERT INTO department_role_memberships
+       (id, department_role_id, user_id, created_at, updated_at)
+     VALUES
+       ($1, $2, $3, NOW(), NOW()),
+       ($4, $5, $6, NOW(), NOW()),
+       ($7, $8, $9, NOW(), NOW()),
+       ($10, $8, $11, NOW(), NOW()),
+       ($12, $13, $14, NOW(), NOW()),
+       ($15, $16, $17, NOW(), NOW())`,
+    [
+      randomUUID(), managerRoleAId, managerAId,
+      randomUUID(), managerRoleBId, managerBId,
+      randomUUID(), departmentRoleAId, staffAId,
+      randomUUID(), staffCId,
+      randomUUID(), departmentRoleBId, staffBId,
+      randomUUID(), adminRoleId, adminId,
     ],
   );
   await query(

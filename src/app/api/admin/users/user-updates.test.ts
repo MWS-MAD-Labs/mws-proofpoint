@@ -7,20 +7,17 @@ import {
   validateUserActionTargets,
 } from "./user-updates";
 
-test("status-only user updates preserve the existing department", () => {
+test("user profile updates only include personal profile fields", () => {
   assert.deepEqual(buildUserProfileUpdate({}), {
     fullName: undefined,
     niy: undefined,
     jobTitle: undefined,
-    departmentId: undefined,
   });
-});
-
-test("user updates can explicitly assign or clear the department", () => {
-  assert.equal(buildUserProfileUpdate({ department_id: "department-1" }).departmentId, "department-1");
-  assert.equal(buildUserProfileUpdate({ department_id: "" }).departmentId, null);
-  assert.equal(buildUserProfileUpdate({ department_id: "none" }).departmentId, null);
-  assert.equal(buildUserProfileUpdate({ department_id: null }).departmentId, null);
+  assert.deepEqual(buildUserProfileUpdate({ full_name: "A User", job_title: "Teacher" }), {
+    fullName: "A User",
+    niy: undefined,
+    jobTitle: "Teacher",
+  });
 });
 
 test("bulk user IDs are filtered and deduplicated", () => {

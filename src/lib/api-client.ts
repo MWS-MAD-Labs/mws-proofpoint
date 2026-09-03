@@ -272,13 +272,6 @@ class ApiClient {
     return this.request(`/user-roles${query}`);
   }
 
-  async assignRole(userId: string, role: string): Promise<ApiResponse<unknown>> {
-    return this.request("/user-roles", { method: "POST", body: JSON.stringify({ user_id: userId, role }) });
-  }
-
-  async removeRole(userId: string, role: string): Promise<ApiResponse<unknown>> {
-    return this.request(`/user-roles?userId=${userId}&role=${role}`, { method: "DELETE" });
-  }
 
   // ========== Admin API ==========
 
@@ -294,8 +287,6 @@ class ApiClient {
     full_name?: string;
     niy?: string;
     job_title?: string;
-    department_id?: string | null;
-    roles?: string[];
   }): Promise<ApiResponse<unknown>> {
     return this.request("/admin/users", { method: "POST", body: JSON.stringify(data) });
   }
@@ -304,8 +295,6 @@ class ApiClient {
     full_name?: string;
     niy?: string;
     job_title?: string;
-    department_id?: string | null;
-    roles?: string[];
     password?: string;
     status?: string;
   }): Promise<ApiResponse<unknown>> {

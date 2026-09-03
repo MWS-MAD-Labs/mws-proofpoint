@@ -35,19 +35,14 @@ export interface UserProfileUpdateInput {
   full_name?: string | null;
   niy?: string | null;
   job_title?: string | null;
-  department_id?: string | null;
 }
 
 export function buildUserProfileUpdate(input: UserProfileUpdateInput) {
-  const { full_name, niy, job_title, department_id } = input;
-  const departmentId = department_id === "" || department_id === "none"
-    ? null
-    : department_id;
+  const { full_name, niy, job_title } = input;
 
   return {
     fullName: full_name ?? undefined,
     niy: niy ?? undefined,
     jobTitle: job_title ?? undefined,
-    departmentId: department_id === undefined ? undefined : departmentId,
   };
 }

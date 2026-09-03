@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
+import { managerStaffScopeExistsSql } from "@/lib/organization-access";
 import { triggerNotification } from "@/lib/notifications";
 import type { NotificationType } from "@/lib/notifications/types";
 import { getAssessmentPermissions } from "@/features/assessments/server/permissions";
@@ -177,21 +178,30 @@ export async function GET(request: Request) {
                 rt.name as template_name,
                 sp.full_name as staff_name,
                 sp.job_title as staff_job_title,
-                sp.department_id as staff_department_id,
-                d.name as staff_department,
+                staff_department.department_id as staff_department_id,
+                staff_department.department_name as staff_department,
                 mp.full_name as manager_name,
                 mp.job_title as manager_job_title,
                 dp.full_name as director_name,
                 dp.job_title as director_job_title,
                 (
-                  SELECT array_agg(role::text ORDER BY role::text)
-                  FROM user_roles
-                  WHERE user_id = a.staff_id
+                  SELECT array_agg(DISTINCT dr.role::text ORDER BY dr.role::text)
+                  FROM department_role_memberships drm
+                  JOIN department_roles dr ON dr.id = drm.department_role_id
+                  WHERE drm.user_id = a.staff_id
                 ) as staff_roles
          FROM assessments a
          LEFT JOIN rubric_templates rt ON a.template_id = rt.id
          LEFT JOIN profiles sp ON a.staff_id = sp.user_id
-         LEFT JOIN departments d ON sp.department_id = d.id
+         LEFT JOIN LATERAL (
+           SELECT dr.department_id::text AS department_id, d.name AS department_name
+             FROM department_role_memberships drm
+             JOIN department_roles dr ON dr.id = drm.department_role_id
+             JOIN departments d ON d.id = dr.department_id
+            WHERE drm.user_id = a.staff_id AND dr.role::text = 'staff'
+            ORDER BY d.name, dr.department_id
+            LIMIT 1
+         ) staff_department ON true
          LEFT JOIN profiles mp ON a.manager_id = mp.user_id
          LEFT JOIN profiles dp ON a.director_id = dp.user_id
          WHERE a.id = $1`,
@@ -219,18 +229,27 @@ export async function GET(request: Request) {
              rt.name as template_name,
              sp.full_name as staff_name,
              sp.job_title as staff_job_title,
-             d.name as staff_department,
+             staff_department.department_name as staff_department,
              mp.full_name as manager_name,
              mp.job_title as manager_job_title,
              (
-                SELECT array_agg(role::text ORDER BY role::text)
-                FROM user_roles
-                WHERE user_id = a.staff_id
+                SELECT array_agg(DISTINCT dr.role::text ORDER BY dr.role::text)
+                FROM department_role_memberships drm
+                JOIN department_roles dr ON dr.id = drm.department_role_id
+                WHERE drm.user_id = a.staff_id
              ) as staff_roles
       FROM assessments a
       LEFT JOIN rubric_templates rt ON a.template_id = rt.id
       LEFT JOIN profiles sp ON a.staff_id = sp.user_id
-      LEFT JOIN departments d ON sp.department_id = d.id
+      LEFT JOIN LATERAL (
+        SELECT d.name AS department_name
+          FROM department_role_memberships drm
+          JOIN department_roles dr ON dr.id = drm.department_role_id
+          JOIN departments d ON d.id = dr.department_id
+         WHERE drm.user_id = a.staff_id AND dr.role::text = 'staff'
+         ORDER BY d.name, dr.department_id
+         LIMIT 1
+      ) staff_department ON true
       LEFT JOIN profiles mp ON a.manager_id = mp.user_id
       WHERE 1=1
     `;
@@ -239,8 +258,6 @@ export async function GET(request: Request) {
 
     // Apply Role-Based Filtering
     const roles = (session.user as { roles?: string[] }).roles || [];
-    const departmentId = (session.user as { departmentId?: string })
-      .departmentId;
     const userId = session.user.id;
 
     const isAdmin = roles.includes("admin");
@@ -250,12 +267,15 @@ export async function GET(request: Request) {
     if (isAdmin || isDirector) {
       // Admins and Directors see all assessments
     } else if (isManager) {
-      // Manager sees:
-      // 1. Staff in their department
-      // 2. Assessments they explicitly manage
-      // 3. Their own assessments
-      sql += ` AND (sp.department_id = $${paramIndex++} OR a.manager_id = $${paramIndex++} OR a.staff_id = $${paramIndex++})`;
-      params.push(departmentId ?? null, userId, userId);
+      // Managers see staff assigned to a department they manage, assessments they
+      // explicitly manage, and their own assessments.
+      sql += ` AND (
+        ${managerStaffScopeExistsSql("a.staff_id", `$${paramIndex}`)}
+        OR a.manager_id = $${paramIndex}
+        OR a.staff_id = $${paramIndex}
+      )`;
+      params.push(userId);
+      paramIndex++;
     } else {
       // Staff see only their own assessments
       sql += ` AND a.staff_id = $${paramIndex++}`;

@@ -17,10 +17,14 @@ interface SessionUserWithRoles {
   roles?: string[];
 }
 
-type UserWithProfileAndRoles = Prisma.UserGetPayload<{
+type UserWithOrganizationAssignments = Prisma.UserGetPayload<{
   include: {
-    profile: { include: { department: true } };
-    roles: true;
+    profile: true;
+    departmentRoleMemberships: {
+      include: {
+        departmentRole: { include: { department: true } };
+      };
+    };
   };
 }>;
 
@@ -47,8 +51,12 @@ export async function GET(request: Request) {
       const user = await prisma.user.findUnique({
         where: { id: userId },
         include: {
-          profile: { include: { department: true } },
-          roles: true,
+          profile: true,
+          departmentRoleMemberships: {
+            include: {
+              departmentRole: { include: { department: true } },
+            },
+          },
         },
       });
       if (!user) return NextResponse.json({ data: null });
@@ -58,8 +66,12 @@ export async function GET(request: Request) {
     const users = await prisma.user.findMany({
       where: { status: { not: "deleted" } },
       include: {
-        profile: { include: { department: true } },
-        roles: true,
+        profile: true,
+        departmentRoleMemberships: {
+          include: {
+            departmentRole: { include: { department: true } },
+          },
+        },
       },
       orderBy: { profile: { fullName: "asc" } },
     });
@@ -79,7 +91,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
 
     const body = await request.json();
-    const { email, password, full_name, niy, job_title, department_id, roles } = body;
+    const { email, password, full_name, niy, job_title } = body;
 
     if (!email || !password)
       return NextResponse.json({ error: "Email and password required" }, { status: 400 });
@@ -90,7 +102,6 @@ export async function POST(request: Request) {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const rolesArray = sanitizeRoles(roles);
 
     const newUser = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -110,24 +121,23 @@ export async function POST(request: Request) {
           fullName:     full_name     ?? null,
           niy:          niy           ?? null,
           jobTitle:     job_title     ?? null,
-          departmentId: department_id ?? null,
         },
       });
 
-      for (const role of rolesArray) {
-  await tx.$executeRawUnsafe(
-    `INSERT INTO user_roles (id, user_id, role, created_at)
-     VALUES ($1, $2, $3::app_role, NOW())`,
-    randomUUID(), user.id, role
-  );
-}
 
       return user;
     });
 
     const created = await prisma.user.findUnique({
       where: { id: newUser.id },
-      include: { profile: { include: { department: true } }, roles: true },
+      include: {
+        profile: true,
+        departmentRoleMemberships: {
+          include: {
+            departmentRole: { include: { department: true } },
+          },
+        },
+      },
     });
 
     return NextResponse.json({ data: formatUser(created!) }, { status: 201 });
@@ -145,7 +155,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
 
     const body = await request.json();
-    const { id, userIds, full_name, niy, job_title, department_id, roles, password, status } = body;
+    const { id, userIds, full_name, niy, job_title, password, status } = body;
     const bulkUserIds = normalizeUserIds(userIds);
 
     if (bulkUserIds.length > 0) {
@@ -180,7 +190,7 @@ export async function PUT(request: Request) {
     await prisma.$transaction(async (tx) => {
       await tx.profile.updateMany({
         where: { userId: id },
-        data: buildUserProfileUpdate({ full_name, niy, job_title, department_id }),
+        data: buildUserProfileUpdate({ full_name, niy, job_title }),
       });
 
       if (password) {
@@ -192,24 +202,18 @@ export async function PUT(request: Request) {
         await tx.user.update({ where: { id }, data: { status } });
       }
 
-      if (roles) {
-        const rolesArray = sanitizeRoles(roles);
-        if (rolesArray.length > 0) {
-          await tx.userRole.deleteMany({ where: { userId: id } });
-for (const role of rolesArray) {
-  await tx.$executeRawUnsafe(
-    `INSERT INTO user_roles (id, user_id, role, created_at)
-     VALUES ($1, $2, $3::app_role, NOW())`,
-    randomUUID(), id, role
-  );
-}
-        }
-      }
     });
 
     const updated = await prisma.user.findUnique({
       where: { id },
-      include: { profile: { include: { department: true } }, roles: true },
+      include: {
+        profile: true,
+        departmentRoleMemberships: {
+          include: {
+            departmentRole: { include: { department: true } },
+          },
+        },
+      },
     });
 
     return NextResponse.json({ data: formatUser(updated!) });
@@ -302,30 +306,43 @@ export async function DELETE(request: Request) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const VALID_ROLES = ["admin", "staff", "manager", "director", "supervisor"];
+function formatUser(user: UserWithOrganizationAssignments) {
+  const assignments = user.departmentRoleMemberships
+    .filter(({ departmentRole }) =>
+      (["admin", "director"].includes(departmentRole.role) && departmentRole.departmentId === null) ||
+      (["manager", "supervisor", "staff"].includes(departmentRole.role) && departmentRole.departmentId !== null),
+    )
+    .map(({ departmentRole }) => ({
+      department_role_id: departmentRole.id,
+      department_id: departmentRole.departmentId,
+      department_name: departmentRole.department?.name ?? null,
+      role: departmentRole.role,
+    }))
+    .sort((left, right) =>
+      (left.department_name ?? "").localeCompare(right.department_name ?? "") ||
+      left.role.localeCompare(right.role),
+    );
+  const departments = Array.from(
+    new Map(
+      assignments
+        .filter((assignment) => assignment.department_id)
+        .map((assignment) => [assignment.department_id!, {
+          id: assignment.department_id!,
+          name: assignment.department_name ?? "Unnamed department",
+        }]),
+    ).values(),
+  );
 
-function sanitizeRoles(roles: unknown): string[] {
-  let arr: string[] = ["staff"];
-  if (Array.isArray(roles)) {
-    arr = roles.map((r) => String(r).trim().toLowerCase()).filter(Boolean);
-  } else if (typeof roles === "string" && roles.length > 0) {
-    arr = roles.replace(/[{}]/g, "").split(",").map((r) => r.trim().toLowerCase()).filter(Boolean);
-  }
-  const filtered = arr.filter((r) => VALID_ROLES.includes(r));
-  return filtered.length > 0 ? filtered : ["staff"];
-}
-
-function formatUser(user: UserWithProfileAndRoles) {
   return {
-    id:              user.id,
-    email:           user.email,
-    status:          user.status,
-    created_at:      user.createdAt,
-    full_name:       user.profile?.fullName     ?? null,
-    niy:             user.profile?.niy          ?? null,
-    job_title:       user.profile?.jobTitle     ?? null,
-    department_id:   user.profile?.departmentId ?? null,
-    department_name: user.profile?.department?.name ?? null,
-    roles:           user.roles?.map((role) => role.role) ?? [],
+    id: user.id,
+    email: user.email,
+    status: user.status,
+    created_at: user.createdAt,
+    full_name: user.profile?.fullName ?? null,
+    niy: user.profile?.niy ?? null,
+    job_title: user.profile?.jobTitle ?? null,
+    assignments,
+    departments,
+    roles: Array.from(new Set(assignments.map((assignment) => assignment.role))),
   };
 }

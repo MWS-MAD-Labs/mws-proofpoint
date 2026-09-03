@@ -3,18 +3,20 @@ import test from "node:test";
 import { refreshAuthToken } from "./auth-token";
 
 test("active user refreshes token authorization fields", async () => {
-  const token = { id: "user-1", roles: ["staff"], departmentId: null };
+  const token = { id: "user-1", roles: ["staff"], departmentId: null, departmentIds: [] as string[] };
   const result = await refreshAuthToken(token, async () => ({
     id: "user-1",
     roles: ["manager"],
-    departmentId: "department-1",
+    departmentId: null,
+    departmentIds: ["department-1", "department-2"],
   }));
 
   assert.equal(result, token);
   assert.deepEqual(result, {
     id: "user-1",
     roles: ["manager"],
-    departmentId: "department-1",
+    departmentId: null,
+    departmentIds: ["department-1", "department-2"],
   });
 });
 
