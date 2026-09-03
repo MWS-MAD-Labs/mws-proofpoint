@@ -49,6 +49,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api-client";
+import { GLOBAL_ROLES } from "@/lib/app-roles";
 import { useAuth } from "@/hooks/useAuth";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1258,7 +1259,7 @@ function DirectorLayoutWrapper() {
 
 export default function DirectorPage() {
   return (
-    <ProtectedRoute requiredRoles={["director", "admin"]}>
+    <ProtectedRoute requiredRoles={GLOBAL_ROLES}>
       <Suspense
         fallback={
           <Loader2 className="h-12 w-12 animate-spin fixed top-1/2 left-1/2" />

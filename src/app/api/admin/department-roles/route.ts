@@ -6,6 +6,7 @@ import {
     isCanonicalRoleAssignment,
     rebuildUserRoleProjection,
 } from "@/lib/organization-access";
+import { isGlobalRole, isManageableRole } from "@/lib/app-roles";
 
 // Helper to check if user is admin
 async function requireAdmin() {
@@ -97,13 +98,13 @@ export async function POST(request: Request) {
             : department_id;
         const normalizedRole = String(role).trim().toLowerCase();
         const normalizedName = typeof name === "string" && name.trim() ? name.trim() : null;
-        if (!["admin", "director", "manager", "supervisor", "staff"].includes(normalizedRole)) {
+        if (!isManageableRole(normalizedRole)) {
             return NextResponse.json({ error: "Unsupported role" }, { status: 400 });
         }
         if (!isCanonicalRoleAssignment(normalizedRole, finalDeptId)) {
             return NextResponse.json(
                 {
-                    error: ["admin", "director"].includes(normalizedRole)
+                    error: isGlobalRole(normalizedRole)
                         ? "Admin and director roles must be global."
                         : "Manager, supervisor, and staff roles require a department.",
                 },
@@ -198,7 +199,7 @@ export async function DELETE(request: Request) {
                 await client.query("ROLLBACK");
                 return NextResponse.json({ error: "Department role not found" }, { status: 404 });
             }
-            if (role.departmentId === null && ["admin", "director"].includes(role.role)) {
+            if (role.departmentId === null && isGlobalRole(role.role)) {
                 await client.query("ROLLBACK");
                 return NextResponse.json(
                     { error: "Global admin and director role definitions cannot be deleted." },

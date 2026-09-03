@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { PoolClient } from "pg";
 import { pool, query, queryOne } from "@/lib/db";
+import { GLOBAL_ROLES } from "@/lib/app-roles";
 
 export type ProgramStatus =
   | "not_started"
@@ -30,7 +31,7 @@ export interface StrategicPlanRow {
 
 export function hasAnyRole(
   user: StrategicSessionUser | undefined | null,
-  roles: string[],
+  roles: readonly string[],
 ) {
   const userRoles = user?.roles ?? [];
   return roles.some((role) => userRoles.includes(role));
@@ -62,7 +63,7 @@ export async function canReadStrategicPlan(
 ) {
   if (!user?.id) return false;
   if (plan.status === "published") return true;
-  if (hasAnyRole(user, ["director", "admin"])) return true;
+  if (hasAnyRole(user, GLOBAL_ROLES)) return true;
   return isManagerOfDepartment(user, plan.department_id);
 }
 
@@ -71,14 +72,14 @@ export async function canWriteStrategicPlan(
   user: StrategicSessionUser | undefined | null,
 ) {
   if (!user?.id) return false;
-  if (hasAnyRole(user, ["director", "admin"])) return true;
+  if (hasAnyRole(user, GLOBAL_ROLES)) return true;
   return isManagerOfDepartment(user, plan.department_id);
 }
 
 export function canDeleteStrategicPlan(
   user: StrategicSessionUser | undefined | null,
 ) {
-  return !!user?.id && hasAnyRole(user, ["director", "admin"]);
+  return !!user?.id && hasAnyRole(user, GLOBAL_ROLES);
 }
 
 export async function canCreateStrategicPlan(
@@ -91,7 +92,7 @@ export async function canCreateStrategicPlan(
     [departmentId],
   );
   if (existing) return false;
-  if (hasAnyRole(user, ["director", "admin"])) return true;
+  if (hasAnyRole(user, GLOBAL_ROLES)) return true;
   return isManagerOfDepartment(user, departmentId);
 }
 

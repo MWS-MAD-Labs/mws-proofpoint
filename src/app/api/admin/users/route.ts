@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
 import type { Prisma } from "@prisma/client";
+import { isCanonicalRoleAssignment } from "@/lib/organization-access";
 import {
   buildUserProfileUpdate,
   normalizeUserIds,
@@ -309,8 +310,7 @@ export async function DELETE(request: Request) {
 function formatUser(user: UserWithOrganizationAssignments) {
   const assignments = user.departmentRoleMemberships
     .filter(({ departmentRole }) =>
-      (["admin", "director"].includes(departmentRole.role) && departmentRole.departmentId === null) ||
-      (["manager", "supervisor", "staff"].includes(departmentRole.role) && departmentRole.departmentId !== null),
+      isCanonicalRoleAssignment(departmentRole.role, departmentRole.departmentId),
     )
     .map(({ departmentRole }) => ({
       department_role_id: departmentRole.id,

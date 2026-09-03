@@ -6,8 +6,7 @@ import {
   signIn as nextAuthSignIn,
   signOut as nextAuthSignOut,
 } from "next-auth/react";
-
-type AppRole = "admin" | "staff" | "manager" | "director";
+import { isManageableRole, type ManageableRole } from "@/lib/app-roles";
 
 interface Profile {
   id: string;
@@ -26,7 +25,7 @@ interface AuthContextType {
   user: User | null;
   session: { user: User } | null;
   profile: Profile | null;
-  roles: AppRole[];
+  roles: ManageableRole[];
   loading: boolean;
   signUp: (
     email: string,
@@ -36,7 +35,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
-  hasRole: (role: AppRole) => boolean;
+  hasRole: (role: ManageableRole) => boolean;
   isAdmin: boolean;
   isManager: boolean;
   isDirector: boolean;
@@ -71,8 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     : null;
 
   // Extract roles from session
-  const roles: AppRole[] = session?.user
-    ? (((session.user as { roles?: string[] }).roles ?? []) as AppRole[])
+  const roles: ManageableRole[] = session?.user
+    ? ((session.user as { roles?: string[] }).roles ?? []).filter(isManageableRole)
     : [];
 
   const signUp = async (email: string, password: string, fullName: string) => {
@@ -157,7 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await nextAuthSignOut({ redirect: false });
   };
 
-  const hasRole = (role: AppRole) => roles.includes(role);
+  const hasRole = (role: ManageableRole) => roles.includes(role);
 
   const value: AuthContextType = {
     user,

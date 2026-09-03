@@ -68,6 +68,7 @@ See the [v0.2.0 release notes](https://github.com/MWS-MAD-Labs/mws-proofpoint/re
 
 - Hierarchical departments and sub-departments.
 - Searchable department structure with focused department details.
+- User management with search (name, email, NIY, job title) plus department, account status, and role filters, and bulk suspend, reactivate, and delete actions.
 - Global and department-scoped role management.
 - Department role memberships used for workflow authorization and staff eligibility.
 - Rubric, KPI framework, observation form, and workflow configuration.

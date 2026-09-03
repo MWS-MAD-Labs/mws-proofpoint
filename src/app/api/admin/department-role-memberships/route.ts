@@ -2,9 +2,8 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { pool, query } from "@/lib/db";
-import { rebuildUserRoleProjection } from "@/lib/organization-access";
-
-const MANAGEABLE_ROLES = new Set(["admin", "director", "manager", "supervisor", "staff"]);
+import { canonicalRoleScopeSql, rebuildUserRoleProjection } from "@/lib/organization-access";
+import { isDepartmentalRole, isGlobalRole, isManageableRole } from "@/lib/app-roles";
 
 interface AssignmentRow {
   departmentRoleId: string;
@@ -81,8 +80,7 @@ export async function GET() {
          LEFT JOIN department_role_memberships drm ON drm.department_role_id = dr.id
          LEFT JOIN users u ON u.id = drm.user_id AND u.status <> 'deleted'
          LEFT JOIN profiles p ON p.user_id = u.id
-        WHERE (dr.department_id IS NOT NULL AND dr.role::text IN ('manager', 'supervisor', 'staff'))
-           OR (dr.department_id IS NULL AND dr.role::text IN ('director', 'admin'))
+        WHERE ${canonicalRoleScopeSql("dr")}
         ORDER BY d.name NULLS FIRST, dr.role, p.full_name NULLS LAST, u.email`,
     );
 
@@ -134,15 +132,15 @@ export async function PUT(request: Request) {
         [departmentRoleId],
       );
       const role = roleResult.rows[0];
-      if (!role || !MANAGEABLE_ROLES.has(role.role)) {
+      if (!role || !isManageableRole(role.role)) {
         await client.query("ROLLBACK");
         return NextResponse.json({ error: "Role assignment not found." }, { status: 404 });
       }
-      if (role.departmentId === null && !["admin", "director"].includes(role.role)) {
+      if (role.departmentId === null && !isGlobalRole(role.role)) {
         await client.query("ROLLBACK");
         return NextResponse.json({ error: "This global role cannot be managed here." }, { status: 400 });
       }
-      if (role.departmentId !== null && !["manager", "supervisor", "staff"].includes(role.role)) {
+      if (role.departmentId !== null && !isDepartmentalRole(role.role)) {
         await client.query("ROLLBACK");
         return NextResponse.json({ error: "This department role cannot be managed here." }, { status: 400 });
       }

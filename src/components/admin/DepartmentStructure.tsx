@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { isGlobalRole } from "@/lib/app-roles";
 import type { DepartmentRoleAssignment } from "./DepartmentRoleAssignmentDialog";
 
 export interface DepartmentStructureUser {
@@ -178,7 +179,7 @@ export function DepartmentStructure({
     );
   };
 
-  const globalAssignments = roleAssignments.filter((assignment) => assignment.department_id === null && ["director", "admin"].includes(assignment.role));
+  const globalAssignments = roleAssignments.filter((assignment) => assignment.department_id === null && isGlobalRole(assignment.role));
   const children = selected ? childrenByParent.get(selected.id) ?? [] : [];
   const managers = selected?.role_holders.filter((holder) => holder.role === "manager") ?? [];
   const supervisors = selected?.role_holders.filter((holder) => holder.role === "supervisor") ?? [];

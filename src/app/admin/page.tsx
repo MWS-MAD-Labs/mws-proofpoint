@@ -35,7 +35,9 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { api } from '@/lib/api-client';
+import { MANAGEABLE_ROLES } from '@/lib/app-roles';
 
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -115,6 +117,9 @@ function AdminContent() {
     const [departments, setDepartments] = useState<Department[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [departmentFilter, setDepartmentFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [roleFilter, setRoleFilter] = useState('all');
     const [activeTab, setActiveTab] = useState('users');
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
     const [actionPending, setActionPending] = useState(false);
@@ -173,12 +178,28 @@ function AdminContent() {
 
     useEffect(() => {
         setSelectedUserIds([]);
-    }, [searchTerm]);
+    }, [searchTerm, departmentFilter, statusFilter, roleFilter]);
 
-    const filteredUsers = users.filter(u =>
-        u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        u.email?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredUsers = users.filter(user => {
+        const normalizedSearch = searchTerm.trim().toLowerCase();
+        const matchesSearch = !normalizedSearch ||
+            user.full_name?.toLowerCase().includes(normalizedSearch) ||
+            user.email.toLowerCase().includes(normalizedSearch) ||
+            user.niy?.toLowerCase().includes(normalizedSearch) ||
+            user.job_title?.toLowerCase().includes(normalizedSearch);
+        const matchesDepartment = departmentFilter === 'all' ||
+            (departmentFilter === 'unassigned'
+                ? !user.assignments.some(assignment => assignment.department_id)
+                : user.assignments.some(assignment => assignment.department_id === departmentFilter));
+        const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
+        const matchesRole = roleFilter === 'all' ||
+            (roleFilter === 'unassigned'
+                ? user.roles.length === 0
+                : user.roles.includes(roleFilter));
+
+        return matchesSearch && matchesDepartment && matchesStatus && matchesRole;
+    });
+    const hasActiveUserFilters = searchTerm.trim() !== '' || departmentFilter !== 'all' || statusFilter !== 'all' || roleFilter !== 'all';
     const filteredUserIds = filteredUsers.map(user => user.id);
     const allFilteredUsersSelected = filteredUserIds.length > 0 && filteredUserIds.every(id => selectedUserIds.includes(id));
     const someFilteredUsersSelected = filteredUserIds.some(id => selectedUserIds.includes(id));
@@ -436,6 +457,70 @@ function AdminContent() {
                             </div>
                         </CardHeader>
                         <CardContent>
+                            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
+                                <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-3">
+                                    <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                                        <SelectTrigger aria-label="Filter users by department" className="w-full bg-card">
+                                            <SelectValue placeholder="All departments" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All departments</SelectItem>
+                                            <SelectItem value="unassigned">No department</SelectItem>
+                                            {departments.map(department => (
+                                                <SelectItem key={department.id} value={department.id}>
+                                                    {department.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                                        <SelectTrigger aria-label="Filter users by account status" className="w-full bg-card">
+                                            <SelectValue placeholder="All statuses" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All statuses</SelectItem>
+                                            <SelectItem value="active">Active</SelectItem>
+                                            <SelectItem value="suspended">Suspended</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Select value={roleFilter} onValueChange={setRoleFilter}>
+                                        <SelectTrigger aria-label="Filter users by role" className="w-full bg-card">
+                                            <SelectValue placeholder="All roles" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All roles</SelectItem>
+                                            {MANAGEABLE_ROLES.map(role => (
+                                                <SelectItem key={role} value={role} className="capitalize">
+                                                    {role}
+                                                </SelectItem>
+                                            ))}
+                                            <SelectItem value="unassigned">No role</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex items-center justify-between gap-3 lg:justify-end">
+                                    {!loading && (
+                                        <span className="whitespace-nowrap text-sm text-muted-foreground">
+                                            {filteredUsers.length} of {users.length} users
+                                        </span>
+                                    )}
+                                    {hasActiveUserFilters && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => {
+                                                setSearchTerm('');
+                                                setDepartmentFilter('all');
+                                                setStatusFilter('all');
+                                                setRoleFilter('all');
+                                            }}
+                                        >
+                                            Clear search and filters
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
                             {loading ? (
                                 <div className="flex flex-col items-center justify-center py-20">
                                     <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
@@ -445,7 +530,7 @@ function AdminContent() {
                                 <div className="text-center py-20 border border-dashed rounded-xl bg-muted/20">
                                     <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
                                     <h3 className="text-lg font-semibold">No users found</h3>
-                                    <p className="text-muted-foreground">No users match your search criteria.</p>
+                                    <p className="text-muted-foreground">No users match your search and filter criteria.</p>
                                 </div>
                             ) : (
                                 <div className="rounded-md border border-border/50 overflow-hidden">

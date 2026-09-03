@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg";
+import { DEPARTMENTAL_ROLES, GLOBAL_ROLES, isDepartmentalRole, isGlobalRole } from "@/lib/app-roles";
 
 const SAFE_SQL_ALIAS = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SAFE_SQL_REFERENCE = /^(?:[A-Za-z_][A-Za-z0-9_]*\.)?[A-Za-z_][A-Za-z0-9_]*$/;
@@ -9,10 +10,13 @@ export function canonicalRoleScopeSql(alias = "dr"): string {
     throw new Error("Invalid SQL alias for canonical role scope.");
   }
 
+  const globalRolesSql = GLOBAL_ROLES.map(role => `'${role}'`).join(", ");
+  const departmentalRolesSql = DEPARTMENTAL_ROLES.map(role => `'${role}'`).join(", ");
+
   return `(
-    (${alias}.role::text IN ('admin', 'director') AND ${alias}.department_id IS NULL)
+    (${alias}.role::text IN (${globalRolesSql}) AND ${alias}.department_id IS NULL)
     OR
-    (${alias}.role::text IN ('manager', 'supervisor', 'staff') AND ${alias}.department_id IS NOT NULL)
+    (${alias}.role::text IN (${departmentalRolesSql}) AND ${alias}.department_id IS NOT NULL)
   )`;
 }
 
@@ -38,8 +42,8 @@ export function managerStaffScopeExistsSql(
 }
 
 export function isCanonicalRoleAssignment(role: string, departmentId: string | null): boolean {
-  return (["admin", "director"].includes(role) && departmentId === null)
-    || (["manager", "supervisor", "staff"].includes(role) && departmentId !== null);
+  return (isGlobalRole(role) && departmentId === null)
+    || (isDepartmentalRole(role) && departmentId !== null);
 }
 
 export async function rebuildUserRoleProjection(
