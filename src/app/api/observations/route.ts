@@ -282,7 +282,7 @@ export async function POST(req: Request) {
        JOIN workflow_definitions wd
          ON wd.id = rwa.workflow_id AND wd.type = 'CLASSROOM_OBSERVATION'
        WHERE rt.id = $2
-         AND ($3::uuid IS NULL OR rwa.workflow_id = $3::uuid)
+         AND ($3::text IS NULL OR rwa.workflow_id = $3::text)
        GROUP BY rt.id, rt.name, rwa.workflow_id
        HAVING COUNT(DISTINCT selected.staff_id) = CARDINALITY($1::uuid[])
        ORDER BY rwa.workflow_id
