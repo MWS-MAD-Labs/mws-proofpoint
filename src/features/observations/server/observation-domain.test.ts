@@ -367,6 +367,61 @@ test("list filters use participant EXISTS predicates without multiplying observa
   ]);
 });
 
+test("combined director and manager filters bind only parameters used by each query", () => {
+  const actor = { id: "director-manager", roles: ["director", "manager"] };
+  for (const includeActionExpression of [true, false]) {
+    for (const actionRequired of [undefined, "true", "false"] as const) {
+      for (const filtered of [false, true]) {
+        const params: unknown[] = [];
+        const { whereSql, actionExpression } = buildListFilters(
+          actor,
+          {
+            q: "",
+            page: 1,
+            pageSize: 10,
+            sort: "updated_desc",
+            actionRequired,
+            ...(filtered ? { q: "Teacher", status: "submitted" as const } : {}),
+          },
+          params,
+          includeActionExpression,
+        );
+        const needsActor = includeActionExpression || actionRequired !== undefined;
+        assert.deepEqual(params, [
+          ...(needsActor ? [actor.id] : []),
+          ...(filtered ? ["%Teacher%", "submitted"] : []),
+        ]);
+        const sql = includeActionExpression
+          ? `${whereSql} ${actionExpression}`
+          : whereSql;
+        const placeholders = [...new Set(
+          [...sql.matchAll(/\$(\d+)/g)].map((match) => Number(match[1])),
+        )].sort((a, b) => a - b);
+        assert.deepEqual(placeholders, params.map((_, index) => index + 1));
+        if (!filtered && actionRequired === undefined) {
+          assert.equal(whereSql, "TRUE");
+        }
+        if (actionRequired === "false") assert.match(whereSql, /NOT \(/);
+      }
+    }
+  }
+});
+
+test("count-only filters preserve manager and staff visibility parameters", () => {
+  for (const role of ["manager", "staff"]) {
+    const params: unknown[] = [];
+    const { whereSql } = buildListFilters(
+      { id: "scoped-user", roles: [role] },
+      { q: "", page: 1, pageSize: 10, sort: "updated_desc" },
+      params,
+      false,
+    );
+    assert.deepEqual(params, ["scoped-user"]);
+    assert.match(whereSql, /visibility_participant\.staff_id = \$1/);
+    assert.match(whereSql, /<> 'draft'/);
+  }
+});
+
 test("overdue filters include submitted observations only", () => {
   const params: unknown[] = [];
   const { whereSql } = buildListFilters(
