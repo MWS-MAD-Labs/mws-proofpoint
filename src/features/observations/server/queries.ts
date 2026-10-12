@@ -203,14 +203,19 @@ export function buildListFilters(
   actor: ObservationActor,
   input: ObservationListQuery,
   params: unknown[],
+  includeActionExpression = true,
 ): { whereSql: string; actionExpression: string } {
   const clauses = [buildVisibilityClause(actor, params)];
+  const needsActionExpression =
+    includeActionExpression || input.actionRequired !== undefined;
   let actorParam: string | null = params.length > 0 ? `$${params.length}` : null;
-  if (actionExpressionNeedsActor(actor) && !actorParam) {
+  if (needsActionExpression && actionExpressionNeedsActor(actor) && !actorParam) {
     params.push(actor.id);
     actorParam = `$${params.length}`;
   }
-  const actionExpression = buildActionRequiredExpression(actor, actorParam);
+  const actionExpression = needsActionExpression
+    ? buildActionRequiredExpression(actor, actorParam)
+    : "FALSE";
 
   if (input.q) {
     params.push(`%${input.q}%`);
@@ -549,6 +554,7 @@ export async function queryObservationList(
     actor,
     input,
     countParams,
+    false,
   );
   const summaryParams: unknown[] = [];
   const visibility = buildVisibilityClause(actor, summaryParams);

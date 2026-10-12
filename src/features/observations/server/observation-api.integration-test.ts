@@ -449,6 +449,27 @@ test("Phase 1 list and summary queries enforce role scope, filters, pagination, 
         queryObservationList(fixture.staffB, all),
       ]);
 
+    const directorManager = {
+      ...fixture.managerA,
+      roles: ["director", "manager"],
+    };
+    const [combinedList, combinedUnfiltered, combinedActions, combinedNonActions, combinedEmpty] =
+      await Promise.all([
+        queryObservationList(directorManager, all),
+        queryObservationList(directorManager, listInput({})),
+        queryObservationList(directorManager, listInput({ q: fixture.prefix, actionRequired: "true" })),
+        queryObservationList(directorManager, listInput({ q: fixture.prefix, actionRequired: "false" })),
+        queryObservationList(directorManager, listInput({ q: randomUUID(), status: "submitted" })),
+      ]);
+    assert.equal(combinedList.pagination.total, directorList.pagination.total);
+    assert.ok(combinedUnfiltered.pagination.total >= combinedList.pagination.total);
+    assert.equal(
+      combinedActions.pagination.total + combinedNonActions.pagination.total,
+      combinedList.pagination.total,
+    );
+    assert.deepEqual(combinedEmpty.data, []);
+    assert.equal(combinedEmpty.pagination.total, 0);
+
     assert.equal(adminList.pagination.total, 12);
     assert.equal(directorList.pagination.total, 12);
     assert.equal(managerList.pagination.total, 10);
@@ -542,6 +563,16 @@ test("Phase 1 list and summary queries enforce role scope, filters, pagination, 
         queryObservationSummary(fixture.managerA),
         queryObservationSummary(fixture.staffA),
       ]);
+
+    const combinedSummary = await queryObservationSummary(directorManager);
+    assert.equal(combinedSummary.counts.draft, directorSummary.counts.draft);
+    assert.equal(combinedSummary.counts.completed, directorSummary.counts.completed);
+    assert.equal(
+      combinedSummary.counts.awaitingAcknowledgement,
+      directorSummary.counts.awaitingAcknowledgement,
+    );
+    assert.ok(combinedSummary.needsAttention.length <= 5);
+    assert.ok(combinedSummary.recent.length <= 5);
 
     assertCountDelta(baseline.admin, adminSummary.counts, {
       draft: 2,
