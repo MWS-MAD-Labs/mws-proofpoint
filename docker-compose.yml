@@ -87,7 +87,9 @@ services:
   # MinIO S3-Compatible Storage
   # ============================================
   minio:
-    image: minio/minio
+    # Use the explicit Quay image/tag already used by the production stack.
+    # The unqualified `minio/minio` reference fails to pull on the Komodo host.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: proofpoint-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
