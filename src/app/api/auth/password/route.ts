@@ -2,8 +2,13 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 import { auth } from "@/lib/auth";
 import { queryOne, query } from "@/lib/db";
+import { isHubAuthEnabled } from "@/lib/hub-session";
 
 export async function PUT(request: Request) {
+    if (isHubAuthEnabled()) {
+        return NextResponse.json({ error: "Password changes are managed by the identity provider" }, { status: 410 });
+    }
+
     try {
         const session = await auth();
         if (!session?.user?.id) {

@@ -6,6 +6,8 @@ import { randomUUID } from "crypto";
 import { pool, queryOne } from "@/lib/db";
 import { refreshAuthToken } from "@/lib/auth-token";
 import { canonicalRoleScopeSql } from "@/lib/organization-access";
+import { isHubAuthEnabled } from "@/lib/hub-session";
+import { resolveHubSession } from "@/lib/hub-auth";
 
 interface DbCredentialUser {
   id: string;
@@ -170,7 +172,7 @@ const googleProvider =
     ]
     : [];
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
+const nextAuth = NextAuth({
   providers: [
     Credentials({
       name: "Credentials",
@@ -316,3 +318,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
 });
+
+export const { handlers, signIn, signOut } = nextAuth;
+
+export async function auth() {
+  return isHubAuthEnabled() ? resolveHubSession() : nextAuth.auth();
+}

@@ -9,6 +9,8 @@
 
 ## Current application status
 
+See [Central and Hub integration](./docs/CENTRAL_HUB_INTEGRATION.md) for the staged SSO, Central entitlement, role-permission, and department-scope setup.
+
 | Item | Current state |
 | --- | --- |
 | Application version | [`v0.2.0`](https://github.com/MWS-MAD-Labs/mws-proofpoint/releases/tag/v0.2.0) |

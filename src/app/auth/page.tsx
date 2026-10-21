@@ -56,7 +56,7 @@ function GoogleIcon() {
 
 export default function Auth() {
   const router = useRouter();
-  const { user, signIn, signInWithGoogle, signUp, loading } = useAuth();
+  const { user, signIn, signInWithGoogle, signUp, loading, authMode, authModeError } = useAuth();
   const { toast } = useToast();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -67,12 +67,25 @@ export default function Auth() {
     fullName: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [hubError, setHubError] = useState<string | null>(null);
+  const [hubErrorReady, setHubErrorReady] = useState(false);
+
+  useEffect(() => {
+    setHubError(new URLSearchParams(window.location.search).get("error"));
+    setHubErrorReady(true);
+  }, []);
 
   useEffect(() => {
     if (user && !loading) {
       router.push("/dashboard");
     }
   }, [user, loading, router]);
+
+  useEffect(() => {
+    if (authMode === "hub" && !user && !loading && hubErrorReady && !hubError) {
+      router.replace("/auth/hub");
+    }
+  }, [authMode, user, loading, hubErrorReady, hubError, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,8 +96,8 @@ export default function Auth() {
     } catch (err) {
       if (err instanceof z.ZodError) {
         const newErrors: Record<string, string> = {};
-        err.errors.forEach((e) => {
-          if (e.path[0]) newErrors[e.path[0] as string] = e.message;
+        err.issues.forEach((issue) => {
+          if (issue.path[0]) newErrors[String(issue.path[0])] = issue.message;
         });
         setErrors(newErrors);
         return;
@@ -122,8 +135,8 @@ export default function Auth() {
     } catch (err) {
       if (err instanceof z.ZodError) {
         const newErrors: Record<string, string> = {};
-        err.errors.forEach((e) => {
-          if (e.path[0]) newErrors[e.path[0] as string] = e.message;
+        err.issues.forEach((issue) => {
+          if (issue.path[0]) newErrors[String(issue.path[0])] = issue.message;
         });
         setErrors(newErrors);
         return;
@@ -177,13 +190,46 @@ export default function Auth() {
     }
   };
 
-  if (loading) {
+  if (loading || authMode === "hub") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="relative">
+        <div className="relative flex flex-col items-center gap-4">
           <div className="absolute inset-0 bg-primary rounded-full blur-xl opacity-30 animate-pulse" />
-          <Loader2 className="relative h-10 w-10 animate-spin text-primary" />
+          {loading || !hubErrorReady ? (
+            <Loader2 className="relative h-10 w-10 animate-spin text-primary" />
+          ) : hubError ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {hubError === "no_access"
+                  ? "Your account does not have ProofPoint access. Contact your administrator."
+                  : "The sign-in service is temporarily unavailable. Try again shortly."}
+              </p>
+              <Button onClick={() => window.location.assign("/auth/logout")}>
+                Return to MWS Hub
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">Continue sign-in with MWS Hub…</p>
+              <Button onClick={() => window.location.assign("/auth/hub")}>
+                Continue with MWS Hub
+              </Button>
+            </>
+          )}
         </div>
+      </div>
+    );
+  }
+
+  if (authModeError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>Sign-in is temporarily unavailable</CardTitle>
+            <CardDescription>{authModeError}</CardDescription>
+          </CardHeader>
+        </Card>
       </div>
     );
   }

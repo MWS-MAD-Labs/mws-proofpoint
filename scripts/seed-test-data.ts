@@ -34,9 +34,38 @@ async function seed() {
         const directorId = uuidv4();
 
         const users = [
-            { id: staffId, email: 'staff@example.com', name: 'Test Staff', role: 'staff', deptId, title: 'Senior QA Engineer' },
-            { id: managerId, email: 'manager@example.com', name: 'Test Manager', role: 'manager', deptId, title: 'QA Manager' },
-            { id: directorId, email: 'director@example.com', name: 'Test Director', role: 'director', deptId: null, title: 'Director of Engineering' },
+          {
+            id: staffId,
+            email: "staff@example.com",
+            name: "Test Staff",
+            role: "staff",
+            deptId,
+            title: "Senior QA Engineer",
+          },
+          {
+            id: managerId,
+            email: "manager@example.com",
+            name: "Test Manager",
+            role: "manager",
+            deptId,
+            title: "QA Manager",
+          },
+          {
+            id: directorId,
+            email: "director@example.com",
+            name: "Test Director",
+            role: "director",
+            deptId: null,
+            title: "Director of Engineering",
+          },
+          {
+            id: directorId,
+            email: "asror@millennia21.id",
+            name: "Test Director",
+            role: "director",
+            deptId: null,
+            title: "Director of Engineering",
+          },
         ];
 
         for (const u of users) {
