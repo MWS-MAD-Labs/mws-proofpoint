@@ -242,6 +242,8 @@ http://localhost:3060/api/auth/callback/google
 | `npm run db:studio` | Open Prisma Studio |
 | `npm run db:seed` | Run the primary development seed |
 | `npm run db:seed:it-support-appraisal` | Intentionally create the IT Support appraisal fixture |
+| `npm run permissions:sync` | Publish the ProofPoint permission manifest to Central |
+| `npm run permissions:check` | Verify Central matches the ProofPoint permission manifest |
 
 The IT Support seed is optional and is **not** run automatically during deployment.
 
@@ -265,13 +267,22 @@ flowchart TD
     C --> D[Generate Prisma Client]
     D --> E[Build Next.js application]
     E --> F[Build and publish Docker image to GHCR]
-    F --> G[Signed Komodo webhook]
-    G --> H[Pull environment image]
-    H --> I[Recreate application container]
-    I --> J[Prisma migrate deploy]
-    J --> K[Start Next.js]
-    K --> L[Container health check]
+    F --> G[Validate Central configuration]
+    G --> H[Sync and verify permissions]
+    H --> I[Signed Komodo webhook]
+    I --> J[Pull environment image]
+    J --> K[Recreate application container]
+    K --> L[Prisma migrate deploy]
+    L --> M[Start Next.js]
+    M --> N[Container health check]
 ```
+
+The `staging` and `production` GitHub Environments must each define the
+`CENTRAL_API_BASE_URL` and `CENTRAL_ORGANIZATION_ID` variables plus the
+`CENTRAL_API_TOKEN` secret. Permission sync is a required deployment gate:
+GitHub Actions publishes the manifest, checks it against Central, and only then
+calls the Komodo webhook. The production image also carries the tooling needed
+to run both permission commands manually from `/app` when troubleshooting.
 
 The application container runs `prisma migrate deploy` before starting Next.js. If migrations fail, application startup stops instead of serving code against an incompatible schema.
 

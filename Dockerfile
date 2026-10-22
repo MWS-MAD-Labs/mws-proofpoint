@@ -36,10 +36,11 @@ RUN apk add --no-cache curl
 # Copy the standalone application and its traced runtime dependencies.
 COPY --from=builder /app/.next/standalone ./
 
-# Install only the migration tooling needed at container startup. The standalone
-# output already includes application dependencies such as pg.
+# Install the operational tooling needed at container startup and by staging
+# release jobs. The standalone output already includes application dependencies
+# such as pg, but it does not retain dev-only CLIs such as tsx.
 RUN npm install --prefix /opt/prisma-runtime --no-save --no-audit --no-fund \
-    prisma@7.4.0 dotenv@17.2.3 \
+    prisma@7.4.0 dotenv@17.2.3 tsx@4.21.0 \
     && ln -s /opt/prisma-runtime/node_modules/prisma /app/node_modules/prisma \
     && ln -s /opt/prisma-runtime/node_modules/dotenv /app/node_modules/dotenv
 ENV PATH="/opt/prisma-runtime/node_modules/.bin:${PATH}"
@@ -50,8 +51,13 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/docker ./docker
 COPY --from=builder /app/next.config.* ./
+COPY --from=builder /app/tsconfig.json ./
 COPY --from=builder /app/prisma.config.ts ./
 COPY --from=builder /app/src/lib/database-url.ts ./src/lib/database-url.ts
+# The permission sync is intentionally runnable inside the production image.
+# Keep its directly imported source modules alongside the copied script.
+COPY --from=builder /app/src/lib/central-config.ts ./src/lib/central-config.ts
+COPY --from=builder /app/src/lib/central-access.ts ./src/lib/central-access.ts
 RUN chmod +x /app/docker/start.sh
 
 # Set environment

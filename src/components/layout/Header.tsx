@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import {
   User,
   LogOut,
+  House,
+  Loader2,
   ClipboardList,
   Building2,
   FileText,
@@ -45,8 +47,9 @@ interface HeaderProps {
 
 export function Header({ className }: HeaderProps) {
   const pathname = usePathname();
-  const { user, profile, isAdmin, isManager, isDirector, signOut } = useAuth();
+  const { user, profile, isAdmin, isManager, isDirector, authMode, signOut } = useAuth();
   const [isDark, setIsDark] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme");
@@ -73,6 +76,17 @@ export function Header({ className }: HeaderProps) {
     } else {
       document.documentElement.classList.remove("dark");
       localStorage.setItem("theme", "light");
+    }
+  };
+
+  const handleExit = async () => {
+    setIsLeaving(true);
+    try {
+      await signOut();
+      if (authMode !== "hub") setIsLeaving(false);
+    } catch (error) {
+      console.error("Unable to leave ProofPoint:", error);
+      setIsLeaving(false);
     }
   };
 
@@ -129,6 +143,7 @@ export function Header({ className }: HeaderProps) {
         <Link href="/dashboard" className="flex items-center gap-3 group">
           <ProofPointMark className="h-10 w-10 transition-transform duration-200 group-hover:-translate-y-0.5" />
           <div>
+
             <h1 className="font-heading text-lg font-extrabold tracking-tight text-foreground transition-colors group-hover:text-primary">
               ProofPoint
             </h1>
@@ -313,14 +328,29 @@ export function Header({ className }: HeaderProps) {
                 <DropdownMenuSeparator className="my-2 bg-border/50" />
 
                 <DropdownMenuItem
-                  onClick={signOut}
+                  onClick={handleExit}
+                  disabled={isLeaving}
                   className="rounded-lg cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10"
                 >
                   <div className="flex items-center gap-2 p-1">
                     <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center">
-                      <LogOut className="h-4 w-4" />
+                      {isLeaving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : authMode === "hub" ? (
+                        <House className="h-4 w-4" />
+                      ) : (
+                        <LogOut className="h-4 w-4" />
+                      )}
                     </div>
-                    <span>Sign Out</span>
+                    <span>
+                      {authMode === "hub"
+                        ? isLeaving
+                          ? "Opening the Hub…"
+                          : "Back to Hub"
+                        : isLeaving
+                          ? "Signing Out…"
+                          : "Sign Out"}
+                    </span>
                   </div>
                 </DropdownMenuItem>
               </DropdownMenuContent>

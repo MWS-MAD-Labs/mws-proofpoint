@@ -81,6 +81,11 @@ jobs:
         env:
           NODE_ENV: test
 
+      - name: Run Central and Hub authentication tests
+        run: npm run test:central-auth
+        env:
+          NODE_ENV: test
+
       - name: Run observation database integration tests
         run: npm run test:observations:integration
 
@@ -156,23 +161,48 @@ jobs:
     environment: production
     steps:
       - name: Checkout repository
-        if: vars.PROOFPOINT_CENTRAL_ENABLED == 'true'
         uses: actions/checkout@v4
 
       - name: Setup Node.js for Central permission sync
-        if: vars.PROOFPOINT_CENTRAL_ENABLED == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
 
-      - name: Publish ProofPoint permissions to Central
-        if: vars.PROOFPOINT_CENTRAL_ENABLED == 'true'
-        run: |
-          npm ci
-          npm run permissions:sync
+      - name: Validate Central permission configuration
         env:
-          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL || 'https://db.mws.web.id/api/internal' }}
+          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL }}
+          CENTRAL_API_TOKEN: ${{ secrets.CENTRAL_API_TOKEN }}
+          CENTRAL_ORGANIZATION_ID: ${{ vars.CENTRAL_ORGANIZATION_ID }}
+        run: |
+          if [ -z "$CENTRAL_API_BASE_URL" ]; then
+            echo "::error::CENTRAL_API_BASE_URL is not configured in the production environment."
+            exit 1
+          fi
+          if [ -z "$CENTRAL_API_TOKEN" ]; then
+            echo "::error::CENTRAL_API_TOKEN is not configured in the production environment."
+            exit 1
+          fi
+          if [ -z "$CENTRAL_ORGANIZATION_ID" ]; then
+            echo "::error::CENTRAL_ORGANIZATION_ID is not configured in the production environment."
+            exit 1
+          fi
+
+      - name: Install permission sync dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Publish ProofPoint permissions to Central
+        run: npm run permissions:sync
+        env:
+          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL }}
+          CENTRAL_API_TOKEN: ${{ secrets.CENTRAL_API_TOKEN }}
+          CENTRAL_ORGANIZATION_ID: ${{ vars.CENTRAL_ORGANIZATION_ID }}
+          HUB_SSO_APP_ID: proofpoint
+
+      - name: Verify ProofPoint permissions in Central
+        run: npm run permissions:check
+        env:
+          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL }}
           CENTRAL_API_TOKEN: ${{ secrets.CENTRAL_API_TOKEN }}
           CENTRAL_ORGANIZATION_ID: ${{ vars.CENTRAL_ORGANIZATION_ID }}
           HUB_SSO_APP_ID: proofpoint
@@ -218,23 +248,48 @@ jobs:
     environment: staging
     steps:
       - name: Checkout repository
-        if: vars.PROOFPOINT_CENTRAL_ENABLED == 'true'
         uses: actions/checkout@v4
 
       - name: Setup Node.js for Central permission sync
-        if: vars.PROOFPOINT_CENTRAL_ENABLED == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
 
-      - name: Publish ProofPoint permissions to Central
-        if: vars.PROOFPOINT_CENTRAL_ENABLED == 'true'
-        run: |
-          npm ci
-          npm run permissions:sync
+      - name: Validate Central permission configuration
         env:
-          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL || 'https://db.mws.web.id/api/internal' }}
+          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL }}
+          CENTRAL_API_TOKEN: ${{ secrets.CENTRAL_API_TOKEN }}
+          CENTRAL_ORGANIZATION_ID: ${{ vars.CENTRAL_ORGANIZATION_ID }}
+        run: |
+          if [ -z "$CENTRAL_API_BASE_URL" ]; then
+            echo "::error::CENTRAL_API_BASE_URL is not configured in the staging environment."
+            exit 1
+          fi
+          if [ -z "$CENTRAL_API_TOKEN" ]; then
+            echo "::error::CENTRAL_API_TOKEN is not configured in the staging environment."
+            exit 1
+          fi
+          if [ -z "$CENTRAL_ORGANIZATION_ID" ]; then
+            echo "::error::CENTRAL_ORGANIZATION_ID is not configured in the staging environment."
+            exit 1
+          fi
+
+      - name: Install permission sync dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Publish ProofPoint permissions to Central
+        run: npm run permissions:sync
+        env:
+          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL }}
+          CENTRAL_API_TOKEN: ${{ secrets.CENTRAL_API_TOKEN }}
+          CENTRAL_ORGANIZATION_ID: ${{ vars.CENTRAL_ORGANIZATION_ID }}
+          HUB_SSO_APP_ID: proofpoint
+
+      - name: Verify ProofPoint permissions in Central
+        run: npm run permissions:check
+        env:
+          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL }}
           CENTRAL_API_TOKEN: ${{ secrets.CENTRAL_API_TOKEN }}
           CENTRAL_ORGANIZATION_ID: ${{ vars.CENTRAL_ORGANIZATION_ID }}
           HUB_SSO_APP_ID: proofpoint

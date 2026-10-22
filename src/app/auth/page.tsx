@@ -83,7 +83,7 @@ export default function Auth() {
 
   useEffect(() => {
     if (authMode === "hub" && !user && !loading && hubErrorReady && !hubError) {
-      router.replace("/auth/hub");
+      router.replace("/auth/sso");
     }
   }, [authMode, user, loading, hubErrorReady, hubError, router]);
 
@@ -211,7 +211,7 @@ export default function Auth() {
           ) : (
             <>
               <p className="text-sm text-muted-foreground">Continue sign-in with MWS Hub…</p>
-              <Button onClick={() => window.location.assign("/auth/hub")}>
+              <Button onClick={() => window.location.assign("/auth/sso")}>
                 Continue with MWS Hub
               </Button>
             </>
