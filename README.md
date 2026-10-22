@@ -267,22 +267,23 @@ flowchart TD
     C --> D[Generate Prisma Client]
     D --> E[Build Next.js application]
     E --> F[Build and publish Docker image to GHCR]
-    F --> G[Validate Central configuration]
-    G --> H[Sync and verify permissions]
-    H --> I[Signed Komodo webhook]
-    I --> J[Pull environment image]
-    J --> K[Recreate application container]
-    K --> L[Prisma migrate deploy]
-    L --> M[Start Next.js]
-    M --> N[Container health check]
+    F --> G[Signed Komodo webhook]
+    G --> H[Pull environment image]
+    H --> I[Recreate application container]
+    I --> J[Prisma migrate deploy]
+    J --> K[Start Next.js]
+    K --> L[Container health check]
+    G --> M[Validate Central configuration]
+    M --> N[Sync and verify permissions]
 ```
 
 The `staging` and `production` GitHub Environments must each define the
 `CENTRAL_API_BASE_URL` and `CENTRAL_ORGANIZATION_ID` variables plus the
-`CENTRAL_API_TOKEN` secret. Permission sync is a required deployment gate:
-GitHub Actions publishes the manifest, checks it against Central, and only then
-calls the Komodo webhook. The production image also carries the tooling needed
-to run both permission commands manually from `/app` when troubleshooting.
+`CENTRAL_API_TOKEN` secret. After the selected environment's deploy job succeeds,
+the `send-permissions` job follows Central's setup-guide pattern: it validates the
+environment, publishes the manifest, and verifies the resulting Central state.
+The production image also carries the dependency-free Node script needed to run
+both permission commands manually from `/app` when troubleshooting.
 
 The application container runs `prisma migrate deploy` before starting Next.js. If migrations fail, application startup stops instead of serving code against an incompatible schema.
 

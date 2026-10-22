@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { rolesFromPermissions, rolesWithinLocalDepartmentScope } from "@/lib/central-access";
+import { permissionManifest } from "../../scripts/sync-permissions.mjs";
+import {
+  PROOFPOINT_PERMISSIONS,
+  rolesFromPermissions,
+  rolesWithinLocalDepartmentScope,
+} from "@/lib/central-access";
+
+test("the deployment manifest publishes every permission accepted by ProofPoint", () => {
+  assert.deepEqual(
+    permissionManifest.map(({ key }) => key),
+    [...PROOFPOINT_PERMISSIONS],
+  );
+});
 
 test("Central permissions map only to known ProofPoint roles after app access is granted", () => {
   assert.deepEqual(

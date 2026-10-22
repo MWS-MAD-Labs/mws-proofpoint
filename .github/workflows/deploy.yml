@@ -160,53 +160,6 @@ jobs:
     if: github.ref_name == 'main'
     environment: production
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js for Central permission sync
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Validate Central permission configuration
-        env:
-          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL }}
-          CENTRAL_API_TOKEN: ${{ secrets.CENTRAL_API_TOKEN }}
-          CENTRAL_ORGANIZATION_ID: ${{ vars.CENTRAL_ORGANIZATION_ID }}
-        run: |
-          if [ -z "$CENTRAL_API_BASE_URL" ]; then
-            echo "::error::CENTRAL_API_BASE_URL is not configured in the production environment."
-            exit 1
-          fi
-          if [ -z "$CENTRAL_API_TOKEN" ]; then
-            echo "::error::CENTRAL_API_TOKEN is not configured in the production environment."
-            exit 1
-          fi
-          if [ -z "$CENTRAL_ORGANIZATION_ID" ]; then
-            echo "::error::CENTRAL_ORGANIZATION_ID is not configured in the production environment."
-            exit 1
-          fi
-
-      - name: Install permission sync dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Publish ProofPoint permissions to Central
-        run: npm run permissions:sync
-        env:
-          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL }}
-          CENTRAL_API_TOKEN: ${{ secrets.CENTRAL_API_TOKEN }}
-          CENTRAL_ORGANIZATION_ID: ${{ vars.CENTRAL_ORGANIZATION_ID }}
-          HUB_SSO_APP_ID: proofpoint
-
-      - name: Verify ProofPoint permissions in Central
-        run: npm run permissions:check
-        env:
-          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL }}
-          CENTRAL_API_TOKEN: ${{ secrets.CENTRAL_API_TOKEN }}
-          CENTRAL_ORGANIZATION_ID: ${{ vars.CENTRAL_ORGANIZATION_ID }}
-          HUB_SSO_APP_ID: proofpoint
-
       - name: Call Komodo Webhook (Production)
         env:
           WEBHOOK_URL: ${{ secrets.KOMODO_WEBHOOK_URL }}
@@ -247,53 +200,6 @@ jobs:
     if: github.ref_name == 'Staging'
     environment: staging
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js for Central permission sync
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Validate Central permission configuration
-        env:
-          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL }}
-          CENTRAL_API_TOKEN: ${{ secrets.CENTRAL_API_TOKEN }}
-          CENTRAL_ORGANIZATION_ID: ${{ vars.CENTRAL_ORGANIZATION_ID }}
-        run: |
-          if [ -z "$CENTRAL_API_BASE_URL" ]; then
-            echo "::error::CENTRAL_API_BASE_URL is not configured in the staging environment."
-            exit 1
-          fi
-          if [ -z "$CENTRAL_API_TOKEN" ]; then
-            echo "::error::CENTRAL_API_TOKEN is not configured in the staging environment."
-            exit 1
-          fi
-          if [ -z "$CENTRAL_ORGANIZATION_ID" ]; then
-            echo "::error::CENTRAL_ORGANIZATION_ID is not configured in the staging environment."
-            exit 1
-          fi
-
-      - name: Install permission sync dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Publish ProofPoint permissions to Central
-        run: npm run permissions:sync
-        env:
-          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL }}
-          CENTRAL_API_TOKEN: ${{ secrets.CENTRAL_API_TOKEN }}
-          CENTRAL_ORGANIZATION_ID: ${{ vars.CENTRAL_ORGANIZATION_ID }}
-          HUB_SSO_APP_ID: proofpoint
-
-      - name: Verify ProofPoint permissions in Central
-        run: npm run permissions:check
-        env:
-          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL }}
-          CENTRAL_API_TOKEN: ${{ secrets.CENTRAL_API_TOKEN }}
-          CENTRAL_ORGANIZATION_ID: ${{ vars.CENTRAL_ORGANIZATION_ID }}
-          HUB_SSO_APP_ID: proofpoint
-
       - name: Call Komodo Webhook (Staging)
         env:
           WEBHOOK_URL: ${{ secrets.KOMODO_STAGING_WEBHOOK_URL }}
@@ -329,3 +235,35 @@ jobs:
               -d "$PAYLOAD" \
               "$WEBHOOK_URL"
           fi
+
+  # ─────────────────────────────────────────────
+  # Publish permissions after the selected deploy
+  # ─────────────────────────────────────────────
+  send-permissions:
+    name: Send Permissions → Central
+    needs: [deploy-production, deploy-staging]
+    if: >-
+      always() &&
+      github.event_name != 'pull_request' &&
+      (needs.deploy-production.result == 'success' || needs.deploy-staging.result == 'success')
+    runs-on: ubuntu-latest
+    # The staging branch uses the staging environment, main uses production.
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Send and verify the permissions in Central
+        env:
+          CENTRAL_API_BASE_URL: ${{ vars.CENTRAL_API_BASE_URL || secrets.CENTRAL_API_BASE_URL }}
+          CENTRAL_API_TOKEN: ${{ secrets.CENTRAL_API_TOKEN }}
+          CENTRAL_ORGANIZATION_ID: ${{ vars.CENTRAL_ORGANIZATION_ID || secrets.CENTRAL_ORGANIZATION_ID }}
+          ENVIRONMENT_NAME: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+        run: |
+          if [ -z "$CENTRAL_API_BASE_URL" ]; then echo "::error::CENTRAL_API_BASE_URL is not set in the GitHub Environment $ENVIRONMENT_NAME. Add it there."; exit 1; fi
+          if [ -z "$CENTRAL_API_TOKEN" ]; then echo "::error::CENTRAL_API_TOKEN is not set in the GitHub Environment $ENVIRONMENT_NAME. Add it there."; exit 1; fi
+          if [ -z "$CENTRAL_ORGANIZATION_ID" ]; then echo "::error::CENTRAL_ORGANIZATION_ID is not set in the GitHub Environment $ENVIRONMENT_NAME. Add it there."; exit 1; fi
+          case "${CENTRAL_API_BASE_URL%/}" in
+            https://*/api/internal) ;;
+            *) echo "::error::The address in CENTRAL_API_BASE_URL must start with https:// and end with /api/internal."; exit 1 ;;
+          esac
+          node scripts/sync-permissions.mjs

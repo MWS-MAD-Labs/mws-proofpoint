@@ -24,8 +24,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:milestone1": "tsx prisma/seed-milestone1.ts",
     "db:seed:it-support-appraisal": "tsx scripts/seed-it-support-staff-appraisal.ts",
-    "permissions:sync": "tsx scripts/sync-central-permissions.ts sync",
-    "permissions:check": "tsx scripts/sync-central-permissions.ts check"
+    "permissions:sync": "node scripts/sync-permissions.mjs",
+    "permissions:check": "node scripts/sync-permissions.mjs check"
   },
   "dependencies": {
     "@auth/pg-adapter": "^1.11.1",
