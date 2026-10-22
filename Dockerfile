@@ -36,8 +36,8 @@ RUN apk add --no-cache curl
 # Copy the standalone application and its traced runtime dependencies.
 COPY --from=builder /app/.next/standalone ./
 
-# Install only the migration tooling needed at container startup. The standalone
-# output already includes application dependencies such as pg.
+# Install the migration tooling needed at container startup. Permission sync is
+# a dependency-free Node script and is copied into the runtime image below.
 RUN npm install --prefix /opt/prisma-runtime --no-save --no-audit --no-fund \
     prisma@7.4.0 dotenv@17.2.3 \
     && ln -s /opt/prisma-runtime/node_modules/prisma /app/node_modules/prisma \

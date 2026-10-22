@@ -162,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     if (authMode === "hub") {
-      window.location.assign("/auth/hub");
+      window.location.assign("/auth/sso");
       return { error: null };
     }
     try {
@@ -192,7 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = async () => {
     if (authMode === "hub") {
-      window.location.assign("/auth/hub");
+      window.location.assign("/auth/sso");
       return { error: null };
     }
     try {

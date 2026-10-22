@@ -41,9 +41,22 @@ interface Assessment {
 }
 
 function DashboardContent() {
-  const { profile, roles, isAdmin, isManager, isDirector, signOut } = useAuth();
+  const { profile, roles, isAdmin, isManager, isDirector, authMode, signOut } =
+    useAuth();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isLeaving, setIsLeaving] = useState(false);
+
+  const handleExit = async () => {
+    setIsLeaving(true);
+    try {
+      await signOut();
+      if (authMode !== "hub") setIsLeaving(false);
+    } catch (error) {
+      console.error("Unable to leave ProofPoint:", error);
+      setIsLeaving(false);
+    }
+  };
 
   useEffect(() => {
     const fetchAssessments = async () => {
@@ -134,9 +147,10 @@ function DashboardContent() {
   const actionCards = [
     {
       title: "Performance Appraisals",
-      description: isManager || isAdmin
-        ? "Open self-assessment and staff appraisal workflows"
-        : "Review and acknowledge your performance appraisals",
+      description:
+        isManager || isAdmin
+          ? "Open self-assessment and staff appraisal workflows"
+          : "Review and acknowledge your performance appraisals",
       icon: ClipboardList,
       link: "/appraisals",
       buttonText: "Open Performance Appraisals",
@@ -386,14 +400,22 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        {/* Sign Out */}
+        {/* Return to Hub / sign out */}
         <div className="mt-8 flex justify-end">
           <Button
             variant="ghost"
-            onClick={signOut}
+            onClick={handleExit}
+            disabled={isLeaving}
             className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
           >
-            Sign Out
+            {isLeaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {authMode === "hub"
+              ? isLeaving
+                ? "Opening the Hub…"
+                : "Back to Hub"
+              : isLeaving
+                ? "Signing Out…"
+                : "Sign Out"}
           </Button>
         </div>
       </main>

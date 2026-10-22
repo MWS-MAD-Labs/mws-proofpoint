@@ -242,6 +242,8 @@ http://localhost:3060/api/auth/callback/google
 | `npm run db:studio` | Open Prisma Studio |
 | `npm run db:seed` | Run the primary development seed |
 | `npm run db:seed:it-support-appraisal` | Intentionally create the IT Support appraisal fixture |
+| `npm run permissions:sync` | Publish the ProofPoint permission manifest to Central |
+| `npm run permissions:check` | Verify Central matches the ProofPoint permission manifest |
 
 The IT Support seed is optional and is **not** run automatically during deployment.
 
@@ -271,7 +273,17 @@ flowchart TD
     I --> J[Prisma migrate deploy]
     J --> K[Start Next.js]
     K --> L[Container health check]
+    G --> M[Validate Central configuration]
+    M --> N[Sync and verify permissions]
 ```
+
+The `staging` and `production` GitHub Environments must each define the
+`CENTRAL_API_BASE_URL` and `CENTRAL_ORGANIZATION_ID` variables plus the
+`CENTRAL_API_TOKEN` secret. After the selected environment's deploy job succeeds,
+the `send-permissions` job follows Central's setup-guide pattern: it validates the
+environment, publishes the manifest, and verifies the resulting Central state.
+The production image also carries the dependency-free Node script needed to run
+both permission commands manually from `/app` when troubleshooting.
 
 The application container runs `prisma migrate deploy` before starting Next.js. If migrations fail, application startup stops instead of serving code against an incompatible schema.
 
