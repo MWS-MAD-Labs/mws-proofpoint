@@ -1,13 +1,22 @@
 "use client";
 
-import { createContext, useContext, ReactNode } from "react";
+import { createContext, useContext, ReactNode, useEffect, useState } from "react";
 import {
   useSession,
   signIn as nextAuthSignIn,
   signOut as nextAuthSignOut,
 } from "next-auth/react";
 
-type AppRole = "admin" | "staff" | "manager" | "director";
+import { keepFresh } from "mws-central-auth/client";
+
+type AppRole =
+  | "admin"
+  | "staff"
+  | "manager"
+  | "supervisor"
+  | "director";
+
+type AuthMode = "hub" | "nextauth";
 
 interface Profile {
   id: string;
@@ -28,6 +37,8 @@ interface AuthContextType {
   profile: Profile | null;
   roles: AppRole[];
   loading: boolean;
+  authMode: AuthMode | null;
+  authModeError: string | null;
   signUp: (
     email: string,
     password: string,
@@ -47,7 +58,48 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { data: session, status } = useSession();
-  const loading = status === "loading";
+  const [authMode, setAuthMode] = useState<AuthMode | null>(null);
+  const [authModeError, setAuthModeError] = useState<string | null>(null);
+  const [hubRefreshUrl, setHubRefreshUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/mode", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Authentication mode lookup failed (HTTP ${response.status})`);
+        const result = (await response.json()) as { mode?: AuthMode; refreshUrl?: string };
+        if (result.mode !== "hub" && result.mode !== "nextauth") {
+          throw new Error("Authentication mode response is invalid");
+        }
+        if (result.mode === "hub" && !result.refreshUrl) {
+          throw new Error("Hub refresh URL is not configured");
+        }
+        if (!cancelled) {
+          setAuthMode(result.mode);
+          setHubRefreshUrl(result.refreshUrl ?? null);
+          setAuthModeError(null);
+        }
+      })
+      .catch((error) => {
+        console.error("Unable to load authentication mode:", error);
+        if (!cancelled) {
+          setAuthModeError(error instanceof Error ? error.message : "Authentication mode is unavailable");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (authMode !== "hub" || !session || !hubRefreshUrl) return;
+    return keepFresh({
+      refreshUrl: hubRefreshUrl,
+      onEnded: () => window.location.assign("/auth/logout"),
+    });
+  }, [authMode, session, hubRefreshUrl]);
+
+  const loading = status === "loading" || (authMode === null && authModeError === null);
 
   // Extract user data from NextAuth session
   const user: User | null = session?.user
@@ -76,6 +128,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     : [];
 
   const signUp = async (email: string, password: string, fullName: string) => {
+    if (authMode === "hub") {
+      return { error: new Error("Account creation is managed by the MWS Hub") };
+    }
     try {
       const response = await fetch("/api/auth/signup", {
         method: "POST",
@@ -106,6 +161,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
+    if (authMode === "hub") {
+      window.location.assign("/auth/hub");
+      return { error: null };
+    }
     try {
       const result = await nextAuthSignIn("credentials", {
         email,
@@ -132,6 +191,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithGoogle = async () => {
+    if (authMode === "hub") {
+      window.location.assign("/auth/hub");
+      return { error: null };
+    }
     try {
       const result = await nextAuthSignIn("google", {
         callbackUrl: "/dashboard",
@@ -154,6 +217,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    if (authMode === "hub") {
+      window.location.assign("/auth/logout");
+      return;
+    }
     await nextAuthSignOut({ redirect: false });
   };
 
@@ -165,6 +232,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile,
     roles,
     loading,
+    authMode,
+    authModeError,
     signUp,
     signIn,
     signInWithGoogle,

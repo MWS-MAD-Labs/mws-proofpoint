@@ -22,13 +22,17 @@
     "test:observations:integration": "node scripts/run-observation-integration-tests.mjs",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:milestone1": "tsx prisma/seed-milestone1.ts",
-    "db:seed:it-support-appraisal": "tsx scripts/seed-it-support-staff-appraisal.ts"
+    "db:seed:it-support-appraisal": "tsx scripts/seed-it-support-staff-appraisal.ts",
+    "permissions:sync": "tsx scripts/sync-central-permissions.ts sync",
+    "permissions:check": "tsx scripts/sync-central-permissions.ts check"
   },
   "dependencies": {
     "@auth/pg-adapter": "^1.11.1",
     "@aws-sdk/client-s3": "^3.962.0",
     "@aws-sdk/s3-request-presigner": "^3.962.0",
     "@hookform/resolvers": "^3.10.0",
+    "@prisma/adapter-pg": "^7.4.0",
+    "@prisma/client": "^7.4.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-aspect-ratio": "^1.1.7",
@@ -66,13 +70,12 @@
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
+    "mws-central-auth": "github:MWS-MAD-Labs/mws-central-auth#v0.8.0",
     "next": "^15.1.3",
     "next-auth": "^5.0.0-beta.30",
     "next-themes": "^0.3.0",
     "nodemailer": "^7.0.13",
     "pg": "^8.16.3",
-    "@prisma/adapter-pg": "^7.4.0",
-    "@prisma/client": "^7.4.0",
     "prisma": "^7.4.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
@@ -85,7 +88,7 @@
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^13.0.0",
     "vaul": "^0.9.9",
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

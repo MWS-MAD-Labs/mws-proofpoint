@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
+import { isHubAuthEnabled } from "@/lib/hub-session";
 import type { Prisma } from "@prisma/client";
 import {
   buildUserProfileUpdate,
@@ -93,14 +94,14 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { email, password, full_name, niy, job_title } = body;
 
-    if (!email || !password)
+    if (!email || (!password && !isHubAuthEnabled()))
       return NextResponse.json({ error: "Email and password required" }, { status: 400 });
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing)
       return NextResponse.json({ error: "Email already exists" }, { status: 409 });
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password || randomUUID(), 10);
 
 
     const newUser = await prisma.$transaction(async (tx) => {

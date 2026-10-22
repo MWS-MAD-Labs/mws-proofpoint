@@ -18,6 +18,10 @@ declare module "next-auth" {
             roles?: string[];
             departmentId?: string | null;
             departmentIds?: string[];
+            centralPersonId?: string;
+            centralRole?: string;
+            permissions?: string[];
+            entitlementVersion?: number;
         };
     }
 }

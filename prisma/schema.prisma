@@ -29,6 +29,7 @@ model User {
   email                                  String                                 @unique
   passwordHash                           String                                 @map("password_hash")
   emailVerified                          Boolean?                               @default(false) @map("email_verified")
+  centralPersonId                        String?                                @map("central_person_id")
   createdAt                              DateTime                               @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                              DateTime                               @default(now()) @map("updated_at") @db.Timestamptz(6)
   status                                 String                                 @default("active")
@@ -58,6 +59,7 @@ model User {
   roles                                  UserRole[]
 
   @@unique([nlsmartrackId], map: "users_nlsmartrack_id_key", where: raw("(nlsmartrack_id IS NOT NULL)"))
+  @@unique([centralPersonId], map: "users_central_person_id_key", where: raw("(central_person_id IS NOT NULL)"))
   @@index([status], map: "idx_users_status")
   @@map("users")
 }

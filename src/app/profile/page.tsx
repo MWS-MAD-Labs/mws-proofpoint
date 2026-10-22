@@ -17,6 +17,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/hooks/useAuth";
 
 interface UserProfile {
   id: string;
@@ -29,6 +30,7 @@ interface UserProfile {
 
 export default function ProfilePage() {
   const { data: session } = useSession();
+  const { authMode } = useAuth();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -239,60 +241,62 @@ export default function ProfilePage() {
         </CardContent>
       </Card>
 
-      {/* Security */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Security</CardTitle>
-          <CardDescription>Change your password.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={passwordForm.handleSubmit(onPasswordSubmit)}
-            className="space-y-4"
-          >
-            <div className="grid gap-2">
-              <Label htmlFor="currentPassword">Current Password</Label>
-              <Input
-                id="currentPassword"
-                type="password"
-                {...passwordForm.register("currentPassword", {
-                  required: true,
-                })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="newPassword">New Password</Label>
-              <Input
-                id="newPassword"
-                type="password"
-                {...passwordForm.register("newPassword", { required: true })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="confirmPassword">Confirm New Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                {...passwordForm.register("confirmPassword", {
-                  required: true,
-                })}
-              />
-            </div>
-            <div className="flex justify-end">
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={updatePasswordMutation.isPending}
-              >
-                {updatePasswordMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Update Password
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      {/* Local password credentials are not used after the Hub cutover. */}
+      {authMode === "nextauth" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Security</CardTitle>
+            <CardDescription>Change your password.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              onSubmit={passwordForm.handleSubmit(onPasswordSubmit)}
+              className="space-y-4"
+            >
+              <div className="grid gap-2">
+                <Label htmlFor="currentPassword">Current Password</Label>
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  {...passwordForm.register("currentPassword", {
+                    required: true,
+                  })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="newPassword">New Password</Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  {...passwordForm.register("newPassword", { required: true })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  {...passwordForm.register("confirmPassword", {
+                    required: true,
+                  })}
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  type="submit"
+                  variant="outline"
+                  disabled={updatePasswordMutation.isPending}
+                >
+                  {updatePasswordMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Update Password
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
