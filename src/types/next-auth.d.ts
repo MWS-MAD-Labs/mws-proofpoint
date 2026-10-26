@@ -18,6 +18,7 @@ declare module "next-auth" {
             roles?: string[];
             departmentId?: string | null;
             departmentIds?: string[];
+            localUserId?: string;
             centralPersonId?: string;
             centralRole?: string;
             permissions?: string[];

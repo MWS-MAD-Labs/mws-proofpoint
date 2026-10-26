@@ -12,27 +12,27 @@ export const permissionManifest = [
   },
   {
     key: "proofpoint.admin",
-    description: "Grants the admin role scope in ProofPoint",
+    description: "Central role marker for the ProofPoint ADMIN role",
     requires: ["proofpoint.access"],
   },
   {
     key: "proofpoint.director",
-    description: "Grants the director role scope in ProofPoint",
+    description: "Central role marker for the ProofPoint DIRECTOR role",
     requires: ["proofpoint.access"],
   },
   {
     key: "proofpoint.manager",
-    description: "Grants the manager role scope in ProofPoint",
+    description: "Central role marker for the ProofPoint MANAGER role",
     requires: ["proofpoint.access"],
   },
   {
     key: "proofpoint.supervisor",
-    description: "Grants the supervisor role scope in ProofPoint",
+    description: "Central role marker for the ProofPoint SUPERVISOR role",
     requires: ["proofpoint.access"],
   },
   {
     key: "proofpoint.staff",
-    description: "Grants the staff role scope in ProofPoint",
+    description: "Central role marker for the ProofPoint STAFF role",
     requires: ["proofpoint.access"],
   },
 ];

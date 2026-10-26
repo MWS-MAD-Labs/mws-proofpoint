@@ -19,7 +19,7 @@
     "db:migrate:check": "prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma",
     "db:studio": "prisma studio",
     "test:observations": "node --import tsx --test src/features/observations/server/notificationSettings.test.ts src/features/observations/server/observation-domain.test.ts src/lib/notifications/observation-notifications.test.ts src/app/api/admin/observation-notification-settings/route.test.ts",
-    "test:central-auth": "node --import tsx --test src/lib/central-access.test.ts src/lib/application-url.test.ts",
+    "test:central-auth": "node --import tsx --test src/lib/central-access.test.ts src/lib/application-url.test.ts src/lib/hub-auth.test.ts",
     "test:observations:integration": "node scripts/run-observation-integration-tests.mjs",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:milestone1": "tsx prisma/seed-milestone1.ts",
