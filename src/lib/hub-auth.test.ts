@@ -10,6 +10,12 @@ const identity = {
   exp: 1_900_000_000,
 };
 
+const localUser = {
+  id: "ee0c38f1-d0ed-43e9-90a1-226391895db3",
+  centralPersonId: identity.sub,
+  profile: { fullName: "Local Display Name" },
+};
+
 function entitlement(role: string): CentralEntitlement {
   return {
     id: "group:proofpoint-employees",
@@ -28,47 +34,39 @@ function dependencies(
   return {
     identityFromCookie: async () => identity,
     lookupEntitlement: async () => entitlement("ADMIN"),
-    findUserByCentralPersonId: async () => null,
-    findUsersByEmail: async () => [],
+    ensureLocalUser: async () => localUser,
     findMemberships: async () => [],
     ...overrides,
   };
 }
 
 describe("resolveHubSession", () => {
-  it("authenticates a Central-authorized global role without a local ProofPoint account", async () => {
-    let localLookupAttempted = false;
+  it("projects a Central-authorized global role into a local ProofPoint account", async () => {
+    let projectionAttempted = false;
     const session = await resolveHubSession("hub_at=test", dependencies({
-      findUserByCentralPersonId: async () => {
-        localLookupAttempted = true;
-        return null;
+      ensureLocalUser: async () => {
+        projectionAttempted = true;
+        return localUser;
       },
     }));
 
     assert.ok(session);
-    assert.equal(session.user.id, identity.sub);
+    assert.equal(session.user.id, localUser.id);
     assert.equal(session.user.centralPersonId, identity.sub);
-    assert.equal(session.user.localUserId, undefined);
+    assert.equal(session.user.localUserId, localUser.id);
     assert.deepEqual(session.user.roles, ["admin"]);
-    assert.equal(localLookupAttempted, true);
+    assert.equal(projectionAttempted, true);
   });
 
-  it("does not make the optional local database a prerequisite for a global role", async () => {
-    const originalError = console.error;
-    console.error = () => undefined;
-    try {
-      const session = await resolveHubSession("hub_at=test", dependencies({
-        findUserByCentralPersonId: async () => {
+  it("fails closed when the local account cannot be projected", async () => {
+    await assert.rejects(
+      resolveHubSession("hub_at=test", dependencies({
+        ensureLocalUser: async () => {
           throw new Error("ProofPoint database unavailable");
         },
-      }));
-
-      assert.ok(session);
-      assert.equal(session.user.id, identity.sub);
-      assert.deepEqual(session.user.roles, ["admin"]);
-    } finally {
-      console.error = originalError;
-    }
+      })),
+      /ProofPoint database unavailable/,
+    );
   });
 
   it("authenticates a Central-authorized departmental user without granting unscoped local access", async () => {
@@ -77,21 +75,15 @@ describe("resolveHubSession", () => {
     }));
 
     assert.ok(session);
-    assert.equal(session.user.id, identity.sub);
+    assert.equal(session.user.id, localUser.id);
     assert.equal(session.user.centralRole, "MANAGER");
     assert.deepEqual(session.user.roles, []);
     assert.deepEqual(session.user.departmentIds, []);
   });
 
   it("applies an existing local department membership without making it the identity source", async () => {
-    const localUser = {
-      id: "ee0c38f1-d0ed-43e9-90a1-226391895db3",
-      centralPersonId: identity.sub,
-      profile: { fullName: "Local Display Name" },
-    };
     const session = await resolveHubSession("hub_at=test", dependencies({
       lookupEntitlement: async () => entitlement("MANAGER"),
-      findUserByCentralPersonId: async () => localUser,
       findMemberships: async () => [{
         departmentRole: {
           role: "manager",
@@ -112,9 +104,9 @@ describe("resolveHubSession", () => {
     let localLookupAttempted = false;
     const session = await resolveHubSession("hub_at=test", dependencies({
       lookupEntitlement: async () => null,
-      findUserByCentralPersonId: async () => {
+      ensureLocalUser: async () => {
         localLookupAttempted = true;
-        return null;
+        return localUser;
       },
     }));
 
@@ -137,11 +129,11 @@ describe("resolveHubSession", () => {
     await assert.rejects(
       resolveHubSession("hub_at=test", dependencies({
         lookupEntitlement: async () => entitlement("MANAGER"),
-        findUserByCentralPersonId: async () => {
-          throw new Error("ProofPoint database unavailable");
+        findMemberships: async () => {
+          throw new Error("ProofPoint membership lookup unavailable");
         },
       })),
-      /ProofPoint database unavailable/,
+      /ProofPoint membership lookup unavailable/,
     );
   });
 });

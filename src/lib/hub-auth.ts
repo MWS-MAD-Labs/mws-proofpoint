@@ -1,5 +1,7 @@
 import type { Session } from "next-auth";
 import { headers } from "next/headers";
+import bcrypt from "bcrypt";
+import { randomUUID } from "crypto";
 import type { HubSessionClaims } from "mws-central-auth/server";
 import {
   lookupCentralEntitlement,
@@ -25,35 +27,79 @@ type LocalMembership = {
 export type HubAuthDependencies = {
   identityFromCookie(cookieHeader: string | null): Promise<VerifiedCentralIdentity | null>;
   lookupEntitlement(personId: string): Promise<CentralEntitlement | null>;
-  findUserByCentralPersonId(personId: string): Promise<LocalUser | null>;
-  findUsersByEmail(email: string): Promise<LocalUser[]>;
+  ensureLocalUser(identity: VerifiedCentralIdentity): Promise<LocalUser>;
   findMemberships(userId: string): Promise<LocalMembership[]>;
 };
+
+const localUserSelect = {
+  id: true,
+  centralPersonId: true,
+  profile: { select: { fullName: true } },
+} as const;
 
 const defaultDependencies: HubAuthDependencies = {
   identityFromCookie: (cookieHeader) => hubSession().fromCookieHeader(cookieHeader),
   lookupEntitlement: lookupCentralEntitlement,
-  async findUserByCentralPersonId(personId) {
+  async ensureLocalUser(identity) {
     const { prisma } = await import("@/lib/prisma");
-    return prisma.user.findUnique({
-      where: { centralPersonId: personId },
-      select: {
-        id: true,
-        centralPersonId: true,
-        profile: { select: { fullName: true } },
-      },
+    const existing = await prisma.user.findUnique({
+      where: { centralPersonId: identity.sub },
+      select: localUserSelect,
     });
-  },
-  async findUsersByEmail(email) {
-    const { prisma } = await import("@/lib/prisma");
-    return prisma.user.findMany({
-      where: { email: { equals: email, mode: "insensitive" } },
-      select: {
-        id: true,
-        centralPersonId: true,
-        profile: { select: { fullName: true } },
-      },
-      take: 2,
+    if (existing) return existing;
+
+    const normalizedEmail = identity.email.trim().toLowerCase();
+    return prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${identity.sub}))`;
+
+      const byPersonId = await tx.user.findUnique({
+        where: { centralPersonId: identity.sub },
+        select: localUserSelect,
+      });
+      if (byPersonId) return byPersonId;
+
+      const emailMatches = await tx.user.findMany({
+        where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+        select: localUserSelect,
+        take: 2,
+      });
+      if (emailMatches.length > 1) {
+        throw new Error("More than one ProofPoint account matches the Hub email");
+      }
+
+      const byEmail = emailMatches[0];
+      if (byEmail?.centralPersonId && byEmail.centralPersonId !== identity.sub) {
+        throw new Error("The ProofPoint email is linked to another Central person");
+      }
+      if (byEmail) {
+        return tx.user.update({
+          where: { id: byEmail.id },
+          data: {
+            centralPersonId: identity.sub,
+            email: normalizedEmail,
+            emailVerified: true,
+            profile: {
+              upsert: {
+                create: { email: normalizedEmail },
+                update: { email: normalizedEmail },
+              },
+            },
+          },
+          select: localUserSelect,
+        });
+      }
+
+      const passwordHash = await bcrypt.hash(randomUUID(), 12);
+      return tx.user.create({
+        data: {
+          email: normalizedEmail,
+          passwordHash,
+          emailVerified: true,
+          centralPersonId: identity.sub,
+          profile: { create: { email: normalizedEmail } },
+        },
+        select: localUserSelect,
+      });
     });
   },
   async findMemberships(userId) {
@@ -70,24 +116,6 @@ const defaultDependencies: HubAuthDependencies = {
 };
 
 const GLOBAL_ROLES = new Set<ProofPointRole>(["admin", "director"]);
-
-async function findOptionalLocalUser(
-  identity: VerifiedCentralIdentity,
-  dependencies: HubAuthDependencies,
-): Promise<LocalUser | null> {
-  const byPersonId = await dependencies.findUserByCentralPersonId(identity.sub);
-  if (byPersonId) return byPersonId;
-
-  const emailMatches = await dependencies.findUsersByEmail(identity.email);
-  if (emailMatches.length > 1) {
-    console.error("[hub-auth] More than one ProofPoint account matches the Hub email");
-    return null;
-  }
-
-  const byEmail = emailMatches[0] ?? null;
-  if (byEmail?.centralPersonId && byEmail.centralPersonId !== identity.sub) return null;
-  return byEmail;
-}
 
 export async function resolveHubSession(
   cookieHeader?: string | null,
@@ -106,24 +134,12 @@ export async function resolveHubSession(
     entitlement.permissions,
   );
 
-  let localUser: LocalUser | null = null;
+  const localUser = await dependencies.ensureLocalUser(identity);
   let memberships: LocalMembership[] = [];
   const needsDepartmentScope = authorizedRoles.some((role) => !GLOBAL_ROLES.has(role));
 
-  try {
-    localUser = await findOptionalLocalUser(identity, dependencies);
-  } catch (error) {
-    if (needsDepartmentScope) throw error;
-    console.error(
-      "[hub-auth] Optional ProofPoint user lookup failed; continuing with the Central identity",
-      error instanceof Error ? error.message : error,
-    );
-  }
-
   if (needsDepartmentScope) {
-    memberships = localUser
-      ? await dependencies.findMemberships(localUser.id)
-      : [];
+    memberships = await dependencies.findMemberships(localUser.id);
   }
 
   const roles = rolesWithinLocalDepartmentScope(
@@ -138,16 +154,13 @@ export async function resolveHubSession(
 
   return {
     user: {
-      // Existing ProofPoint records keep their application-local actor ID. A
-      // Central-only principal is still a valid session and uses Central's
-      // stable person ID until an operation genuinely needs local app data.
-      id: localUser?.id ?? identity.sub,
+      id: localUser.id,
       email: identity.email,
-      name: localUser?.profile?.fullName ?? null,
+      name: localUser.profile?.fullName ?? null,
       roles,
       departmentId: departmentIds.length === 1 ? departmentIds[0] : null,
       departmentIds,
-      localUserId: localUser?.id,
+      localUserId: localUser.id,
       centralPersonId: identity.sub,
       centralRole: entitlement.role,
       permissions: entitlement.permissions,
