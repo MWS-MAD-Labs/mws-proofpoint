@@ -57,7 +57,7 @@ model User {
   createdTemplates                       RubricTemplate[]                       @relation("TemplateCreator")
   ownedStrategicPlans                    StrategicPlan[]                        @relation("PlanOwner")
   roles                                  UserRole[]
-
+  
   @@unique([nlsmartrackId], map: "users_nlsmartrack_id_key", where: raw("(nlsmartrack_id IS NOT NULL)"))
   @@unique([centralPersonId], map: "users_central_person_id_key", where: raw("(central_person_id IS NOT NULL)"))
   @@index([status], map: "idx_users_status")

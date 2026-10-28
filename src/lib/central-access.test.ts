@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { permissionManifest } from "../../scripts/sync-permissions.mjs";
 import {
+  CENTRAL_ROLE,
   PROOFPOINT_PERMISSIONS,
-  rolesFromPermissions,
+  rolesFromCentralEntitlement,
   rolesWithinLocalDepartmentScope,
 } from "@/lib/central-access";
 
@@ -14,21 +15,42 @@ test("the deployment manifest publishes every permission accepted by ProofPoint"
   );
 });
 
-test("Central permissions map only to known ProofPoint roles after app access is granted", () => {
+test("Central role keys map to the existing ProofPoint roles", () => {
   assert.deepEqual(
-    rolesFromPermissions(["proofpoint.access", "proofpoint.manager", "other.permission"]),
-    ["manager"],
+    Object.entries(CENTRAL_ROLE),
+    [
+      ["ADMIN", "admin"],
+      ["DIRECTOR", "director"],
+      ["MANAGER", "manager"],
+      ["SUPERVISOR", "supervisor"],
+      ["STAFF", "staff"],
+    ],
   );
 });
 
-test("a role permission without proofpoint.access grants no ProofPoint role", () => {
-  assert.deepEqual(rolesFromPermissions(["proofpoint.admin"]), []);
+test("the Central role is accepted only when application access is granted", () => {
+  assert.deepEqual(
+    rolesFromCentralEntitlement("MANAGER", ["proofpoint.access", "proofpoint.manager"]),
+    ["manager"],
+  );
+  assert.deepEqual(rolesFromCentralEntitlement("MANAGER", ["proofpoint.manager"]), []);
 });
 
-test("multiple Central permissions can grant multiple local role scopes", () => {
+test("role-like permissions cannot override the role configured in Central", () => {
   assert.deepEqual(
-    rolesFromPermissions(["proofpoint.access", "proofpoint.staff", "proofpoint.supervisor"]),
-    ["supervisor", "staff"],
+    rolesFromCentralEntitlement("STAFF", [
+      "proofpoint.access",
+      "proofpoint.admin",
+      "proofpoint.supervisor",
+    ]),
+    ["staff"],
+  );
+});
+
+test("an unsupported Central role grants no ProofPoint role", () => {
+  assert.deepEqual(
+    rolesFromCentralEntitlement("OBSERVER", ["proofpoint.access"]),
+    [],
   );
 });
 
@@ -39,7 +61,7 @@ test("departmental roles require a matching ProofPoint department membership", (
   );
 });
 
-test("Central admin and director permissions remain global roles", () => {
+test("Central admin and director roles remain global", () => {
   assert.deepEqual(
     rolesWithinLocalDepartmentScope(["admin", "director"], []),
     ["admin", "director"],

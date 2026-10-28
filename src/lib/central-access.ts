@@ -11,12 +11,12 @@ export const PROOFPOINT_PERMISSIONS = [
 
 export type ProofPointRole = "admin" | "director" | "manager" | "supervisor" | "staff";
 
-export const ROLE_PERMISSION: Record<ProofPointRole, (typeof PROOFPOINT_PERMISSIONS)[number]> = {
-  admin: "proofpoint.admin",
-  director: "proofpoint.director",
-  manager: "proofpoint.manager",
-  supervisor: "proofpoint.supervisor",
-  staff: "proofpoint.staff",
+export const CENTRAL_ROLE: Record<string, ProofPointRole> = {
+  ADMIN: "admin",
+  DIRECTOR: "director",
+  MANAGER: "manager",
+  SUPERVISOR: "supervisor",
+  STAFF: "staff",
 };
 
 export type CentralEntitlement = {
@@ -48,11 +48,13 @@ export function clearCentralEntitlementCacheForTest(): void {
   cache.clear();
 }
 
-export function rolesFromPermissions(permissions: readonly string[]): ProofPointRole[] {
+export function rolesFromCentralEntitlement(
+  role: string,
+  permissions: readonly string[],
+): ProofPointRole[] {
   if (!permissions.includes("proofpoint.access")) return [];
-  return (Object.keys(ROLE_PERMISSION) as ProofPointRole[]).filter((role) =>
-    permissions.includes(ROLE_PERMISSION[role]),
-  );
+  const configuredRole = CENTRAL_ROLE[role];
+  return configuredRole ? [configuredRole] : [];
 }
 
 export function rolesWithinLocalDepartmentScope(
@@ -126,7 +128,7 @@ export async function lookupCentralEntitlement(personId: string): Promise<Centra
     console.error("[central-auth] Central returned an invalid or mismatched ProofPoint entitlement");
     throw new CentralUnavailableError("Central entitlement is invalid for this application");
   }
-  if (rolesFromPermissions(entitlement.permissions).length === 0) {
+  if (rolesFromCentralEntitlement(entitlement.role, entitlement.permissions).length === 0) {
     cache.delete(personId);
     return null;
   }
