@@ -1,4 +1,4 @@
-import type { DomainData, KPIData } from "@/components/assessment";
+import type { DomainData, KPIData } from "@/hooks/useAssessment";
 import type {
   ObservationQuestionType,
   ObservationRubricSection,

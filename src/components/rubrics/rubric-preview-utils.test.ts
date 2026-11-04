@@ -40,7 +40,9 @@ test("buildKpiPreviewDomains normalizes blank names and preserves existing trial
     {
       "k-1": {
         score: 4,
-        evidence: [{ id: "1", title: "Doc", evidence: "https://example.com" }],
+        evidence: [
+          { name: "Doc", evidence: "https://example.com", notes: "Sample" },
+        ],
       },
     },
   );
