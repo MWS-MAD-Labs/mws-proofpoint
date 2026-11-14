@@ -60,3 +60,5 @@ backend/.env
 *.tsv
 
 /src/generated/prisma
+docs/CENTRAL_HUB_INTEGRATION.md
+docs/CENTRAL_HUB_CONVERSATION_SUMMARY.md

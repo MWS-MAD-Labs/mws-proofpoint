@@ -81,6 +81,11 @@ jobs:
         env:
           NODE_ENV: test
 
+      - name: Run Central and Hub authentication tests
+        run: npm run test:central-auth
+        env:
+          NODE_ENV: test
+
       - name: Run observation database integration tests
         run: npm run test:observations:integration
 

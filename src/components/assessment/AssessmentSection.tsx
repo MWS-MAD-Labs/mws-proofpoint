@@ -57,7 +57,7 @@ function SectionHeader({
   progressPercentage: number;
   domainScore: number | null;
 }) {
-  const isComplete = completedKPIs === totalKPIs;
+  const isComplete = totalKPIs > 0 && completedKPIs === totalKPIs;
 
   return (
     <div className="flex w-full items-center gap-4 text-left">
