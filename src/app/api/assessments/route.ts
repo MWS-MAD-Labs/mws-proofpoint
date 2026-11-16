@@ -4,10 +4,17 @@ import { query, queryOne } from "@/lib/db";
 import { managerStaffScopeExistsSql } from "@/lib/organization-access";
 import { triggerNotification } from "@/lib/notifications";
 import type { NotificationType } from "@/lib/notifications/types";
-import { getAssessmentPermissions } from "@/features/assessments/server/permissions";
+import {
+  canUpdateLegacyAssessment,
+  getAssessmentPermissions,
+} from "@/features/assessments/server/permissions";
 import { isManagerLedAssessment } from "@/features/assessments/server/lifecycle";
 import { calculateWeightedPercentageScore, getGradeFromScore } from "@/features/assessments/scoring";
 import { getAutomaticPeriod } from "@/lib/utils";
+import {
+  findFirstLocalUserWithEffectiveRole,
+  userHasEffectiveRole,
+} from "@/lib/effective-user-access";
 
 function hasEvidence(value: unknown): boolean {
   if (typeof value === "string") return value.trim().length > 0;
@@ -488,16 +495,17 @@ export async function POST(request: Request) {
       if (!workflow) return NextResponse.json({ error: "No manager-led appraisal workflow is assigned to this staff member and rubric" }, { status: 403 });
     }
 
-    // Auto-assign director if not provided
-    let finalDirectorId = director_id;
-    if (!finalDirectorId) {
-      const director = await queryOne<{ user_id: string }>(
-        `SELECT ur.user_id FROM user_roles ur
-         JOIN profiles p ON ur.user_id = p.user_id
-         WHERE ur.role = 'director'
-         LIMIT 1`,
-      );
-      finalDirectorId = director?.user_id || null;
+    // Director assignments must reflect Central's current effective role.
+    let finalDirectorId = typeof director_id === "string" ? director_id : null;
+    if (finalDirectorId) {
+      if (!(await userHasEffectiveRole(finalDirectorId, "director"))) {
+        return NextResponse.json(
+          { error: "Selected director does not have an active director entitlement" },
+          { status: 400 },
+        );
+      }
+    } else {
+      finalDirectorId = (await findFirstLocalUserWithEffectiveRole("director"))?.id ?? null;
     }
 
     if (isManagerLed && !finalDirectorId) {
@@ -574,6 +582,20 @@ export async function PUT(request: Request) {
     }
 
     const roles = ((session.user as { roles?: string[] }).roles ?? []).map((role) => role.toLowerCase());
+    if (!canUpdateLegacyAssessment(
+      { id: session.user.id, roles },
+      {
+        staffId: existingAssessment.staff_id,
+        managerId: existingAssessment.manager_id,
+        directorId: existingAssessment.director_id,
+      },
+      updates,
+    )) {
+      return NextResponse.json(
+        { error: "Forbidden: you cannot update these assessment fields" },
+        { status: 403 },
+      );
+    }
     const isManagerSelfAssessment = existingAssessment.staff_id === session.user.id && roles.includes("manager");
 
     if (updates.staff_scores !== undefined) {
@@ -768,6 +790,9 @@ export async function DELETE(request: Request) {
     const isAdmin = (
       (session.user as { roles?: string[] }).roles ?? []
     ).includes("admin");
+    const isManager = (
+      (session.user as { roles?: string[] }).roles ?? []
+    ).includes("manager");
     const isOwner = assessment.staff_id === session.user.id;
     const isAssignedManager = assessment.manager_id === session.user.id;
     const isDraft =
@@ -778,7 +803,7 @@ export async function DELETE(request: Request) {
     // Permissions:
     // 1. Admin can delete anything
     // 2. Owner can delete if it's still a draft/rejected
-    if (!isAdmin && !((isOwner || isAssignedManager) && isDraft)) {
+    if (!isAdmin && !((isOwner || (isManager && isAssignedManager)) && isDraft)) {
       return NextResponse.json(
         {
           error:

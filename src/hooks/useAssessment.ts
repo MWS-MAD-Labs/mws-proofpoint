@@ -539,15 +539,10 @@ export function useAssessment(assessmentId?: string) {
     }
 
     setSaving(true);
-    const finalScore = assessment.permissions?.isManagerLed
-      ? calculateStaffAppraisalScore(domains, "manager")
-      : calculateWeightedScore(domains, "manager");
-    const finalGrade = finalScore !== null ? getGradeFromScore(finalScore) : null;
-
     const { error } = assessment.permissions?.isManagerLed
       ? await api.performAssessmentAction(assessment.id, { action: "acknowledge", staffNotes: staffAcknowledgement })
       : await api.updateAssessment(assessment.id, {
-          status: 'acknowledged', staff_notes: staffAcknowledgement, final_score: finalScore, final_grade: finalGrade,
+          status: 'acknowledged', staff_notes: staffAcknowledgement,
         });
 
     setSaving(false);

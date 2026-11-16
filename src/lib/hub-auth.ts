@@ -17,6 +17,7 @@ type VerifiedCentralIdentity = Pick<HubSessionClaims, "sub" | "email" | "source"
 type LocalUser = {
   id: string;
   centralPersonId: string | null;
+  status: string;
   profile: { fullName: string | null } | null;
 };
 
@@ -34,6 +35,7 @@ export type HubAuthDependencies = {
 const localUserSelect = {
   id: true,
   centralPersonId: true,
+  status: true,
   profile: { select: { fullName: true } },
 } as const;
 
@@ -68,6 +70,9 @@ const defaultDependencies: HubAuthDependencies = {
       }
 
       const byEmail = emailMatches[0];
+      if (byEmail && byEmail.status !== "active") {
+        return byEmail;
+      }
       if (byEmail?.centralPersonId && byEmail.centralPersonId !== identity.sub) {
         throw new Error("The ProofPoint email is linked to another Central person");
       }
@@ -135,6 +140,8 @@ export async function resolveHubSession(
   );
 
   const localUser = await dependencies.ensureLocalUser(identity);
+  if (localUser.status !== "active") return null;
+
   let memberships: LocalMembership[] = [];
   const needsDepartmentScope = authorizedRoles.some((role) => !GLOBAL_ROLES.has(role));
 

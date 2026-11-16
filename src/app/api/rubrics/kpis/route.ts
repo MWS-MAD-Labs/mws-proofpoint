@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
+import { rubricMutationAccess } from "@/lib/rubric-authorization";
+
+function accessError(access: "allowed" | "forbidden" | "not_found") {
+  if (access === "allowed") return null;
+  return NextResponse.json(
+    { error: access === "not_found" ? "Rubric not found" : "Forbidden" },
+    { status: access === "not_found" ? 404 : 403 },
+  );
+}
 
 // POST /api/rubrics/kpis - Create new KPI
 export async function POST(request: Request) {
@@ -38,6 +47,8 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    const denied = accessError(await rubricMutationAccess(session.user, "standard", standard_id));
+    if (denied) return denied;
 
     if (!isValidPerformancePercentage(performance_weight)) {
       return NextResponse.json(
@@ -133,6 +144,8 @@ export async function PATCH(request: Request) {
         { status: 400 },
       );
     }
+    const denied = accessError(await rubricMutationAccess(session.user, "kpi", id));
+    if (denied) return denied;
 
     if (performance_weight !== undefined && !isValidPerformancePercentage(performance_weight)) {
       return NextResponse.json(
@@ -206,6 +219,8 @@ export async function DELETE(request: Request) {
         { status: 400 },
       );
     }
+    const denied = accessError(await rubricMutationAccess(session.user, "kpi", id));
+    if (denied) return denied;
 
     await query(`DELETE FROM kpis WHERE id = $1`, [id]);
 

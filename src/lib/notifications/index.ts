@@ -1,5 +1,8 @@
 import { sendEmail, emailSubjects, emailTemplates } from "@/lib/email";
-import { query } from "@/lib/db";
+import {
+  effectiveRolesForLocalUser,
+  findLocalUsersWithEffectiveRoles,
+} from "@/lib/effective-user-access";
 import { isNotificationEnabled } from "./preferences";
 import { getAssessmentNotificationData } from "./fetcher";
 import {
@@ -15,21 +18,11 @@ const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
 async function getAdminUsers(): Promise<
   Array<{ userId: string; email: string; name: string }>
 > {
-  const admins = await query<{
-    user_id: string;
-    email: string;
-    full_name: string | null;
-  }>(
-    `SELECT u.id as user_id, u.email, p.full_name
-     FROM users u
-     INNER JOIN user_roles ur ON u.id = ur.user_id
-     LEFT JOIN profiles p ON u.id = p.user_id
-     WHERE ur.role = 'admin' AND u.status = 'active'`,
-  );
+  const admins = await findLocalUsersWithEffectiveRoles(["admin"]);
   return admins.map((a) => ({
-    userId: a.user_id,
+    userId: a.id,
     email: a.email,
-    name: a.full_name || "Admin",
+    name: a.fullName || "Admin",
   }));
 }
 
@@ -134,9 +127,13 @@ async function getRecipientsForNotificationType(
   type: NotificationType,
   data: NonNullable<Awaited<ReturnType<typeof getAssessmentNotificationData>>>,
 ): Promise<Array<{ userId: string; email: string; name: string }>> {
+  const hasEffectiveRole = async (userId: string, roles: string[]) =>
+    (await effectiveRolesForLocalUser(userId)).some((role) => roles.includes(role));
+
   switch (type) {
     case "assessment_submitted":
-      return data.managerId && data.managerEmail
+      return data.managerId && data.managerEmail &&
+        await hasEffectiveRole(data.managerId, ["manager", "admin"])
         ? [
             {
               userId: data.managerId,
@@ -147,7 +144,8 @@ async function getRecipientsForNotificationType(
         : [];
 
     case "manager_review_completed":
-      return data.directorId && data.directorEmail
+      return data.directorId && data.directorEmail &&
+        await hasEffectiveRole(data.directorId, ["director", "admin"])
         ? [
             {
               userId: data.directorId,
@@ -176,14 +174,20 @@ async function getRecipientsForNotificationType(
     case "assessment_acknowledged": {
       const recipients: Array<{ userId: string; email: string; name: string }> =
         [];
-      if (data.managerId && data.managerEmail) {
+      if (
+        data.managerId && data.managerEmail &&
+        await hasEffectiveRole(data.managerId, ["manager", "admin"])
+      ) {
         recipients.push({
           userId: data.managerId,
           email: data.managerEmail,
           name: data.managerName || "Manager",
         });
       }
-      if (data.directorId && data.directorEmail) {
+      if (
+        data.directorId && data.directorEmail &&
+        await hasEffectiveRole(data.directorId, ["director", "admin"])
+      ) {
         recipients.push({
           userId: data.directorId,
           email: data.directorEmail,

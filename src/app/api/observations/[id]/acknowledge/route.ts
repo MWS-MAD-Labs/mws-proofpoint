@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
 import { getObservationSession } from "@/features/observations/server/auth";
-import { pool, query, queryOne } from "@/lib/db";
+import { pool, queryOne } from "@/lib/db";
+import {
+  effectiveRolesForLocalUser,
+  findLocalUsersWithEffectiveRoles,
+} from "@/lib/effective-user-access";
 import { getObservationPermissions } from "@/features/observations/server/permissions";
 import {
   notifyObservationAcknowledged,
@@ -382,7 +386,15 @@ export async function PATCH(
     const observationTitle =
       observation.title?.trim() || observation.rubricName || "Observation";
 
-    if (result.updated && observation.managerId && observation.managerEmail) {
+    const managerStillAuthorized = result.updated && observation.managerId
+      ? await effectiveRolesForLocalUser(observation.managerId)
+          .then((roles) => roles.some((role) => role === "manager" || role === "admin"))
+          .catch((error) => {
+            console.error("[acknowledge] unable to verify observer notification recipient", error);
+            return false;
+          })
+      : false;
+    if (managerStillAuthorized && observation.managerId && observation.managerEmail) {
       await notifyManagerObservationAcknowledged(
         observation.managerId,
         observation.managerEmail,
@@ -398,14 +410,16 @@ export async function PATCH(
       );
     }
 
-    const adminUsers = result.updated
-      ? await query<AdminEmailRow>(
-          `SELECT u.id, u.email FROM users u
-           JOIN user_roles ur ON ur.user_id = u.id
-           WHERE ur.role = 'admin' AND u.status = 'active'
-           LIMIT 3`,
-        )
-      : [];
+    let adminUsers: AdminEmailRow[] = [];
+    if (result.updated) {
+      try {
+        adminUsers = (await findLocalUsersWithEffectiveRoles(["admin"]))
+          .slice(0, 3)
+          .map(({ id: userId, email }) => ({ id: userId, email }));
+      } catch (error) {
+        console.error("[acknowledge] unable to verify administrator notification recipients", error);
+      }
+    }
 
     for (const adminUser of adminUsers) {
       if (adminUser.email && adminUser.email !== observation.managerEmail) {

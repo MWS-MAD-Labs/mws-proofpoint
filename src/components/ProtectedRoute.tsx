@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
 
-type AppRole = 'admin' | 'staff' | 'manager' | 'director';
+type AppRole = 'admin' | 'staff' | 'manager' | 'supervisor' | 'director';
 
 interface ProtectedRouteProps {
   children: ReactNode;
