@@ -57,6 +57,7 @@ interface Indicator {
   evidence_guidance?: string | null;
   question_type?: string | null;
   score_options?: string[] | null;
+  is_required?: boolean | null;
   sort_order?: number;
 }
 
@@ -105,6 +106,7 @@ export function ObservationFormEditor() {
     evidence_guidance: string;
     question_type: string;
     score_options: string[];
+    is_required: boolean;
     newOption: string;
   } | null>(null);
 
@@ -270,6 +272,7 @@ export function ObservationFormEditor() {
         evidence_guidance: "",
         question_type: "SCALE",
         score_options: [],
+        is_required: true,
         newOption: "",
       });
     }
@@ -654,6 +657,7 @@ export function ObservationFormEditor() {
                                           evidence_guidance: indicator.evidence_guidance || "",
                                           question_type: indicator.question_type || "SCALE",
                                           score_options: (indicator as any).score_options ?? [],
+                                          is_required: indicator.is_required !== false,
                                           newOption: "",
                                         })}
                                       >

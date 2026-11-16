@@ -5,9 +5,12 @@ import { randomUUID } from "crypto";
 import type { HubSessionClaims } from "mws-central-auth/server";
 import {
   lookupCentralEntitlement,
+  lookupCentralEmployee,
+  CentralUnavailableError,
   rolesFromCentralEntitlement,
   rolesWithinLocalDepartmentScope,
   type CentralEntitlement,
+  type CentralEmployeeProfile,
   type ProofPointRole,
 } from "@/lib/central-access";
 import { hubSession } from "@/lib/hub-session";
@@ -28,7 +31,8 @@ type LocalMembership = {
 export type HubAuthDependencies = {
   identityFromCookie(cookieHeader: string | null): Promise<VerifiedCentralIdentity | null>;
   lookupEntitlement(personId: string): Promise<CentralEntitlement | null>;
-  ensureLocalUser(identity: VerifiedCentralIdentity): Promise<LocalUser>;
+  lookupEmployee(personId: string): Promise<CentralEmployeeProfile | null>;
+  ensureLocalUser(identity: VerifiedCentralIdentity, displayName: string): Promise<LocalUser>;
   findMemberships(userId: string): Promise<LocalMembership[]>;
 };
 
@@ -42,15 +46,31 @@ const localUserSelect = {
 const defaultDependencies: HubAuthDependencies = {
   identityFromCookie: (cookieHeader) => hubSession().fromCookieHeader(cookieHeader),
   lookupEntitlement: lookupCentralEntitlement,
-  async ensureLocalUser(identity) {
+  lookupEmployee: lookupCentralEmployee,
+  async ensureLocalUser(identity, displayName) {
     const { prisma } = await import("@/lib/prisma");
+    const normalizedEmail = identity.email.trim().toLowerCase();
+    const normalizedName = displayName.trim();
     const existing = await prisma.user.findUnique({
       where: { centralPersonId: identity.sub },
       select: localUserSelect,
     });
-    if (existing) return existing;
+    if (existing && existing.status !== "active") return existing;
+    if (existing) {
+      return prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          profile: {
+            upsert: {
+              create: { email: normalizedEmail, fullName: normalizedName },
+              update: { email: normalizedEmail, fullName: normalizedName },
+            },
+          },
+        },
+        select: localUserSelect,
+      });
+    }
 
-    const normalizedEmail = identity.email.trim().toLowerCase();
     return prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${identity.sub}))`;
 
@@ -58,7 +78,21 @@ const defaultDependencies: HubAuthDependencies = {
         where: { centralPersonId: identity.sub },
         select: localUserSelect,
       });
-      if (byPersonId) return byPersonId;
+      if (byPersonId && byPersonId.status !== "active") return byPersonId;
+      if (byPersonId) {
+        return tx.user.update({
+          where: { id: byPersonId.id },
+          data: {
+            profile: {
+              upsert: {
+                create: { email: normalizedEmail, fullName: normalizedName },
+                update: { email: normalizedEmail, fullName: normalizedName },
+              },
+            },
+          },
+          select: localUserSelect,
+        });
+      }
 
       const emailMatches = await tx.user.findMany({
         where: { email: { equals: normalizedEmail, mode: "insensitive" } },
@@ -85,8 +119,8 @@ const defaultDependencies: HubAuthDependencies = {
             emailVerified: true,
             profile: {
               upsert: {
-                create: { email: normalizedEmail },
-                update: { email: normalizedEmail },
+                create: { email: normalizedEmail, fullName: normalizedName },
+                update: { email: normalizedEmail, fullName: normalizedName },
               },
             },
           },
@@ -101,7 +135,7 @@ const defaultDependencies: HubAuthDependencies = {
           passwordHash,
           emailVerified: true,
           centralPersonId: identity.sub,
-          profile: { create: { email: normalizedEmail } },
+          profile: { create: { email: normalizedEmail, fullName: normalizedName } },
         },
         select: localUserSelect,
       });
@@ -134,12 +168,18 @@ export async function resolveHubSession(
 
   const entitlement = await dependencies.lookupEntitlement(identity.sub);
   if (!entitlement) return null;
+  const employee = await dependencies.lookupEmployee(identity.sub);
+  if (!employee) return null;
+  if (employee.email.trim().toLowerCase() !== identity.email.trim().toLowerCase()) {
+    throw new CentralUnavailableError("Central employee email does not match the Hub identity");
+  }
   const authorizedRoles = rolesFromCentralEntitlement(
     entitlement.role,
     entitlement.permissions,
   );
 
-  const localUser = await dependencies.ensureLocalUser(identity);
+  const displayName = employee.full_name.trim();
+  const localUser = await dependencies.ensureLocalUser(identity, displayName);
   if (localUser.status !== "active") return null;
 
   let memberships: LocalMembership[] = [];
@@ -163,7 +203,7 @@ export async function resolveHubSession(
     user: {
       id: localUser.id,
       email: identity.email,
-      name: localUser.profile?.fullName ?? null,
+      name: displayName,
       roles,
       departmentId: departmentIds.length === 1 ? departmentIds[0] : null,
       departmentIds,

@@ -17,6 +17,13 @@ const localUser = {
   profile: { fullName: "Local Display Name" },
 };
 
+const centralEmployee = {
+  person_id: identity.sub,
+  full_name: "Central Display Name",
+  email: identity.email,
+  status: "ACTIVE",
+};
+
 function entitlement(role: string): CentralEntitlement {
   return {
     id: "group:proofpoint-employees",
@@ -36,6 +43,7 @@ function dependencies(
   return {
     identityFromCookie: async () => identity,
     lookupEntitlement: async () => entitlement("ADMIN"),
+    lookupEmployee: async () => centralEmployee,
     ensureLocalUser: async () => localUser,
     findMemberships: async () => [],
     ...overrides,
@@ -45,9 +53,11 @@ function dependencies(
 describe("resolveHubSession", () => {
   it("projects a Central-authorized global role into a local ProofPoint account", async () => {
     let projectionAttempted = false;
+    let projectedName = "";
     const session = await resolveHubSession("hub_at=test", dependencies({
-      ensureLocalUser: async () => {
+      ensureLocalUser: async (_identity, displayName) => {
         projectionAttempted = true;
+        projectedName = displayName;
         return localUser;
       },
     }));
@@ -56,8 +66,10 @@ describe("resolveHubSession", () => {
     assert.equal(session.user.id, localUser.id);
     assert.equal(session.user.centralPersonId, identity.sub);
     assert.equal(session.user.localUserId, localUser.id);
+    assert.equal(session.user.name, centralEmployee.full_name);
     assert.deepEqual(session.user.roles, ["admin"]);
     assert.equal(projectionAttempted, true);
+    assert.equal(projectedName, centralEmployee.full_name);
   });
 
   it("fails closed when the local account cannot be projected", async () => {
@@ -137,6 +149,32 @@ describe("resolveHubSession", () => {
 
     assert.equal(session, null);
     assert.equal(localLookupAttempted, false);
+  });
+
+  it("denies the session when Central has no active employee profile", async () => {
+    let localLookupAttempted = false;
+    const session = await resolveHubSession("hub_at=test", dependencies({
+      lookupEmployee: async () => null,
+      ensureLocalUser: async () => {
+        localLookupAttempted = true;
+        return localUser;
+      },
+    }));
+
+    assert.equal(session, null);
+    assert.equal(localLookupAttempted, false);
+  });
+
+  it("fails closed when the Central employee email differs from Hub", async () => {
+    await assert.rejects(
+      resolveHubSession("hub_at=test", dependencies({
+        lookupEmployee: async () => ({
+          ...centralEmployee,
+          email: "another.person@example.test",
+        }),
+      })),
+      /does not match the Hub identity/,
+    );
   });
 
   it("fails closed when Central access lookup fails", async () => {

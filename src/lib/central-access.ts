@@ -37,6 +37,13 @@ export type CentralDirectoryEntitlement = CentralEntitlement & {
   };
 };
 
+export type CentralEmployeeProfile = {
+  person_id: string;
+  full_name: string;
+  email: string;
+  status: string;
+};
+
 export class CentralUnavailableError extends Error {
   constructor(message = "Central could not be reached") {
     super(message);
@@ -50,10 +57,12 @@ function cacheDurationMs(): number {
 }
 
 const cache = new Map<string, { entitlement: CentralEntitlement; at: number }>();
+const employeeCache = new Map<string, { employee: CentralEmployeeProfile; at: number }>();
 const supportedPermissions = new Set<string>(PROOFPOINT_PERMISSIONS);
 
 export function clearCentralEntitlementCacheForTest(): void {
   cache.clear();
+  employeeCache.clear();
 }
 
 export function rolesFromCentralEntitlement(
@@ -168,6 +177,62 @@ export async function lookupCentralEntitlement(personId: string): Promise<Centra
 
   cache.set(personId, { entitlement, at: Date.now() });
   return entitlement;
+}
+
+export async function lookupCentralEmployee(
+  personId: string,
+): Promise<CentralEmployeeProfile | null> {
+  const cached = employeeCache.get(personId);
+  if (cached && Date.now() - cached.at < cacheDurationMs()) {
+    return cached.employee;
+  }
+  const base = centralApiBase();
+  const token = centralApiToken();
+  const organizationId = centralOrganizationId();
+  if (!base || !token || !organizationId) {
+    throw new CentralUnavailableError("Central API configuration is incomplete");
+  }
+
+  const url = new URL(`${base}/employees/lookup`);
+  url.searchParams.set("person_id", personId);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { ...centralAuthHeaders(token), accept: "application/json" },
+      signal: AbortSignal.timeout(5_000),
+      cache: "no-store",
+    });
+  } catch (error) {
+    console.error("[central-auth] Employee lookup failed", error instanceof Error ? error.message : error);
+    throw new CentralUnavailableError();
+  }
+
+  if (response.status === 404) {
+    employeeCache.delete(personId);
+    return null;
+  }
+  const body = (await response.json().catch(() => null)) as
+    | { data?: CentralEmployeeProfile | null }
+    | null;
+  if (!response.ok || !body?.data) {
+    throw new CentralUnavailableError("Central employee lookup failed");
+  }
+
+  const employee = body.data;
+  if (
+    employee.person_id !== personId ||
+    typeof employee.full_name !== "string" ||
+    employee.full_name.trim().length === 0 ||
+    typeof employee.email !== "string" ||
+    employee.email.trim().length === 0 ||
+    typeof employee.status !== "string" ||
+    employee.status.toUpperCase() !== "ACTIVE"
+  ) {
+    throw new CentralUnavailableError("Central returned an invalid employee profile");
+  }
+  employeeCache.set(personId, { employee, at: Date.now() });
+  return employee;
 }
 
 export async function listCentralEntitlements(): Promise<CentralDirectoryEntitlement[]> {
