@@ -11,6 +11,7 @@ import { isCanonicalRoleAssignment } from "@/lib/organization-access";
 import {
   buildUserProfileUpdate,
   normalizeUserIds,
+  validateCentralManagedProfileUpdate,
   validateBulkReactivationStatus,
   validateUserActionTargets,
 } from "./user-updates";
@@ -189,6 +190,24 @@ export async function PUT(request: Request) {
     if (!id)
       return NextResponse.json({ error: "User ID required" }, { status: 400 });
 
+    const targetUser = await prisma.user.findUnique({
+      where: { id },
+      select: { centralPersonId: true },
+    });
+    if (!targetUser)
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+    const centralProfileError = validateCentralManagedProfileUpdate(
+      isHubAuthEnabled(),
+      targetUser.centralPersonId,
+      full_name,
+    );
+    if (centralProfileError)
+      return NextResponse.json(
+        { error: centralProfileError.error },
+        { status: centralProfileError.status },
+      );
+
     await prisma.$transaction(async (tx) => {
       await tx.profile.updateMany({
         where: { userId: id },
@@ -337,6 +356,7 @@ function formatUser(user: UserWithOrganizationAssignments) {
   return {
     id: user.id,
     email: user.email,
+    central_person_id: user.centralPersonId,
     status: user.status,
     created_at: user.createdAt,
     full_name: user.profile?.fullName ?? null,

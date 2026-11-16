@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
 import { api } from '@/lib/api-client';
+import { useAuth } from '@/hooks/useAuth';
 
 interface OrganizationAssignment {
     department_role_id: string;
@@ -26,6 +27,7 @@ interface OrganizationAssignment {
 interface User {
     id: string;
     email: string;
+    central_person_id: string | null;
     full_name: string | null;
     niy: string | null;
     job_title: string | null;
@@ -48,6 +50,8 @@ export function UserManagementModal({
     onSuccess,
 }: UserManagementModalProps) {
     const isEditMode = !!user;
+    const { authMode } = useAuth();
+    const isCentralManaged = authMode === 'hub' && !!user?.central_person_id;
 
     const [formData, setFormData] = useState({
         email: '',
@@ -89,15 +93,15 @@ export function UserManagementModal({
         try {
             if (isEditMode && user) {
                 const { error: updateError } = await api.updateUser(user.id, {
-                    full_name: formData.full_name || undefined,
+                    full_name: isCentralManaged ? undefined : formData.full_name || undefined,
                     niy: formData.niy || undefined,
                     job_title: formData.job_title || undefined,
                     password: formData.password || undefined,
                 });
                 if (updateError) throw updateError;
             } else {
-                if (!formData.email || !formData.password) {
-                    throw new Error('Email and password are required');
+                if (!formData.email || (authMode !== 'hub' && !formData.password)) {
+                    throw new Error(authMode === 'hub' ? 'Email is required' : 'Email and password are required');
                 }
                 const { error: createError } = await api.createUser({
                     email: formData.email,
@@ -153,19 +157,21 @@ export function UserManagementModal({
                             />
                         </div>
 
-                        <div className="grid gap-2">
-                            <Label htmlFor="password">
-                                {isEditMode ? 'New Password (leave blank to keep current)' : 'Password'}
-                            </Label>
-                            <Input
-                                id="password"
-                                type="password"
-                                value={formData.password}
-                                onChange={e => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                                placeholder={isEditMode ? '••••••••' : 'Enter password'}
-                                className="glass-panel"
-                            />
-                        </div>
+                        {authMode === 'nextauth' && (
+                            <div className="grid gap-2">
+                                <Label htmlFor="password">
+                                    {isEditMode ? 'New Password (leave blank to keep current)' : 'Password'}
+                                </Label>
+                                <Input
+                                    id="password"
+                                    type="password"
+                                    value={formData.password}
+                                    onChange={e => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                                    placeholder={isEditMode ? '••••••••' : 'Enter password'}
+                                    className="glass-panel"
+                                />
+                            </div>
+                        )}
 
                         <div className="grid gap-2">
                             <Label htmlFor="full_name">Full Name</Label>
@@ -173,9 +179,13 @@ export function UserManagementModal({
                                 id="full_name"
                                 value={formData.full_name}
                                 onChange={e => setFormData(prev => ({ ...prev, full_name: e.target.value }))}
+                                disabled={isCentralManaged}
                                 placeholder="John Doe"
                                 className="glass-panel"
                             />
+                            {isCentralManaged && (
+                                <p className="text-xs text-muted-foreground">Managed by MWS Central.</p>
+                            )}
                         </div>
 
                         <div className="grid gap-2">

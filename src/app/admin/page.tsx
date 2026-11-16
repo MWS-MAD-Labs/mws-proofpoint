@@ -86,6 +86,7 @@ interface OrganizationAssignment {
 interface User {
     id: string;
     email: string;
+    central_person_id: string | null;
     full_name: string | null;
     niy: string | null;
     job_title: string | null;

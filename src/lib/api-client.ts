@@ -283,7 +283,7 @@ class ApiClient {
 
   async createUser(data: {
     email: string;
-    password: string;
+    password?: string;
     full_name?: string;
     niy?: string;
     job_title?: string;

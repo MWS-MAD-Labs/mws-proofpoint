@@ -19,9 +19,11 @@ type VerifiedCentralIdentity = Pick<HubSessionClaims, "sub" | "email" | "source"
 
 type LocalUser = {
   id: string;
+  email: string;
+  emailVerified: boolean | null;
   centralPersonId: string | null;
   status: string;
-  profile: { fullName: string | null } | null;
+  profile: { email: string; fullName: string | null } | null;
 };
 
 type LocalMembership = {
@@ -38,10 +40,25 @@ export type HubAuthDependencies = {
 
 const localUserSelect = {
   id: true,
+  email: true,
+  emailVerified: true,
   centralPersonId: true,
   status: true,
-  profile: { select: { fullName: true } },
+  profile: { select: { email: true, fullName: true } },
 } as const;
+
+export function needsCentralIdentitySync(
+  user: Pick<LocalUser, "email" | "emailVerified" | "profile">,
+  email: string,
+  fullName: string,
+): boolean {
+  return (
+    user.email !== email ||
+    user.emailVerified !== true ||
+    user.profile?.email !== email ||
+    user.profile.fullName !== fullName
+  );
+}
 
 const defaultDependencies: HubAuthDependencies = {
   identityFromCookie: (cookieHeader) => hubSession().fromCookieHeader(cookieHeader),
@@ -51,25 +68,6 @@ const defaultDependencies: HubAuthDependencies = {
     const { prisma } = await import("@/lib/prisma");
     const normalizedEmail = identity.email.trim().toLowerCase();
     const normalizedName = displayName.trim();
-    const existing = await prisma.user.findUnique({
-      where: { centralPersonId: identity.sub },
-      select: localUserSelect,
-    });
-    if (existing && existing.status !== "active") return existing;
-    if (existing) {
-      return prisma.user.update({
-        where: { id: existing.id },
-        data: {
-          profile: {
-            upsert: {
-              create: { email: normalizedEmail, fullName: normalizedName },
-              update: { email: normalizedEmail, fullName: normalizedName },
-            },
-          },
-        },
-        select: localUserSelect,
-      });
-    }
 
     return prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${identity.sub}))`;
@@ -80,9 +78,24 @@ const defaultDependencies: HubAuthDependencies = {
       });
       if (byPersonId && byPersonId.status !== "active") return byPersonId;
       if (byPersonId) {
+        const conflictingEmailOwner = await tx.user.findFirst({
+          where: {
+            id: { not: byPersonId.id },
+            email: { equals: normalizedEmail, mode: "insensitive" },
+          },
+          select: { id: true },
+        });
+        if (conflictingEmailOwner) {
+          throw new Error("The Central email belongs to another ProofPoint account");
+        }
+        if (!needsCentralIdentitySync(byPersonId, normalizedEmail, normalizedName)) {
+          return byPersonId;
+        }
         return tx.user.update({
           where: { id: byPersonId.id },
           data: {
+            email: normalizedEmail,
+            emailVerified: true,
             profile: {
               upsert: {
                 create: { email: normalizedEmail, fullName: normalizedName },

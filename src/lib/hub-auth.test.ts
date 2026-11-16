@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { CentralEntitlement } from "@/lib/central-access";
-import { resolveHubSession, type HubAuthDependencies } from "@/lib/hub-auth";
+import {
+  needsCentralIdentitySync,
+  resolveHubSession,
+  type HubAuthDependencies,
+} from "@/lib/hub-auth";
 
 const identity = {
   sub: "1db43b65-63ce-46bf-b6e6-1dcfbc6fbc85",
@@ -12,9 +16,11 @@ const identity = {
 
 const localUser = {
   id: "ee0c38f1-d0ed-43e9-90a1-226391895db3",
+  email: identity.email,
+  emailVerified: true,
   centralPersonId: identity.sub,
   status: "active",
-  profile: { fullName: "Local Display Name" },
+  profile: { email: identity.email, fullName: "Local Display Name" },
 };
 
 const centralEmployee = {
@@ -197,6 +203,62 @@ describe("resolveHubSession", () => {
         },
       })),
       /ProofPoint membership lookup unavailable/,
+    );
+  });
+});
+
+describe("needsCentralIdentitySync", () => {
+  const projectedUser = {
+    email: identity.email,
+    emailVerified: true,
+    profile: {
+      email: identity.email,
+      fullName: centralEmployee.full_name,
+    },
+  };
+
+  it("does not rewrite an unchanged Central identity projection", () => {
+    assert.equal(
+      needsCentralIdentitySync(projectedUser, identity.email, centralEmployee.full_name),
+      false,
+    );
+  });
+
+  it("detects a changed Central email in either local identity table", () => {
+    assert.equal(
+      needsCentralIdentitySync(
+        { ...projectedUser, email: "old@example.test" },
+        identity.email,
+        centralEmployee.full_name,
+      ),
+      true,
+    );
+    assert.equal(
+      needsCentralIdentitySync(
+        { ...projectedUser, profile: { ...projectedUser.profile, email: "old@example.test" } },
+        identity.email,
+        centralEmployee.full_name,
+      ),
+      true,
+    );
+  });
+
+  it("detects changed Central names and unverified local email state", () => {
+    assert.equal(
+      needsCentralIdentitySync(
+        { ...projectedUser, profile: { ...projectedUser.profile, fullName: "Old Name" } },
+        identity.email,
+        centralEmployee.full_name,
+      ),
+      true,
+    );
+    assert.equal(
+      needsCentralIdentitySync(
+        { ...projectedUser, emailVerified: false },
+        identity.email,
+        centralEmployee.full_name,
+      ),
+      true,
     );
   });
 });
