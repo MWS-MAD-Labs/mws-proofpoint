@@ -2,6 +2,15 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
 import { randomUUID } from "crypto";
+import { rubricMutationAccess } from "@/lib/rubric-authorization";
+
+function accessError(access: "allowed" | "forbidden" | "not_found") {
+    if (access === "allowed") return null;
+    return NextResponse.json(
+        { error: access === "not_found" ? "Rubric not found" : "Forbidden" },
+        { status: access === "not_found" ? 404 : 403 },
+    );
+}
 
 // POST /api/rubrics/sections - Create new section
 export async function POST(request: Request) {
@@ -17,6 +26,8 @@ export async function POST(request: Request) {
         if (!template_id || !name || weight === undefined) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
+        const denied = accessError(await rubricMutationAccess(session.user, "template", template_id));
+        if (denied) return denied;
 
         const id = randomUUID();
 
@@ -48,6 +59,8 @@ export async function PATCH(request: Request) {
         if (!id) {
             return NextResponse.json({ error: "Section ID is required" }, { status: 400 });
         }
+        const denied = accessError(await rubricMutationAccess(session.user, "section", id));
+        if (denied) return denied;
 
         const updatedSection = await queryOne(
             `UPDATE rubric_sections 
@@ -84,6 +97,8 @@ export async function DELETE(request: Request) {
         if (!id) {
             return NextResponse.json({ error: "Section ID is required" }, { status: 400 });
         }
+        const denied = accessError(await rubricMutationAccess(session.user, "section", id));
+        if (denied) return denied;
 
         await query(`DELETE FROM rubric_sections WHERE id = $1`, [id]);
 

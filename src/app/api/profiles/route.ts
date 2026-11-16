@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
+import { isHubAuthEnabled } from "@/lib/hub-session";
 
 // GET /api/profiles - List all profiles (admin) or get current user profile
 export async function GET(request: Request) {
@@ -82,6 +83,13 @@ export async function PUT(request: Request) {
 
         const body = await request.json();
         const { full_name, avatar_url } = body;
+
+        if (isHubAuthEnabled() && full_name !== undefined) {
+            return NextResponse.json(
+                { error: "Full name is managed by MWS Central" },
+                { status: 400 }
+            );
+        }
 
         const updated = await queryOne(
             `UPDATE profiles

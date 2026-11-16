@@ -36,6 +36,7 @@ import {
   ChevronsUpDown,
   ExpandIcon,
   ShrinkIcon,
+  Eye,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -67,6 +68,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ObservationFormEditor } from "@/components/admin/ObservationFormEditor";
+import { KpiRubricPreviewDialog } from "@/components/rubrics/KpiRubricPreviewDialog";
 import { useAuth } from "@/hooks/useAuth";
 
 // Type definitions
@@ -494,6 +496,7 @@ function RubricsContent({ mode = "KPI_APPRAISAL" }: { mode?: "KPI_APPRAISAL" | "
   // UI State
   const [templateSelectorOpen, setTemplateSelectorOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const handleSelectTemplate = async (template: Template) => {
     if (selectedTemplate?.id === template.id) return;
@@ -1141,6 +1144,15 @@ function RubricsContent({ mode = "KPI_APPRAISAL" }: { mode?: "KPI_APPRAISAL" | "
               </Button>
             </div>
             <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPreviewOpen(true)}
+                disabled={isDetailLoading}
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                Preview Fill-In
+              </Button>
               {isEditMode ? (
                 <>
                   <Button
@@ -1722,6 +1734,13 @@ function RubricsContent({ mode = "KPI_APPRAISAL" }: { mode?: "KPI_APPRAISAL" | "
           onImport={handleImportDomains}
         />
       )}
+
+      {/* Interactive Fill-In Preview Dialog */}
+      <KpiRubricPreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        template={currentData}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>

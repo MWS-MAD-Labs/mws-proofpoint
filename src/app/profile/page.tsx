@@ -17,6 +17,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/hooks/useAuth";
 
 interface UserProfile {
   id: string;
@@ -29,6 +30,7 @@ interface UserProfile {
 
 export default function ProfilePage() {
   const { data: session } = useSession();
+  const { authMode } = useAuth();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -46,7 +48,7 @@ export default function ProfilePage() {
 
   // Profile Update Mutation
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: { full_name: string; avatar_url?: string }) => {
+    mutationFn: async (data: { full_name?: string; avatar_url?: string }) => {
       const res = await fetch("/api/profiles", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -104,7 +106,6 @@ export default function ProfilePage() {
       // After upload, update profile with new URL
       if (profile) {
         updateProfileMutation.mutate({
-          full_name: profile.full_name,
           avatar_url: data.url,
         });
       }
@@ -200,7 +201,11 @@ export default function ProfilePage() {
       <Card>
         <CardHeader>
           <CardTitle>Personal Information</CardTitle>
-          <CardDescription>Update your personal details.</CardDescription>
+          <CardDescription>
+            {authMode === "hub"
+              ? "Your name and email are managed by MWS Central."
+              : "Update your personal details."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form
@@ -212,6 +217,8 @@ export default function ProfilePage() {
               <Input
                 id="full_name"
                 defaultValue={profile?.full_name}
+                disabled={authMode !== "nextauth"}
+                className={authMode !== "nextauth" ? "bg-muted" : undefined}
                 {...registerProfile("full_name")}
               />
             </div>
@@ -227,72 +234,76 @@ export default function ProfilePage() {
                 className="bg-muted"
               />
             </div>
-            <div className="flex justify-end">
-              <Button type="submit" disabled={updateProfileMutation.isPending}>
-                {updateProfileMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Save Changes
-              </Button>
-            </div>
+            {authMode === "nextauth" && (
+              <div className="flex justify-end">
+                <Button type="submit" disabled={updateProfileMutation.isPending}>
+                  {updateProfileMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Save Changes
+                </Button>
+              </div>
+            )}
           </form>
         </CardContent>
       </Card>
 
-      {/* Security */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Security</CardTitle>
-          <CardDescription>Change your password.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={passwordForm.handleSubmit(onPasswordSubmit)}
-            className="space-y-4"
-          >
-            <div className="grid gap-2">
-              <Label htmlFor="currentPassword">Current Password</Label>
-              <Input
-                id="currentPassword"
-                type="password"
-                {...passwordForm.register("currentPassword", {
-                  required: true,
-                })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="newPassword">New Password</Label>
-              <Input
-                id="newPassword"
-                type="password"
-                {...passwordForm.register("newPassword", { required: true })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="confirmPassword">Confirm New Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                {...passwordForm.register("confirmPassword", {
-                  required: true,
-                })}
-              />
-            </div>
-            <div className="flex justify-end">
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={updatePasswordMutation.isPending}
-              >
-                {updatePasswordMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Update Password
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      {/* Local password credentials are not used after the Hub cutover. */}
+      {authMode === "nextauth" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Security</CardTitle>
+            <CardDescription>Change your password.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              onSubmit={passwordForm.handleSubmit(onPasswordSubmit)}
+              className="space-y-4"
+            >
+              <div className="grid gap-2">
+                <Label htmlFor="currentPassword">Current Password</Label>
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  {...passwordForm.register("currentPassword", {
+                    required: true,
+                  })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="newPassword">New Password</Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  {...passwordForm.register("newPassword", { required: true })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  {...passwordForm.register("confirmPassword", {
+                    required: true,
+                  })}
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  type="submit"
+                  variant="outline"
+                  disabled={updatePasswordMutation.isPending}
+                >
+                  {updatePasswordMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Update Password
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

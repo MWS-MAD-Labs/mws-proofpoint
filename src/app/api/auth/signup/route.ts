@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import bcrypt from "bcrypt";
 import { query, queryOne } from "@/lib/db";
+import { isHubAuthEnabled } from "@/lib/hub-session";
 
 interface SignupBody {
   email: string;
@@ -10,6 +11,10 @@ interface SignupBody {
 }
 
 export async function POST(request: Request) {
+  if (isHubAuthEnabled()) {
+    return NextResponse.json({ error: "Account creation is managed centrally" }, { status: 410 });
+  }
+
   try {
     const body: SignupBody = await request.json();
     const { email, password, fullName } = body;

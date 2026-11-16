@@ -20,6 +20,7 @@ import {
   Check,
   BookOpen,
   ListChecks,
+  Eye,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -45,6 +46,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ObservationRubricPreviewDialog } from "@/components/rubrics/ObservationRubricPreviewDialog";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -55,6 +57,7 @@ interface Indicator {
   evidence_guidance?: string | null;
   question_type?: string | null;
   score_options?: string[] | null;
+  is_required?: boolean | null;
   sort_order?: number;
 }
 
@@ -103,11 +106,13 @@ export function ObservationFormEditor() {
     evidence_guidance: string;
     question_type: string;
     score_options: string[];
+    is_required: boolean;
     newOption: string;
   } | null>(null);
 
   const [deleteSectionId, setDeleteSectionId] = useState<string | null>(null);
   const [deleteIndicatorId, setDeleteIndicatorId] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // ── Fetch ──
 
@@ -267,6 +272,7 @@ export function ObservationFormEditor() {
         evidence_guidance: "",
         question_type: "SCALE",
         score_options: [],
+        is_required: true,
         newOption: "",
       });
     }
@@ -415,15 +421,25 @@ export function ObservationFormEditor() {
                       <BookOpen className="h-4 w-4 text-primary" />
                       Form Details
                     </CardTitle>
-                    {!editingTemplateInfo && (
-                      <Button variant="ghost" size="sm" onClick={() => {
-                        setEditName(selected.name);
-                        setEditDescription(selected.description || "");
-                        setEditingTemplateInfo(true);
-                      }}>
-                        <Edit3 className="h-3.5 w-3.5 mr-1" /> Edit
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        onClick={() => setPreviewOpen(true)}
+                      >
+                        <Eye className="h-3.5 w-3.5 mr-1.5" /> Preview Form
                       </Button>
-                    )}
+                      {!editingTemplateInfo && (
+                        <Button variant="ghost" size="sm" onClick={() => {
+                          setEditName(selected.name);
+                          setEditDescription(selected.description || "");
+                          setEditingTemplateInfo(true);
+                        }}>
+                          <Edit3 className="h-3.5 w-3.5 mr-1" /> Edit
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -641,6 +657,7 @@ export function ObservationFormEditor() {
                                           evidence_guidance: indicator.evidence_guidance || "",
                                           question_type: indicator.question_type || "SCALE",
                                           score_options: (indicator as any).score_options ?? [],
+                                          is_required: indicator.is_required !== false,
                                           newOption: "",
                                         })}
                                       >
@@ -676,6 +693,21 @@ export function ObservationFormEditor() {
           )}
         </div>
       </div>
+
+      {/* Interactive Form Preview Dialog */}
+      <ObservationRubricPreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        source={{
+          selected,
+          editingTemplateInfo,
+          editName,
+          editDescription,
+          editingSectionId,
+          editingSectionName,
+          editingIndicator,
+        }}
+      />
 
       {/* Create Form Dialog */}
       <Dialog open={showNewDialog} onOpenChange={setShowNewDialog}>

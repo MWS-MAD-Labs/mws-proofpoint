@@ -3,6 +3,16 @@ export interface UserActionValidationError {
   status: 400 | 404;
 }
 
+export function validateCentralManagedProfileUpdate(
+  hubEnabled: boolean,
+  centralPersonId: string | null,
+  fullName: unknown,
+): UserActionValidationError | null {
+  return hubEnabled && centralPersonId && fullName !== undefined
+    ? { error: "Full name is managed by MWS Central", status: 400 }
+    : null;
+}
+
 export function normalizeUserIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.filter((id): id is string => typeof id === "string" && id.length > 0))];

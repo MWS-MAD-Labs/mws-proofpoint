@@ -242,20 +242,14 @@ export async function POST(req: Request) {
 
     const manager = await queryOne<PersonRow>(
       `SELECT
-         u.id, u.email, p.full_name AS "fullName",
-         EXISTS (
-           SELECT 1
-             FROM department_role_memberships drm
-             JOIN department_roles dr ON dr.id = drm.department_role_id
-            WHERE drm.user_id = u.id AND dr.role::text IN ('manager', 'admin')
-         ) AS "hasManagerRole"
+         u.id, u.email, p.full_name AS "fullName"
        FROM users u
        LEFT JOIN profiles p ON p.user_id = u.id
        WHERE u.id = $1 AND u.status = 'active'
        GROUP BY u.id, u.email, p.full_name`,
       [user.id],
     );
-    if (!manager || !manager.hasManagerRole) {
+    if (!manager) {
       return NextResponse.json(
         { error: "The observer must be an active manager or administrator." },
         { status: 400 },

@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
+import { rubricMutationAccess } from "@/lib/rubric-authorization";
+
+function accessError(access: "allowed" | "forbidden" | "not_found") {
+  if (access === "allowed") return null;
+  return NextResponse.json(
+    { error: access === "not_found" ? "Rubric not found" : "Forbidden" },
+    { status: access === "not_found" ? 404 : 403 },
+  );
+}
 
 // POST /api/rubrics/domains - Create new domain
 export async function POST(request: Request) {
@@ -19,6 +28,8 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    const denied = accessError(await rubricMutationAccess(session.user, "template", template_id));
+    if (denied) return denied;
 
     const next = await queryOne<{ next_order: string; next_code: string }>(
       `SELECT
@@ -71,6 +82,8 @@ export async function PATCH(request: Request) {
         { status: 400 },
       );
     }
+    const denied = accessError(await rubricMutationAccess(session.user, "domain", id));
+    if (denied) return denied;
 
     const updatedDomain = await queryOne(
       `UPDATE kpi_domains
@@ -113,6 +126,8 @@ export async function DELETE(request: Request) {
         { status: 400 },
       );
     }
+    const denied = accessError(await rubricMutationAccess(session.user, "domain", id));
+    if (denied) return denied;
 
     await query(`DELETE FROM kpi_domains WHERE id = $1`, [id]);
 

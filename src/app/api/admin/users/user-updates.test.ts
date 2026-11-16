@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildUserProfileUpdate,
   normalizeUserIds,
+  validateCentralManagedProfileUpdate,
   validateBulkReactivationStatus,
   validateUserActionTargets,
 } from "./user-updates";
@@ -18,6 +19,16 @@ test("user profile updates only include personal profile fields", () => {
     niy: undefined,
     jobTitle: "Teacher",
   });
+});
+
+test("Central-linked names cannot be changed locally in Hub mode", () => {
+  assert.deepEqual(
+    validateCentralManagedProfileUpdate(true, "central-person-1", "Changed Name"),
+    { error: "Full name is managed by MWS Central", status: 400 },
+  );
+  assert.equal(validateCentralManagedProfileUpdate(true, "central-person-1", undefined), null);
+  assert.equal(validateCentralManagedProfileUpdate(false, "central-person-1", "Changed Name"), null);
+  assert.equal(validateCentralManagedProfileUpdate(true, null, "Pre-provisioned Name"), null);
 });
 
 test("bulk user IDs are filtered and deduplicated", () => {

@@ -5,11 +5,13 @@ import { randomUUID } from "crypto";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
+import { isHubAuthEnabled } from "@/lib/hub-session";
 import type { Prisma } from "@prisma/client";
 import { isCanonicalRoleAssignment } from "@/lib/organization-access";
 import {
   buildUserProfileUpdate,
   normalizeUserIds,
+  validateCentralManagedProfileUpdate,
   validateBulkReactivationStatus,
   validateUserActionTargets,
 } from "./user-updates";
@@ -94,14 +96,14 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { email, password, full_name, niy, job_title } = body;
 
-    if (!email || !password)
+    if (!email || (!password && !isHubAuthEnabled()))
       return NextResponse.json({ error: "Email and password required" }, { status: 400 });
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing)
       return NextResponse.json({ error: "Email already exists" }, { status: 409 });
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password || randomUUID(), 10);
 
 
     const newUser = await prisma.$transaction(async (tx) => {
@@ -187,6 +189,24 @@ export async function PUT(request: Request) {
 
     if (!id)
       return NextResponse.json({ error: "User ID required" }, { status: 400 });
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id },
+      select: { centralPersonId: true },
+    });
+    if (!targetUser)
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+    const centralProfileError = validateCentralManagedProfileUpdate(
+      isHubAuthEnabled(),
+      targetUser.centralPersonId,
+      full_name,
+    );
+    if (centralProfileError)
+      return NextResponse.json(
+        { error: centralProfileError.error },
+        { status: centralProfileError.status },
+      );
 
     await prisma.$transaction(async (tx) => {
       await tx.profile.updateMany({
@@ -336,6 +356,7 @@ function formatUser(user: UserWithOrganizationAssignments) {
   return {
     id: user.id,
     email: user.email,
+    central_person_id: user.centralPersonId,
     status: user.status,
     created_at: user.createdAt,
     full_name: user.profile?.fullName ?? null,

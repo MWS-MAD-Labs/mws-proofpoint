@@ -2,6 +2,15 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
 import { randomUUID } from "crypto";
+import { rubricMutationAccess } from "@/lib/rubric-authorization";
+
+function accessError(access: "allowed" | "forbidden" | "not_found") {
+    if (access === "allowed") return null;
+    return NextResponse.json(
+        { error: access === "not_found" ? "Rubric not found" : "Forbidden" },
+        { status: access === "not_found" ? 404 : 403 },
+    );
+}
 
 const VALID_QUESTION_TYPES = ["SCALE", "CHOICE", "TEXT"];
 
@@ -19,6 +28,8 @@ export async function POST(request: Request) {
         if (!section_id || !name) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
+        const denied = accessError(await rubricMutationAccess(session.user, "section", section_id));
+        if (denied) return denied;
 
         const finalQuestionType = VALID_QUESTION_TYPES.includes(question_type) ? question_type : "SCALE";
         const id = randomUUID();
@@ -58,6 +69,8 @@ export async function PATCH(request: Request) {
         if (!id) {
             return NextResponse.json({ error: "Indicator ID is required" }, { status: 400 });
         }
+        const denied = accessError(await rubricMutationAccess(session.user, "indicator", id));
+        if (denied) return denied;
 
         const finalQuestionType = question_type && VALID_QUESTION_TYPES.includes(question_type)
             ? question_type : undefined;
@@ -69,7 +82,7 @@ export async function PATCH(request: Request) {
                  sort_order         = COALESCE($3, sort_order),
                  evidence_guidance  = COALESCE($4, evidence_guidance),
                  score_options      = COALESCE($5, score_options),
-                 question_type      = COALESCE($6::\"IndicatorQuestionType\", question_type),
+                 question_type      = COALESCE($6::"IndicatorQuestionType", question_type),
                  score_min          = COALESCE($7, score_min),
                  score_max          = COALESCE($8, score_max),
                  score_step         = COALESCE($9, score_step),
@@ -107,6 +120,8 @@ export async function DELETE(request: Request) {
         if (!id) {
             return NextResponse.json({ error: "Indicator ID is required" }, { status: 400 });
         }
+        const denied = accessError(await rubricMutationAccess(session.user, "indicator", id));
+        if (denied) return denied;
 
         await query(`DELETE FROM rubric_indicators WHERE id = $1`, [id]);
         return NextResponse.json({ message: "Indicator deleted successfully" });
