@@ -1,7 +1,7 @@
 // src/app/api/managers/route.ts
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { query } from "@/lib/db";
+import { findLocalUsersWithEffectiveRoles } from "@/lib/effective-user-access";
 
 export async function GET() {
   const session = await auth();
@@ -10,24 +10,13 @@ export async function GET() {
   }
 
   try {
-    const managers = await query(
-      `SELECT DISTINCT
-         u.id,
-         u.email,
-         p.full_name as "fullName"
-       FROM users u
-       JOIN user_roles ur ON ur.user_id = u.id
-       LEFT JOIN profiles p ON p.user_id = u.id
-       WHERE ur.role IN ('manager', 'admin')
-         AND u.status = 'active'
-       ORDER BY u.email ASC`
-    ) as any[];
+    const managers = await findLocalUsersWithEffectiveRoles(["manager", "admin"]);
 
     // Format to match expected shape { id, email, profile: { fullName } }
     const formatted = managers.map((m) => ({
       id:      m.id,
       email:   m.email,
-      profile: { fullName: m.fullName ?? null },
+      profile: { fullName: m.fullName },
     }));
 
     return NextResponse.json(formatted);

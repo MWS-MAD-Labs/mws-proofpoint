@@ -13,12 +13,14 @@ const identity = {
 const localUser = {
   id: "ee0c38f1-d0ed-43e9-90a1-226391895db3",
   centralPersonId: identity.sub,
+  status: "active",
   profile: { fullName: "Local Display Name" },
 };
 
 function entitlement(role: string): CentralEntitlement {
   return {
     id: "group:proofpoint-employees",
+    person_id: identity.sub,
     application_id: "proofpoint",
     organization_id: "organization-1",
     role,
@@ -67,6 +69,29 @@ describe("resolveHubSession", () => {
       })),
       /ProofPoint database unavailable/,
     );
+  });
+
+  it("denies a suspended local account matched by Central person ID", async () => {
+    const session = await resolveHubSession("hub_at=test", dependencies({
+      ensureLocalUser: async () => ({
+        ...localUser,
+        status: "suspended",
+      }),
+    }));
+
+    assert.equal(session, null);
+  });
+
+  it("denies a deleted local account matched by email", async () => {
+    const session = await resolveHubSession("hub_at=test", dependencies({
+      ensureLocalUser: async () => ({
+        ...localUser,
+        centralPersonId: null,
+        status: "deleted",
+      }),
+    }));
+
+    assert.equal(session, null);
   });
 
   it("authenticates a Central-authorized departmental user without granting unscoped local access", async () => {

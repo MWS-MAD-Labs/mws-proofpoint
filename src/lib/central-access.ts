@@ -21,12 +21,20 @@ export const CENTRAL_ROLE: Record<string, ProofPointRole> = {
 
 export type CentralEntitlement = {
   id: string;
+  person_id: string;
   application_id: string;
   organization_id: string;
   role: string;
   permissions: string[];
   version: number;
   is_active: boolean;
+};
+
+export type CentralDirectoryEntitlement = CentralEntitlement & {
+  person: {
+    email: string;
+    full_name: string | null;
+  };
 };
 
 export class CentralUnavailableError extends Error {
@@ -65,6 +73,46 @@ export function rolesWithinLocalDepartmentScope(
   return entitledRoles.filter((role) =>
     role === "admin" || role === "director" || localRoles.has(role),
   );
+}
+
+export function validateCentralEntitlement(
+  personId: string,
+  entitlement: CentralEntitlement,
+): CentralEntitlement {
+  const applicationId = process.env.HUB_SSO_APP_ID?.trim() || "proofpoint";
+  const organizationId = centralOrganizationId();
+  // Older Central group grants used version 0; current deployments use a
+  // monotonically increasing directory version. Both are valid revisions.
+  const isGroupEntitlement =
+    typeof entitlement.id === "string" && entitlement.id.startsWith("group:");
+  const validVersion = Number.isInteger(entitlement.version) && (
+    isGroupEntitlement ? entitlement.version >= 0 : entitlement.version >= 1
+  );
+
+  if (
+    !organizationId ||
+    typeof entitlement.id !== "string" ||
+    entitlement.id.length === 0 ||
+    typeof entitlement.person_id !== "string" ||
+    entitlement.person_id !== personId ||
+    typeof entitlement.role !== "string" ||
+    !/^[A-Z][A-Z0-9_]*$/.test(entitlement.role) ||
+    !Number.isInteger(entitlement.version) ||
+    !validVersion ||
+    entitlement.is_active !== true ||
+    entitlement.application_id !== applicationId ||
+    entitlement.organization_id !== organizationId ||
+    !Array.isArray(entitlement.permissions) ||
+    entitlement.permissions.some(
+      (permission) =>
+        typeof permission !== "string" || !supportedPermissions.has(permission),
+    )
+  ) {
+    console.error("[central-auth] Central returned an invalid or mismatched ProofPoint entitlement");
+    throw new CentralUnavailableError("Central entitlement is invalid for this application");
+  }
+
+  return entitlement;
 }
 
 export async function lookupCentralEntitlement(personId: string): Promise<CentralEntitlement | null> {
@@ -112,22 +160,7 @@ export async function lookupCentralEntitlement(personId: string): Promise<Centra
     cache.delete(personId);
     return null;
   }
-  if (
-    typeof entitlement.id !== "string" ||
-    entitlement.id.length === 0 ||
-    typeof entitlement.role !== "string" ||
-    !/^[A-Z][A-Z0-9_]*$/.test(entitlement.role) ||
-    !Number.isInteger(entitlement.version) ||
-    entitlement.version < 1 ||
-    entitlement.is_active !== true ||
-    entitlement.application_id !== applicationId ||
-    entitlement.organization_id !== organizationId ||
-    !Array.isArray(entitlement.permissions) ||
-    entitlement.permissions.some((permission) => typeof permission !== "string" || !supportedPermissions.has(permission))
-  ) {
-    console.error("[central-auth] Central returned an invalid or mismatched ProofPoint entitlement");
-    throw new CentralUnavailableError("Central entitlement is invalid for this application");
-  }
+  validateCentralEntitlement(personId, entitlement);
   if (rolesFromCentralEntitlement(entitlement.role, entitlement.permissions).length === 0) {
     cache.delete(personId);
     return null;
@@ -135,4 +168,56 @@ export async function lookupCentralEntitlement(personId: string): Promise<Centra
 
   cache.set(personId, { entitlement, at: Date.now() });
   return entitlement;
+}
+
+export async function listCentralEntitlements(): Promise<CentralDirectoryEntitlement[]> {
+  const base = centralApiBase();
+  const token = centralApiToken();
+  const organizationId = centralOrganizationId();
+  if (!base || !token || !organizationId) {
+    throw new CentralUnavailableError("Central API configuration is incomplete");
+  }
+
+  const applicationId = process.env.HUB_SSO_APP_ID?.trim() || "proofpoint";
+  const rows: CentralDirectoryEntitlement[] = [];
+
+  for (let page = 1; ; page += 1) {
+    const url = new URL(`${base}/application-entitlements`);
+    url.searchParams.set("application_id", applicationId);
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("size", "100");
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: { ...centralAuthHeaders(token), accept: "application/json" },
+        signal: AbortSignal.timeout(15_000),
+        cache: "no-store",
+      });
+    } catch (error) {
+      console.error("[central-auth] Entitlement directory failed", error instanceof Error ? error.message : error);
+      throw new CentralUnavailableError();
+    }
+
+    const body = (await response.json().catch(() => null)) as
+      | {
+          data?: CentralDirectoryEntitlement[];
+          paging?: { total_page: number };
+        }
+      | null;
+    if (!response.ok || !body?.data || !body.paging) {
+      throw new CentralUnavailableError("Central entitlement directory lookup failed");
+    }
+
+    for (const entitlement of body.data) {
+      validateCentralEntitlement(entitlement.person_id, entitlement);
+      if (rolesFromCentralEntitlement(entitlement.role, entitlement.permissions).length > 0) {
+        rows.push(entitlement);
+      }
+    }
+
+    if (page >= body.paging.total_page) break;
+  }
+
+  return rows;
 }

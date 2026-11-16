@@ -15,6 +15,7 @@ import {
 } from "@/features/observations/server/dates";
 import { randomUUID } from "crypto";
 import { notifyObservationReassigned } from "@/lib/notifications/observation-notifications";
+import { effectiveRolesForLocalUser } from "@/lib/effective-user-access";
 import type {
   ObservationDetail,
   ObservationDetailResponse,
@@ -370,6 +371,24 @@ export async function PATCH(
       );
     }
 
+    let requestedManagerRoles: string[] | null = null;
+    if (body.managerId !== undefined) {
+      const requestedManagerId = body.managerId.trim();
+      if (!UUID_PATTERN.test(requestedManagerId)) {
+        return NextResponse.json(
+          { error: "managerId must be a valid UUID." },
+          { status: 400 },
+        );
+      }
+      requestedManagerRoles = await effectiveRolesForLocalUser(requestedManagerId);
+      if (!requestedManagerRoles.some((role) => role === "manager" || role === "admin")) {
+        return NextResponse.json(
+          { error: "The observer must have an active manager or administrator entitlement." },
+          { status: 400 },
+        );
+      }
+    }
+
     const requestedStaffIds = body.staffIds !== undefined
       ? patchStaffIds(body.staffIds)
       : null;
@@ -561,6 +580,12 @@ export async function PATCH(
           )
         : null;
       const resultingManager = managerResult?.rows[0] ?? null;
+      if (resultingManager && requestedManagerRoles) {
+        resultingManager.eligible = requestedManagerRoles.some(
+          (role) => role === "manager" || role === "admin",
+        );
+        resultingManager.isAdmin = requestedManagerRoles.includes("admin");
+      }
       if (!resultingManager?.eligible) {
         await client.query("ROLLBACK");
         return NextResponse.json(
@@ -762,6 +787,7 @@ export async function DELETE(
 
     const roles = (session.user as { roles?: string[] }).roles ?? [];
     const isAdmin = roles.includes("admin");
+    const isManager = roles.includes("manager");
     const { id } = await params;
     const observation = await queryOne<{
       managerId: string | null;
@@ -796,7 +822,7 @@ export async function DELETE(
         { status: 409 },
       );
     }
-    if (!isAdmin && observation.managerId !== session.user.id) {
+    if (!isAdmin && (!isManager || observation.managerId !== session.user.id)) {
       return NextResponse.json(
         { error: "Only an administrator or the assigned observer can delete this observation." },
         { status: 403 },
@@ -821,9 +847,9 @@ export async function DELETE(
                AND pending_participant.acknowledged_at IS NULL
            )
          )
-         AND ($2::boolean OR "managerId" = $3)
+         AND ($2::boolean OR ($3::boolean AND "managerId" = $4))
        RETURNING id`,
-      [id, isAdmin, session.user.id],
+      [id, isAdmin, isManager, session.user.id],
     );
     if (!deleted) {
       return NextResponse.json(

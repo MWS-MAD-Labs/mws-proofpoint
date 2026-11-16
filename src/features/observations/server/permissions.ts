@@ -15,7 +15,8 @@ export function getObservationPermissions(
 ): ObservationPermissions {
   const status = normalizeObservationStatus(observation.status);
   const isAdmin = hasRole(actor, "admin");
-  const isAssignedManager = observation.managerId === actor.id;
+  const isAssignedManager =
+    hasRole(actor, "manager") && observation.managerId === actor.id;
   const isDirector = hasRole(actor, "director");
   const isParticipant =
     observation.isParticipant ?? observation.staffId === actor.id;

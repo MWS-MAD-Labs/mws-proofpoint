@@ -6,7 +6,23 @@ import {
   PROOFPOINT_PERMISSIONS,
   rolesFromCentralEntitlement,
   rolesWithinLocalDepartmentScope,
+  validateCentralEntitlement,
 } from "@/lib/central-access";
+
+const originalEnvironment = {
+  organizationId: process.env.CENTRAL_ORGANIZATION_ID,
+  applicationId: process.env.HUB_SSO_APP_ID,
+};
+
+process.env.CENTRAL_ORGANIZATION_ID = "organization-1";
+process.env.HUB_SSO_APP_ID = "proofpoint";
+
+test.after(() => {
+  if (originalEnvironment.organizationId === undefined) delete process.env.CENTRAL_ORGANIZATION_ID;
+  else process.env.CENTRAL_ORGANIZATION_ID = originalEnvironment.organizationId;
+  if (originalEnvironment.applicationId === undefined) delete process.env.HUB_SSO_APP_ID;
+  else process.env.HUB_SSO_APP_ID = originalEnvironment.applicationId;
+});
 
 test("the deployment manifest publishes every permission accepted by ProofPoint", () => {
   assert.deepEqual(
@@ -66,4 +82,37 @@ test("Central admin and director roles remain global", () => {
     rolesWithinLocalDepartmentScope(["admin", "director"], []),
     ["admin", "director"],
   );
+});
+
+test("Central entitlements are bound to the authenticated Hub person", () => {
+  const entitlement = {
+    id: "entitlement-1",
+    person_id: "another-person",
+    application_id: "proofpoint",
+    organization_id: "organization-1",
+    role: "ADMIN",
+    permissions: ["proofpoint.access", "proofpoint.admin"],
+    version: 1,
+    is_active: true,
+  };
+
+  assert.throws(
+    () => validateCentralEntitlement("hub-person", entitlement),
+    /invalid for this application/,
+  );
+});
+
+test("Central group entitlements accept the contract's zero version", () => {
+  const entitlement = {
+    id: "group:proofpoint-employees",
+    person_id: "hub-person",
+    application_id: "proofpoint",
+    organization_id: "organization-1",
+    role: "STAFF",
+    permissions: ["proofpoint.access", "proofpoint.staff"],
+    version: 0,
+    is_active: true,
+  };
+
+  assert.equal(validateCentralEntitlement("hub-person", entitlement), entitlement);
 });

@@ -208,6 +208,18 @@ test("admin and assigned manager can view and edit draft responses", () => {
   }
 });
 
+test("an assigned former manager loses observer privileges after a Central downgrade", () => {
+  const permissions = getObservationPermissions(
+    { id: "manager", roles: ["staff"] },
+    draft,
+  );
+  assert.equal(permissions.canViewRecord, false);
+  assert.equal(permissions.canViewResponses, false);
+  assert.equal(permissions.canEdit, false);
+  assert.equal(permissions.canSubmit, false);
+  assert.equal(permissions.canDelete, false);
+});
+
 test("a manager who is the subject cannot view a draft through subject status alone", () => {
   const permissions = getObservationPermissions(
     { id: "staff", roles: ["manager", "staff"] },

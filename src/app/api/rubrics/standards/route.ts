@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
+import { rubricMutationAccess } from "@/lib/rubric-authorization";
+
+function accessError(access: "allowed" | "forbidden" | "not_found") {
+  if (access === "allowed") return null;
+  return NextResponse.json(
+    { error: access === "not_found" ? "Rubric not found" : "Forbidden" },
+    { status: access === "not_found" ? 404 : 403 },
+  );
+}
 
 // POST /api/rubrics/standards - Create new standard
 export async function POST(request: Request) {
@@ -19,6 +28,8 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    const denied = accessError(await rubricMutationAccess(session.user, "domain", domain_id));
+    if (denied) return denied;
 
     const domain = await queryOne<{ template_id: string }>(
       `SELECT template_id FROM kpi_domains WHERE id = $1`,
@@ -84,6 +95,8 @@ export async function PATCH(request: Request) {
         { status: 400 },
       );
     }
+    const denied = accessError(await rubricMutationAccess(session.user, "standard", id));
+    if (denied) return denied;
 
     const updatedStandard = await queryOne(
       `UPDATE kpi_standards
@@ -128,6 +141,8 @@ export async function DELETE(request: Request) {
         { status: 400 },
       );
     }
+    const denied = accessError(await rubricMutationAccess(session.user, "standard", id));
+    if (denied) return denied;
 
     await query(`DELETE FROM kpi_standards WHERE id = $1`, [id]);
 

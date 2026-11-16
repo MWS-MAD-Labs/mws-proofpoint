@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
+import {
+  canCreateRubric,
+  canDeleteRubric,
+  canManageRubric,
+  canWriteRubricScope,
+} from "@/lib/rubric-authorization";
 
 // GET /api/rubrics - List rubric templates with domains, standards, and KPIs
 export async function GET(request: Request) {
@@ -140,9 +146,17 @@ export async function POST(request: Request) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    if (!canCreateRubric(session.user)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const body = await request.json();
     const { name, description, department_id, is_global, template_type } = body;
+    const departmentId = typeof department_id === "string" ? department_id : null;
+    const isGlobal = is_global === true;
+    if (!canWriteRubricScope(session.user, departmentId, isGlobal)) {
+      return NextResponse.json({ error: "Forbidden rubric scope" }, { status: 403 });
+    }
     const validTemplateTypes = [
       "KPI_APPRAISAL",
       "STAFF_APPRAISAL",
@@ -160,8 +174,8 @@ export async function POST(request: Request) {
       [
         name,
         description ?? null,
-        department_id ?? null,
-        is_global ?? false,
+        departmentId,
+        isGlobal,
         session.user.id,
         finalTemplateType,
       ],
@@ -205,6 +219,32 @@ export async function PATCH(request: Request) {
       );
     }
 
+    const rubric = await queryOne<{
+      created_by: string | null;
+      department_id: string | null;
+      is_global: boolean;
+    }>(
+      `SELECT created_by, department_id, is_global
+         FROM rubric_templates
+        WHERE id = $1 AND is_active = true`,
+      [id],
+    );
+    if (!rubric) {
+      return NextResponse.json({ error: "Template not found" }, { status: 404 });
+    }
+    if (!canManageRubric(session.user, rubric.created_by)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    const nextDepartmentId = department_id === undefined
+      ? rubric.department_id
+      : typeof department_id === "string"
+        ? department_id
+        : null;
+    const nextIsGlobal = typeof is_global === "boolean" ? is_global : rubric.is_global;
+    if (!canWriteRubricScope(session.user, nextDepartmentId, nextIsGlobal)) {
+      return NextResponse.json({ error: "Forbidden rubric scope" }, { status: 403 });
+    }
+
     const updatedTemplate = await queryOne(
       `UPDATE rubric_templates
              SET name = COALESCE($1, name),
@@ -218,7 +258,7 @@ export async function PATCH(request: Request) {
       [
         name,
         description,
-        department_id ?? null,
+        nextDepartmentId,
         is_global,
         finalTemplateType ?? null,
         id,
@@ -261,7 +301,7 @@ export async function DELETE(request: Request) {
     }
 
     // Ambil data rubric (hanya yang masih aktif)
-    const rubric = await queryOne<{ id: string; created_by: string }>(
+    const rubric = await queryOne<{ id: string; created_by: string | null }>(
       `SELECT id, created_by FROM rubric_templates WHERE id = $1 AND is_active = true`,
       [id],
     );
@@ -273,16 +313,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Cek apakah user adalah admin
-    const adminRole = await queryOne<{ role: string }>(
-      `SELECT role FROM user_roles WHERE user_id = $1 AND role = 'admin'`,
-      [session.user.id],
-    );
-
-    const isAdmin = !!adminRole;
-    const isCreator = rubric.created_by === session.user.id;
-
-    if (!isAdmin && !isCreator) {
+    if (!canDeleteRubric(session.user, rubric.created_by)) {
       return NextResponse.json(
         { error: "Forbidden: hanya admin atau pembuat rubric yang bisa menghapus" },
         { status: 403 },
