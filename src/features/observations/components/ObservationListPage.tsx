@@ -18,7 +18,7 @@ import { ObservationPagination } from "./ObservationPagination";
 export function ObservationListPage() {
   const auth = useAuth();
   const { filters, updateFilters, clearFilters } = useObservationFilters(auth.roles, auth.loading);
-  const showOrganisationFilters = auth.isAdmin || auth.isDirector;
+  const showOrganisationFilters = auth.isAdmin || auth.isDirector || auth.isInstructionalCoach;
   const list = useQuery({ queryKey: observationKeys.list(filters), queryFn: () => fetchObservationList(filters), enabled: !auth.loading && !!auth.user });
   const options = useQuery({
     queryKey: [...observationKeys.filterOptions(), showOrganisationFilters],
@@ -37,7 +37,7 @@ export function ObservationListPage() {
             <h1 className="text-3xl font-semibold tracking-tight">All observations</h1>
             <p className="mt-2 text-muted-foreground">Search, filter, and open observation records. This URL can be shared or bookmarked.</p>
           </div>
-          {(auth.isAdmin || auth.isManager) && <Button asChild><Link href="/observations/new"><Plus className="mr-2 h-4 w-4" />New observation</Link></Button>}
+          {(auth.isAdmin || auth.isManager || auth.isInstructionalCoach) && <Button asChild><Link href="/observations/new"><Plus className="mr-2 h-4 w-4" />New observation</Link></Button>}
         </section>
 
         <ObservationFilters filters={filters} options={options.data ?? { departments: [], managers: [], rubrics: [] }} showDepartment={showOrganisationFilters} showManager={showOrganisationFilters} onChange={updateFilters} onClear={clearFilters} />

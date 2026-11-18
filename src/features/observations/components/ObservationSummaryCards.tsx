@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, Clock3, ClipboardList, type LucideIcon } f
 import { Card, CardContent } from "@/components/ui/card";
 import type { ObservationSummaryCounts } from "../types";
 
-type RoleView = "admin" | "director" | "manager" | "staff";
+type RoleView = "admin" | "director" | "coach" | "manager" | "staff";
 
 interface SummaryCard {
   label: string;

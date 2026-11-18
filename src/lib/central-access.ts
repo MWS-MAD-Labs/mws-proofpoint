@@ -7,9 +7,16 @@ export const PROOFPOINT_PERMISSIONS = [
   "proofpoint.manager",
   "proofpoint.supervisor",
   "proofpoint.staff",
+  "proofpoint.instructional_coach",
 ] as const;
 
-export type ProofPointRole = "admin" | "director" | "manager" | "supervisor" | "staff";
+export type ProofPointRole =
+  | "admin"
+  | "director"
+  | "manager"
+  | "supervisor"
+  | "staff"
+  | "instructional_coach";
 
 export const CENTRAL_ROLE: Record<string, ProofPointRole> = {
   ADMIN: "admin",
@@ -17,7 +24,15 @@ export const CENTRAL_ROLE: Record<string, ProofPointRole> = {
   MANAGER: "manager",
   SUPERVISOR: "supervisor",
   STAFF: "staff",
+  INSTRUCTIONAL_COACH: "instructional_coach",
 };
+
+// Roles that apply across the organization without a local department membership.
+export const UNSCOPED_ROLES: ReadonlySet<ProofPointRole> = new Set([
+  "admin",
+  "director",
+  "instructional_coach",
+]);
 
 export type CentralEntitlement = {
   id: string;
@@ -80,7 +95,7 @@ export function rolesWithinLocalDepartmentScope(
 ): ProofPointRole[] {
   const localRoles = new Set(membershipRoles);
   return entitledRoles.filter((role) =>
-    role === "admin" || role === "director" || localRoles.has(role),
+    UNSCOPED_ROLES.has(role) || localRoles.has(role),
   );
 }
 

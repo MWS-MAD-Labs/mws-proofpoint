@@ -6,7 +6,7 @@ import {
   signIn as nextAuthSignIn,
   signOut as nextAuthSignOut,
 } from "next-auth/react";
-import { isManageableRole, type ManageableRole } from "@/lib/app-roles";
+import { isSessionRole, type SessionRole } from "@/lib/app-roles";
 
 import { keepFresh } from "mws-central-auth/client";
 
@@ -29,7 +29,7 @@ interface AuthContextType {
   user: User | null;
   session: { user: User } | null;
   profile: Profile | null;
-  roles: ManageableRole[];
+  roles: SessionRole[];
   loading: boolean;
   authMode: AuthMode | null;
   authModeError: string | null;
@@ -41,10 +41,11 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
-  hasRole: (role: ManageableRole) => boolean;
+  hasRole: (role: SessionRole) => boolean;
   isAdmin: boolean;
   isManager: boolean;
   isDirector: boolean;
+  isInstructionalCoach: boolean;
   isStaff: boolean;
 }
 
@@ -117,8 +118,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     : null;
 
   // Extract roles from session
-  const roles: ManageableRole[] = session?.user
-    ? ((session.user as { roles?: string[] }).roles ?? []).filter(isManageableRole)
+  const roles: SessionRole[] = session?.user
+    ? ((session.user as { roles?: string[] }).roles ?? []).filter(isSessionRole)
     : [];
 
   const signUp = async (email: string, password: string, fullName: string) => {
@@ -218,7 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await nextAuthSignOut({ redirect: false });
   };
 
-  const hasRole = (role: ManageableRole) => roles.includes(role);
+  const hasRole = (role: SessionRole) => roles.includes(role);
 
   const value: AuthContextType = {
     user,
@@ -236,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAdmin: hasRole("admin"),
     isManager: hasRole("manager"),
     isDirector: hasRole("director"),
+    isInstructionalCoach: hasRole("instructional_coach"),
     isStaff: hasRole("staff"),
   };
 

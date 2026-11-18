@@ -7,6 +7,7 @@ import {
 } from "@/features/observations/server/dates";
 import { pool, query, queryOne } from "@/lib/db";
 import { managerStaffScopeExistsSql } from "@/lib/organization-access";
+import { canObserve, canObserveAnyStaff } from "@/lib/app-roles";
 
 import { parseObservationListQuery } from "@/features/observations/schemas";
 import { queryObservationList } from "@/features/observations/server/queries";
@@ -146,11 +147,9 @@ export async function POST(req: Request) {
     id: session.user.id,
     roles: (session.user as { roles?: string[] }).roles ?? [],
   };
-  const isAdmin = user.roles.includes("admin");
-  const isManager = user.roles.includes("manager");
-  if (!isAdmin && !isManager) {
+  if (!canObserve(user.roles)) {
     return NextResponse.json(
-      { error: "Only managers and administrators can create observations." },
+      { error: "Only managers, instructional coaches, and administrators can create observations." },
       { status: 403 },
     );
   }
@@ -225,7 +224,7 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    if (!isAdmin) {
+    if (!canObserveAnyStaff(user.roles)) {
       const outOfScope = await queryOne<{ count: number }>(
         `SELECT COUNT(*)::int AS count
          FROM UNNEST($1::uuid[]) AS selected(staff_id)
@@ -251,7 +250,7 @@ export async function POST(req: Request) {
     );
     if (!manager) {
       return NextResponse.json(
-        { error: "The observer must be an active manager or administrator." },
+        { error: "The observer must be an active manager, instructional coach, or administrator." },
         { status: 400 },
       );
     }

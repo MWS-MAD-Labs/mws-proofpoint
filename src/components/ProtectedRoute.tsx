@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
-import type { ManageableRole } from '@/lib/app-roles';
+import type { SessionRole } from '@/lib/app-roles';
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  requiredRoles?: readonly ManageableRole[];
+  requiredRoles?: readonly SessionRole[];
 }
 
 export default function ProtectedRoute({ children, requiredRoles }: ProtectedRouteProps) {

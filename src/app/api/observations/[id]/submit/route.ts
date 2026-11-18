@@ -323,7 +323,7 @@ export async function PATCH(
           randomUUID(),
           id,
           user.id,
-          `Submitted by ${isAdmin ? "admin" : "manager"}`,
+          `Submitted by ${isAdmin ? "admin" : user.roles.includes("instructional_coach") ? "instructional coach" : "manager"}`,
         ],
       );
       await client.query("COMMIT");

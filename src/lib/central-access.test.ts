@@ -40,6 +40,7 @@ test("Central role keys map to the existing ProofPoint roles", () => {
       ["MANAGER", "manager"],
       ["SUPERVISOR", "supervisor"],
       ["STAFF", "staff"],
+      ["INSTRUCTIONAL_COACH", "instructional_coach"],
     ],
   );
 });
@@ -81,6 +82,20 @@ test("Central admin and director roles remain global", () => {
   assert.deepEqual(
     rolesWithinLocalDepartmentScope(["admin", "director"], []),
     ["admin", "director"],
+  );
+});
+
+test("the Central instructional coach role is global and needs no department membership", () => {
+  assert.deepEqual(
+    rolesFromCentralEntitlement("INSTRUCTIONAL_COACH", [
+      "proofpoint.access",
+      "proofpoint.instructional_coach",
+    ]),
+    ["instructional_coach"],
+  );
+  assert.deepEqual(
+    rolesWithinLocalDepartmentScope(["instructional_coach"], []),
+    ["instructional_coach"],
   );
 });
 

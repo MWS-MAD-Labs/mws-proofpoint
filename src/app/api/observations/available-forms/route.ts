@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getObservationSession } from "@/features/observations/server/auth";
 import { query, queryOne } from "@/lib/db";
 import { managerStaffScopeExistsSql } from "@/lib/organization-access";
+import { canObserve, canObserveAnyStaff } from "@/lib/app-roles";
 import type { ObservationCreationForm } from "@/features/observations/types";
 
 interface StaffAccessRow {
@@ -35,9 +36,7 @@ async function availableForms(value: unknown) {
   }
 
   const userRoles = (session.user as { roles?: string[] }).roles ?? [];
-  const isAdmin = userRoles.includes("admin");
-  const isManager = userRoles.includes("manager");
-  if (!isAdmin && !isManager) {
+  if (!canObserve(userRoles)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -74,7 +73,7 @@ async function availableForms(value: unknown) {
     );
   }
 
-  if (!isAdmin) {
+  if (!canObserveAnyStaff(userRoles)) {
     const outOfScope = await queryOne<{ count: number }>(
       `SELECT COUNT(*)::int AS count
        FROM UNNEST($1::uuid[]) AS selected(staff_id)

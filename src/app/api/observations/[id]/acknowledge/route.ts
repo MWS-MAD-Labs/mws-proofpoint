@@ -7,6 +7,7 @@ import {
   findLocalUsersWithEffectiveRoles,
 } from "@/lib/effective-user-access";
 import { getObservationPermissions } from "@/features/observations/server/permissions";
+import { canObserve } from "@/lib/app-roles";
 import {
   notifyObservationAcknowledged,
   notifyManagerObservationAcknowledged,
@@ -388,7 +389,7 @@ export async function PATCH(
 
     const managerStillAuthorized = result.updated && observation.managerId
       ? await effectiveRolesForLocalUser(observation.managerId)
-          .then((roles) => roles.some((role) => role === "manager" || role === "admin"))
+          .then((roles) => canObserve(roles))
           .catch((error) => {
             console.error("[acknowledge] unable to verify observer notification recipient", error);
             return false;

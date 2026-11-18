@@ -35,6 +35,11 @@ export const permissionManifest = [
     description: "Central role marker for the ProofPoint STAFF role",
     requires: ["proofpoint.access"],
   },
+  {
+    key: "proofpoint.instructional_coach",
+    description: "Central role marker for the ProofPoint INSTRUCTIONAL_COACH role",
+    requires: ["proofpoint.access"],
+  },
 ];
 
 function value(name) {

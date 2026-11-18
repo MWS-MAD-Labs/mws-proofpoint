@@ -29,10 +29,19 @@ export function ObservationOverview() {
     queryFn: fetchObservationSummary,
     enabled: !auth.loading && !!auth.user,
   });
-  const role = auth.isAdmin ? "admin" : auth.isManager ? "manager" : auth.isDirector ? "director" : "staff";
+  const role = auth.isAdmin
+    ? "admin"
+    : auth.isInstructionalCoach
+      ? "coach"
+      : auth.isManager
+        ? "manager"
+        : auth.isDirector
+          ? "director"
+          : "staff";
   const subtitle = {
     admin: "Monitor observation activity, workflow health, and organisation-wide follow-up.",
     director: "Track organisation-wide progress and records that require follow-up.",
+    coach: "Observe staff across every unit, continue your drafts, and follow organisation-wide progress.",
     manager: "Continue drafts, monitor participant acknowledgements, and review recent work.",
     staff: "Review observations shared with you and acknowledge pending reports.",
   }[role];
@@ -50,7 +59,7 @@ export function ObservationOverview() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline"><Link href="/observations/all">View all <ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
-            {(auth.isAdmin || auth.isManager) && (
+            {(auth.isAdmin || auth.isManager || auth.isInstructionalCoach) && (
               <Button asChild><Link href="/observations/new"><Plus className="mr-2 h-4 w-4" />New observation</Link></Button>
             )}
             {role === "staff" && pendingParticipantItem && (
@@ -104,7 +113,7 @@ function OverviewSkeleton() {
   return <div className="space-y-6"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}</div><div className="grid gap-6 xl:grid-cols-[minmax(22rem,0.9fr)_minmax(0,1.6fr)]"><Skeleton className="h-96 rounded-xl" /><Skeleton className="h-96 rounded-xl" /></div></div>;
 }
 
-function EmptyOverview({ role }: { role: "admin" | "director" | "manager" | "staff" }) {
-  const copy = role === "manager" ? "Nothing needs your attention. Start a new observation when your next review is ready." : role === "staff" ? "You have no pending acknowledgements. Newly submitted observations will appear here." : "There are no overdue or unassigned observations requiring follow-up.";
-  return <div className="rounded-xl border border-dashed p-8 text-center"><ClipboardCheck className="mx-auto h-9 w-9 text-muted-foreground" /><p className="mt-4 font-medium">You’re all caught up</p><p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{copy}</p>{(role === "admin" || role === "manager") && <Button asChild variant="outline" className="mt-5"><Link href="/observations/new">New observation</Link></Button>}</div>;
+function EmptyOverview({ role }: { role: "admin" | "director" | "coach" | "manager" | "staff" }) {
+  const copy = role === "manager" || role === "coach" ? "Nothing needs your attention. Start a new observation when your next review is ready." : role === "staff" ? "You have no pending acknowledgements. Newly submitted observations will appear here." : "There are no overdue or unassigned observations requiring follow-up.";
+  return <div className="rounded-xl border border-dashed p-8 text-center"><ClipboardCheck className="mx-auto h-9 w-9 text-muted-foreground" /><p className="mt-4 font-medium">You’re all caught up</p><p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{copy}</p>{(role === "admin" || role === "manager" || role === "coach") && <Button asChild variant="outline" className="mt-5"><Link href="/observations/new">New observation</Link></Button>}</div>;
 }
