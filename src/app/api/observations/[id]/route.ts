@@ -582,10 +582,14 @@ export async function PATCH(
         : null;
       const resultingManager = managerResult?.rows[0] ?? null;
       // Central-only roles (instructional coach) have no local membership, so the
-      // observer's effective roles come from the reassignment lookup or, when the
-      // observer is editing their own observation, from the current session.
+      // observer's effective roles must also be resolved when an admin edits an
+      // unchanged observer's observation.
       const observerRoles = requestedManagerRoles
-        ?? (resultingManager?.id === session.user.id ? roles : null);
+        ?? (resultingManager?.id === session.user.id
+          ? roles
+          : resultingManager
+            ? await effectiveRolesForLocalUser(resultingManager.id)
+            : null);
       if (resultingManager && observerRoles) {
         resultingManager.eligible = canObserve(observerRoles);
         resultingManager.isAdmin = canObserveAnyStaff(observerRoles);
