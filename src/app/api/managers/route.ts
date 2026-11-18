@@ -10,7 +10,7 @@ export async function GET() {
   }
 
   try {
-    const managers = await findLocalUsersWithEffectiveRoles(["manager", "admin"]);
+    const managers = await findLocalUsersWithEffectiveRoles(["manager", "admin", "instructional_coach"]);
 
     // Format to match expected shape { id, email, profile: { fullName } }
     const formatted = managers.map((m) => ({

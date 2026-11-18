@@ -47,7 +47,7 @@ interface HeaderProps {
 
 export function Header({ className }: HeaderProps) {
   const pathname = usePathname();
-  const { user, profile, isAdmin, isManager, isDirector, authMode, signOut } = useAuth();
+  const { user, profile, isAdmin, isManager, isDirector, isInstructionalCoach, authMode, signOut } = useAuth();
   const [isDark, setIsDark] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
 
@@ -263,6 +263,8 @@ export function Header({ className }: HeaderProps) {
                         ? "Admin"
                         : isDirector
                           ? "Director"
+                          : isInstructionalCoach
+                            ? "Instructional Coach"
                           : isManager
                             ? "Manager"
                             : "Staff"}

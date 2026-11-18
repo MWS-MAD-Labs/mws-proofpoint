@@ -15,16 +15,22 @@ export function getObservationPermissions(
 ): ObservationPermissions {
   const status = normalizeObservationStatus(observation.status);
   const isAdmin = hasRole(actor, "admin");
+  // The assigned observer is a manager or instructional coach who created
+  // (or was reassigned) the observation.
   const isAssignedManager =
-    hasRole(actor, "manager") && observation.managerId === actor.id;
-  const isDirector = hasRole(actor, "director");
+    (hasRole(actor, "manager") || hasRole(actor, "instructional_coach")) &&
+    observation.managerId === actor.id;
+  // Directors and instructional coaches oversee every observation.
+  const isDirector =
+    hasRole(actor, "director") || hasRole(actor, "instructional_coach");
   const isParticipant =
     observation.isParticipant ?? observation.staffId === actor.id;
   const hasPendingAcknowledgement =
     isParticipant && observation.participantAcknowledgedAt == null;
 
   // Participants must not learn that an observer's draft exists.
-  // A separate privileged role (admin, director, or assigned manager) retains access.
+  // A separate privileged role (admin, director, instructional coach, or
+  // assigned observer) retains access.
   const canViewRecord =
     isAdmin ||
     isAssignedManager ||

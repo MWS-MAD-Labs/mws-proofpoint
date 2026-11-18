@@ -45,6 +45,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { canObserve } from "@/lib/app-roles";
 import { cn } from "@/lib/utils";
 import {
   createObservation,
@@ -88,7 +89,7 @@ export function ObservationCreationWizard() {
   const roles = (session?.user as { roles?: string[] } | undefined)?.roles ?? [];
   const currentUserId = (session?.user as { id?: string } | undefined)?.id ?? "";
   const isAdmin = roles.includes("admin");
-  const canCreate = isAdmin || roles.includes("manager");
+  const canCreate = canObserve(roles);
 
   const [step, setStep] = useState(0);
   const [staffIds, setStaffIds] = useState<string[]>([]);

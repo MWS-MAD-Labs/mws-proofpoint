@@ -6,6 +6,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getObservationSession } from "@/features/observations/server/auth";
 import { pool, query, queryOne } from "@/lib/db";
 import { managerStaffScopeExistsSql } from "@/lib/organization-access";
+import { canObserve, canObserveAnyStaff, canViewAllObservations } from "@/lib/app-roles";
 import { getObservationPermissions } from "@/features/observations/server/permissions";
 import { normalizeObservationStatus } from "@/features/observations/server/lifecycle";
 import { calculateObservationProgress } from "@/features/observations/server/validation";
@@ -193,6 +194,7 @@ interface ManagerPatchRow {
   fullName: string | null;
   departmentId: string | null;
   eligible: boolean;
+  // True when the observer may observe staff outside their department.
   isAdmin: boolean;
 }
 
@@ -339,8 +341,7 @@ export async function PATCH(
     }
     const roles = (session.user as { roles?: string[] }).roles ?? [];
     const isAdmin = roles.includes("admin");
-    const isManager = roles.includes("manager");
-    if (!isAdmin && !isManager) {
+    if (!canObserve(roles)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -381,9 +382,9 @@ export async function PATCH(
         );
       }
       requestedManagerRoles = await effectiveRolesForLocalUser(requestedManagerId);
-      if (!requestedManagerRoles.some((role) => role === "manager" || role === "admin")) {
+      if (!canObserve(requestedManagerRoles)) {
         return NextResponse.json(
-          { error: "The observer must have an active manager or administrator entitlement." },
+          { error: "The observer must have an active manager, instructional coach, or administrator entitlement." },
           { status: 400 },
         );
       }
@@ -580,16 +581,19 @@ export async function PATCH(
           )
         : null;
       const resultingManager = managerResult?.rows[0] ?? null;
-      if (resultingManager && requestedManagerRoles) {
-        resultingManager.eligible = requestedManagerRoles.some(
-          (role) => role === "manager" || role === "admin",
-        );
-        resultingManager.isAdmin = requestedManagerRoles.includes("admin");
+      // Central-only roles (instructional coach) have no local membership, so the
+      // observer's effective roles come from the reassignment lookup or, when the
+      // observer is editing their own observation, from the current session.
+      const observerRoles = requestedManagerRoles
+        ?? (resultingManager?.id === session.user.id ? roles : null);
+      if (resultingManager && observerRoles) {
+        resultingManager.eligible = canObserve(observerRoles);
+        resultingManager.isAdmin = canObserveAnyStaff(observerRoles);
       }
       if (!resultingManager?.eligible) {
         await client.query("ROLLBACK");
         return NextResponse.json(
-          { error: "The observer must be an active manager or administrator." },
+          { error: "The observer must be an active manager, instructional coach, or administrator." },
           { status: 400 },
         );
       }
@@ -787,7 +791,7 @@ export async function DELETE(
 
     const roles = (session.user as { roles?: string[] }).roles ?? [];
     const isAdmin = roles.includes("admin");
-    const isManager = roles.includes("manager");
+    const isManager = roles.includes("manager") || roles.includes("instructional_coach");
     const { id } = await params;
     const observation = await queryOne<{
       managerId: string | null;
@@ -973,8 +977,7 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
 
     const canViewAllAcknowledgementResponses =
-      user.roles.includes("admin") ||
-      user.roles.includes("director") ||
+      canViewAllObservations(user.roles) ||
       observation.managerId === user.id;
     const participants: ObservationParticipantDetail[] = participantRows.map((participant) => {
       const acknowledgementResponseVisible =

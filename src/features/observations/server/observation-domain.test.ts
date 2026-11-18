@@ -208,6 +208,32 @@ test("admin and assigned manager can view and edit draft responses", () => {
   }
 });
 
+test("an assigned instructional coach can view and edit their own draft responses", () => {
+  const permissions = getObservationPermissions(
+    { id: "manager", roles: ["instructional_coach"] },
+    draft,
+  );
+  assert.equal(permissions.canViewResponses, true);
+  assert.equal(permissions.canEdit, true);
+  assert.equal(permissions.canSubmit, true);
+  assert.equal(permissions.canDelete, true);
+  assert.equal(permissions.canReassign, false);
+});
+
+test("an instructional coach oversees other observers' records like a director", () => {
+  const coach = { id: "coach", roles: ["instructional_coach"] };
+  const othersDraft = getObservationPermissions(coach, draft);
+  assert.equal(othersDraft.canViewRecord, true);
+  assert.equal(othersDraft.canViewResponses, false);
+  assert.equal(othersDraft.canEdit, false);
+  assert.equal(othersDraft.canDelete, false);
+
+  const othersSubmitted = getObservationPermissions(coach, { ...draft, status: "submitted" });
+  assert.equal(othersSubmitted.canViewRecord, true);
+  assert.equal(othersSubmitted.canViewResponses, true);
+  assert.equal(othersSubmitted.canReopen, false);
+});
+
 test("an assigned former manager loses observer privileges after a Central downgrade", () => {
   const permissions = getObservationPermissions(
     { id: "manager", roles: ["staff"] },

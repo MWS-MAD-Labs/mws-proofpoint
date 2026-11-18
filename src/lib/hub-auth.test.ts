@@ -124,6 +124,23 @@ describe("resolveHubSession", () => {
     assert.deepEqual(session.user.departmentIds, []);
   });
 
+  it("grants the Central instructional coach role without reading department memberships", async () => {
+    let membershipsRead = false;
+    const session = await resolveHubSession("hub_at=test", dependencies({
+      lookupEntitlement: async () => entitlement("INSTRUCTIONAL_COACH"),
+      findMemberships: async () => {
+        membershipsRead = true;
+        return [];
+      },
+    }));
+
+    assert.ok(session);
+    assert.equal(session.user.centralRole, "INSTRUCTIONAL_COACH");
+    assert.deepEqual(session.user.roles, ["instructional_coach"]);
+    assert.deepEqual(session.user.departmentIds, []);
+    assert.equal(membershipsRead, false);
+  });
+
   it("applies an existing local department membership without making it the identity source", async () => {
     const session = await resolveHubSession("hub_at=test", dependencies({
       lookupEntitlement: async () => entitlement("MANAGER"),

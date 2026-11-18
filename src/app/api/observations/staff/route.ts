@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getObservationSession } from "@/features/observations/server/auth";
 import { query } from "@/lib/db";
 import { managerStaffScopeExistsSql } from "@/lib/organization-access";
+import { canObserve, canObserveAnyStaff } from "@/lib/app-roles";
 import type { ObservationCreationStaff } from "@/features/observations/types";
 
 interface StaffRow {
@@ -21,11 +22,10 @@ export async function GET() {
     }
 
     const roles = (session.user as { roles?: string[] }).roles ?? [];
-    const isAdmin = roles.includes("admin");
-    const isManager = roles.includes("manager");
-    if (!isAdmin && !isManager) {
+    if (!canObserve(roles)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    const observesAnyStaff = canObserveAnyStaff(roles);
 
     const staff = await query<StaffRow>(
       `SELECT
@@ -54,9 +54,9 @@ export async function GET() {
           LIMIT 1
        ) staff_department ON true
        WHERE u.status = 'active'
-         AND ($1::boolean = true OR u.id <> $2)
+         AND ($3::boolean = true OR u.id <> $2)
        ORDER BY p.full_name ASC NULLS LAST, u.email ASC`,
-      [isAdmin, session.user.id],
+      [observesAnyStaff, session.user.id, roles.includes("admin")],
     );
 
     const response: ObservationCreationStaff[] = staff.map((person) => ({

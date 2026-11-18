@@ -8,7 +8,7 @@ import {
 } from "../schemas";
 
 function roleDefaults(roles: readonly string[]): Partial<ObservationListQuery> {
-  if (roles.includes("admin") || roles.includes("director")) {
+  if (roles.includes("admin") || roles.includes("director") || roles.includes("instructional_coach")) {
     return { sort: "updated_desc" };
   }
   if (roles.includes("manager")) {

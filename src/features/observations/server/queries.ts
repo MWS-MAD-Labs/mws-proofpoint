@@ -1,4 +1,5 @@
 import { query } from "@/lib/db";
+import { canViewAllObservations } from "@/lib/app-roles";
 import { dateOnlyToIso } from "./dates";
 import {
   observationListQuerySchema,
@@ -128,8 +129,13 @@ function parseParticipants(
   }));
 }
 
+// Managers and instructional coaches act on the observations they conduct.
+function isAssignedObserverRole(actor: ObservationActor): boolean {
+  return actor.roles.includes("manager") || actor.roles.includes("instructional_coach");
+}
+
 function buildVisibilityClause(actor: ObservationActor, params: unknown[]): string {
-  if (actor.roles.includes("admin") || actor.roles.includes("director")) return "TRUE";
+  if (canViewAllObservations(actor.roles)) return "TRUE";
 
   params.push(actor.id);
   const actorParam = `$${params.length}`;
@@ -153,7 +159,7 @@ function buildVisibilityClause(actor: ObservationActor, params: unknown[]): stri
 function actionExpressionNeedsActor(actor: ObservationActor): boolean {
   return (
     !actor.roles.includes("admin") &&
-    (actor.roles.includes("manager") || !actor.roles.includes("director"))
+    (isAssignedObserverRole(actor) || !actor.roles.includes("director"))
   );
 }
 
@@ -164,7 +170,7 @@ function buildActionRequiredExpression(
   if (actor.roles.includes("admin")) {
     return `(${overdueExpression}) OR o."managerId" IS NULL`;
   }
-  if (actor.roles.includes("manager")) {
+  if (isAssignedObserverRole(actor)) {
     const managerActions = `(o."managerId" = ${actorParam} AND (${statusExpression}) = 'draft')
       OR (o."managerId" IS DISTINCT FROM ${actorParam}
         AND EXISTS (
