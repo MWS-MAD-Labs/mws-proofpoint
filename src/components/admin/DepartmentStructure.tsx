@@ -51,6 +51,8 @@ interface DepartmentStructureProps {
   onDeleteDepartment: (department: DepartmentStructureDepartment) => void;
   onManageRole: (departmentId: string | null, role: string) => void;
   onEditUser: (userId: string) => void;
+  // Central owns departments and memberships: show them without any way to change them.
+  readOnly?: boolean;
 }
 
 function personName(person: DepartmentStructureRoleHolder) {
@@ -66,6 +68,7 @@ export function DepartmentStructure({
   onDeleteDepartment,
   onManageRole,
   onEditUser,
+  readOnly = false,
 }: DepartmentStructureProps) {
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -190,9 +193,13 @@ export function DepartmentStructure({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-xl font-bold"><FolderTree className="h-5 w-5 text-primary" />Department Structure</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Browse the organisation, then manage assignments in context.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {readOnly
+              ? "Departments and who holds which role come from Central. Change them in Central's Application Access."
+              : "Browse the organisation, then manage assignments in context."}
+          </p>
         </div>
-        <Button onClick={onCreateDepartment}><Building className="mr-2 h-4 w-4" />Add Department</Button>
+        {!readOnly && <Button onClick={onCreateDepartment}><Building className="mr-2 h-4 w-4" />Add Department</Button>}
       </div>
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.2fr)]">
@@ -202,14 +209,14 @@ export function DepartmentStructure({
             <div className="relative pt-2"><Search className="absolute left-3 top-5 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Find a department..." /></div>
           </CardHeader>
           <CardContent className="max-h-[620px] overflow-y-auto pb-5">
-            {!departments.length ? <EmptyDepartments onCreate={onCreateDepartment} /> : (
+            {!departments.length ? <EmptyDepartments onCreate={readOnly ? undefined : onCreateDepartment} /> : (
               <div className="space-y-1" aria-label="Department hierarchy">{roots.map((root) => renderBranch(root))}</div>
             )}
           </CardContent>
         </Card>
 
         <Card className="min-w-0 border-border/60">
-          {!selected ? <EmptyDepartments onCreate={onCreateDepartment} /> : (
+          {!selected ? <EmptyDepartments onCreate={readOnly ? undefined : onCreateDepartment} /> : (
             <>
               <CardHeader className="gap-4 space-y-0 border-b border-border/50 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
@@ -217,8 +224,12 @@ export function DepartmentStructure({
                   <CardTitle className="flex flex-wrap items-center gap-2 text-2xl"><Building className="h-5 w-5 text-primary" />{selected.name}<Badge variant="outline" className="capitalize">{selected.hierarchy_level}</Badge></CardTitle>
                 </div>
                 <div className="flex shrink-0 gap-2">
-                  <Button variant="outline" size="icon" aria-label={`Edit ${selected.name}`} onClick={() => onEditDepartment(selected)}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="outline" size="icon" aria-label={`Delete ${selected.name}`} className="text-destructive hover:text-destructive" onClick={() => onDeleteDepartment(selected)}><Trash2 className="h-4 w-4" /></Button>
+                  {!readOnly && (
+                    <>
+                      <Button variant="outline" size="icon" aria-label={`Edit ${selected.name}`} onClick={() => onEditDepartment(selected)}><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="outline" size="icon" aria-label={`Delete ${selected.name}`} className="text-destructive hover:text-destructive" onClick={() => onDeleteDepartment(selected)}><Trash2 className="h-4 w-4" /></Button>
+                    </>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-6 pt-6">
@@ -228,11 +239,11 @@ export function DepartmentStructure({
                   <Stat label="Supervisors" value={String(supervisors.length)} />
                   <Stat label="Staff" value={String(staff.length)} />
                 </div>
-                <RolePanel title="Managers" role="manager" people={managers} department={selected} onManageRole={onManageRole} onEditUser={onEditUser} />
+                <RolePanel title="Managers" role="manager" people={managers} department={selected} onManageRole={onManageRole} onEditUser={onEditUser} readOnly={readOnly} />
                 {roleAssignments.some((assignment) => assignment.department_id === selected.id && assignment.role === "supervisor") && (
-                  <RolePanel title="Supervisors" role="supervisor" people={supervisors} department={selected} onManageRole={onManageRole} onEditUser={onEditUser} />
+                  <RolePanel title="Supervisors" role="supervisor" people={supervisors} department={selected} onManageRole={onManageRole} onEditUser={onEditUser} readOnly={readOnly} />
                 )}
-                <RolePanel title="Staff" role="staff" people={staff} department={selected} onManageRole={onManageRole} onEditUser={onEditUser} />
+                <RolePanel title="Staff" role="staff" people={staff} department={selected} onManageRole={onManageRole} onEditUser={onEditUser} readOnly={readOnly} />
                 <section>
                   <div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">Immediate child departments</h3><span className="text-sm text-muted-foreground">{children.length}</span></div>
                   {children.length ? <div className="flex flex-wrap gap-2">{children.map((child) => <Button key={child.id} variant="outline" size="sm" onClick={() => { setSelectedId(child.id); setExpanded((current) => new Set(current).add(selected.id)); }}>{child.name}</Button>)}</div> : <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">No child departments.</p>}
@@ -243,24 +254,34 @@ export function DepartmentStructure({
         </Card>
       </div>
 
-      <Card className="border-border/60">
+      {/* With Central, organisation-wide roles live only in Central, so the local list would mislead. */}
+      {!readOnly && <Card className="border-border/60">
         <CardHeader><CardTitle className="text-base">Organisation-wide roles</CardTitle><CardDescription>These roles apply across departments and are managed separately from departmental assignments.</CardDescription></CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
           {globalAssignments.map((assignment) => <div key={assignment.department_role_id} className="rounded-lg border p-4"><div className="mb-3 flex items-center justify-between gap-2"><Badge className="capitalize">{assignment.role}</Badge><Button size="sm" variant="outline" onClick={() => onManageRole(null, assignment.role)}>Manage</Button></div>{assignment.assignees.length ? <div className="space-y-1">{assignment.assignees.map((person) => <p key={person.user_id} className="truncate text-sm">{person.full_name || person.email}</p>)}</div> : <p className="text-sm italic text-muted-foreground">No assignee</p>}</div>)}
         </CardContent>
-      </Card>
+      </Card>}
     </div>
   );
 }
 
-function RolePanel({ title, role, people, department, onManageRole, onEditUser }: { title: string; role: string; people: DepartmentStructureRoleHolder[]; department: DepartmentStructureDepartment; onManageRole: (departmentId: string, role: string) => void; onEditUser: (userId: string) => void }) {
-  return <section className="rounded-xl border p-4"><div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /><h3 className="font-semibold">{title}</h3></div><Button size="sm" variant="outline" onClick={() => onManageRole(department.id, role)}>Manage {title.toLowerCase()}</Button></div>{people.length ? <div className="space-y-2">{people.map((person) => <button key={person.user_id} type="button" onClick={() => onEditUser(person.user_id)} className="flex w-full items-center gap-2 rounded-md p-2 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><UserRound className="h-4 w-4 text-muted-foreground" /><span className="min-w-0 flex-1 truncate text-sm">{personName(person)}</span><span className="truncate text-xs text-muted-foreground">{person.email}</span></button>)}</div> : <p className="rounded-lg bg-muted/40 p-3 text-sm italic text-muted-foreground">No {title.toLowerCase()} assigned.</p>}</section>;
+function RolePanel({ title, role, people, department, onManageRole, onEditUser, readOnly }: { title: string; role: string; people: DepartmentStructureRoleHolder[]; department: DepartmentStructureDepartment; onManageRole: (departmentId: string, role: string) => void; onEditUser: (userId: string) => void; readOnly: boolean }) {
+  const personRow = (person: DepartmentStructureRoleHolder) => (
+    <>
+      <UserRound className="h-4 w-4 text-muted-foreground" />
+      <span className="min-w-0 flex-1 truncate text-sm">{personName(person)}</span>
+      <span className="truncate text-xs text-muted-foreground">{person.email}</span>
+    </>
+  );
+  return <section className="rounded-xl border p-4"><div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /><h3 className="font-semibold">{title}</h3></div>{!readOnly && <Button size="sm" variant="outline" onClick={() => onManageRole(department.id, role)}>Manage {title.toLowerCase()}</Button>}</div>{people.length ? <div className="space-y-2">{people.map((person) => readOnly
+    ? <div key={person.user_id} className="flex w-full items-center gap-2 rounded-md p-2">{personRow(person)}</div>
+    : <button key={person.user_id} type="button" onClick={() => onEditUser(person.user_id)} className="flex w-full items-center gap-2 rounded-md p-2 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{personRow(person)}</button>)}</div> : <p className="rounded-lg bg-muted/40 p-3 text-sm italic text-muted-foreground">No {title.toLowerCase()} assigned.</p>}</section>;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
   return <div className="rounded-lg bg-muted/50 p-3"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-xl font-bold">{value}</p></div>;
 }
 
-function EmptyDepartments({ onCreate }: { onCreate: () => void }) {
-  return <div className="p-8 text-center"><FolderTree className="mx-auto h-9 w-9 text-muted-foreground" /><p className="mt-3 font-medium">No departments yet</p><p className="mt-1 text-sm text-muted-foreground">Create a top-level department to begin the organisation structure.</p><Button className="mt-4" size="sm" onClick={onCreate}>Add Department</Button></div>;
+function EmptyDepartments({ onCreate }: { onCreate?: () => void }) {
+  return <div className="p-8 text-center"><FolderTree className="mx-auto h-9 w-9 text-muted-foreground" /><p className="mt-3 font-medium">No departments yet</p><p className="mt-1 text-sm text-muted-foreground">{onCreate ? "Create a top-level department to begin the organisation structure." : "Departments appear here after the next sync with Central."}</p>{onCreate && <Button className="mt-4" size="sm" onClick={onCreate}>Add Department</Button>}</div>;
 }

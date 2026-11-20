@@ -4,5 +4,7 @@ export async function register() {
       "./features/observations/server/observationAcknowledgementScheduler"
     );
     startObservationAcknowledgementScheduler();
+    const { startCentralSyncScheduler } = await import("./lib/central-sync");
+    startCentralSyncScheduler();
   }
 }

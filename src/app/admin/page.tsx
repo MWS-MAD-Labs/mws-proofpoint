@@ -38,6 +38,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { api } from '@/lib/api-client';
 import { MANAGEABLE_ROLES } from '@/lib/app-roles';
+import { CentralSyncStatus, type CentralSyncStatusResponse } from '@/components/admin/CentralSyncStatus';
 
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -122,6 +123,11 @@ function AdminContent() {
     const [statusFilter, setStatusFilter] = useState('all');
     const [roleFilter, setRoleFilter] = useState('all');
     const [activeTab, setActiveTab] = useState('users');
+    // Central owns users and departments: their tabs only show them (Access Standard AS-1).
+    const [managedByCentral, setManagedByCentral] = useState(false);
+    const handleCentralStatus = useCallback((status: CentralSyncStatusResponse) => {
+        setManagedByCentral(status.managesDepartments);
+    }, []);
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
     const [actionPending, setActionPending] = useState(false);
 
@@ -370,6 +376,8 @@ function AdminContent() {
                 </Card>
             </div>
 
+            <CentralSyncStatus onSynced={() => void fetchData()} onStatus={handleCentralStatus} />
+
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
                 <TabsList className="glass-panel p-1">
@@ -402,8 +410,13 @@ function AdminContent() {
                                         <Settings2 className="h-5 w-5 text-destructive" />
                                         User Management
                                     </CardTitle>
-                                    <CardDescription>Manage accounts and review department-based role assignments</CardDescription>
+                                    <CardDescription>
+                                        {managedByCentral
+                                            ? "Accounts, roles and departments come from Central. Change them in Central's Application Access."
+                                            : 'Manage accounts and review department-based role assignments'}
+                                    </CardDescription>
                                 </div>
+                                {!managedByCentral && (
                                 <div className="flex flex-wrap items-center gap-2">
                                     {selectedUserIds.length > 0 && (
                                         <>
@@ -455,6 +468,7 @@ function AdminContent() {
                                         Add User
                                     </Button>
                                 </div>
+                                )}
                             </div>
                         </CardHeader>
                         <CardContent>
@@ -538,19 +552,19 @@ function AdminContent() {
                                     <Table>
                                         <TableHeader className="bg-muted/50">
                                             <TableRow>
-                                                <TableHead className="w-12">
+                                                {!managedByCentral && <TableHead className="w-12">
                                                     <Checkbox
                                                         aria-label="Select all visible users"
                                                         checked={allFilteredUsersSelected ? true : someFilteredUsersSelected ? 'indeterminate' : false}
                                                         onCheckedChange={(checked) => toggleAllFilteredUsers(checked === true)}
                                                     />
-                                                </TableHead>
+                                                </TableHead>}
                                                 <TableHead className="w-[250px]">User</TableHead>
                                                 <TableHead>Status</TableHead>
                                                 <TableHead>NIY</TableHead>
                                                 <TableHead>Job Title</TableHead>
                                                 <TableHead>Department assignments</TableHead>
-                                                <TableHead className="text-right">Actions</TableHead>
+                                                {!managedByCentral && <TableHead className="text-right">Actions</TableHead>}
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -560,7 +574,7 @@ function AdminContent() {
                                                     data-state={selectedUserIds.includes(user.id) ? 'selected' : undefined}
                                                     className={user.status === 'suspended' ? 'bg-warning-soft/30 hover:bg-warning-soft/50' : 'hover:bg-muted/30 transition-colors'}
                                                 >
-                                                    <TableCell>
+                                                    {!managedByCentral && <TableCell>
                                                         <Checkbox
                                                             aria-label={`Select ${user.full_name || user.email}`}
                                                             checked={selectedUserIds.includes(user.id)}
@@ -569,7 +583,7 @@ function AdminContent() {
                                                                 : current.filter(id => id !== user.id)
                                                             )}
                                                         />
-                                                    </TableCell>
+                                                    </TableCell>}
                                                     <TableCell className="font-medium">
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
@@ -622,7 +636,7 @@ function AdminContent() {
                                                             <span className="text-sm italic text-muted-foreground">No organizational assignment</span>
                                                         )}
                                                     </TableCell>
-                                                    <TableCell className="text-right">
+                                                    {!managedByCentral && <TableCell className="text-right">
                                                         <DropdownMenu>
                                                             <DropdownMenuTrigger asChild>
                                                                 <Button variant="ghost" className="h-8 w-8 p-0">
@@ -678,7 +692,7 @@ function AdminContent() {
                                                                 </DropdownMenuItem>
                                                             </DropdownMenuContent>
                                                         </DropdownMenu>
-                                                    </TableCell>
+                                                    </TableCell>}
                                                 </TableRow>
                                             ))}
                                         </TableBody>
@@ -700,8 +714,11 @@ function AdminContent() {
                                         <FolderTree className="h-5 w-5 text-success" />
                                         Department Structure
                                     </CardTitle>
-                                    <CardDescription>Manage organizational hierarchy</CardDescription>
+                                    <CardDescription>
+                                        {managedByCentral ? 'Units and their people, as Central has them' : 'Manage organizational hierarchy'}
+                                    </CardDescription>
                                 </div>
+                                {!managedByCentral && (
                                 <Button
                                     className="glow-primary"
                                     onClick={() => {
@@ -712,6 +729,7 @@ function AdminContent() {
                                     <Plus className="h-4 w-4 mr-2" />
                                     Add Department
                                 </Button>
+                                )}
                             </div>
                         </CardHeader>
                         <CardContent>
@@ -728,6 +746,7 @@ function AdminContent() {
                                     onEditDepartment={(department) => { setEditingDept(department); setDeptModalOpen(true); }}
                                     onDeleteDepartment={(department) => { setBulkUserAction(null); setItemToDelete({ type: "department", item: department }); setDeleteConfirmOpen(true); }}
                                     onManageRole={manageRoleAssignment}
+                                    readOnly={managedByCentral}
                                     onEditUser={(userId) => {
                                         const user = users.find((candidate) => candidate.id === userId);
                                         if (user) { setEditingUser(user); setUserModalOpen(true); }

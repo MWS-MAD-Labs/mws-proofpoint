@@ -10,6 +10,8 @@ datasource db {
 model Department {
   id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name                 String
+  // The Central unit this department mirrors, set by the Central sync.
+  centralUnitId        String?               @map("central_unit_id")
   parentId             String?               @map("parent_id") @db.Uuid
   createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime              @default(now()) @map("updated_at") @db.Timestamptz(6)
@@ -21,6 +23,7 @@ model Department {
   rubricTemplates      RubricTemplate[]
   strategicPlan        StrategicPlan?
 
+  @@unique([centralUnitId], map: "departments_central_unit_id_key", where: raw("(central_unit_id IS NOT NULL)"))
   @@map("departments")
 }
 

@@ -1,6 +1,7 @@
 // src/app/api/admin/users/route.ts
 
 import { NextResponse } from "next/server";
+import { managedInCentralResponse } from "@/lib/central-sync";
 import { randomUUID } from "crypto";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -88,6 +89,8 @@ export async function GET(request: Request) {
 
 // ── POST /api/admin/users ─────────────────────────────────────────────────────
 export async function POST(request: Request) {
+  const managed = managedInCentralResponse();
+  if (managed) return managed;
   try {
     const adminCheck = await requireAdmin();
     if ("error" in adminCheck)
@@ -152,6 +155,8 @@ export async function POST(request: Request) {
 
 // ── PUT /api/admin/users ──────────────────────────────────────────────────────
 export async function PUT(request: Request) {
+  const managed = managedInCentralResponse();
+  if (managed) return managed;
   try {
     const adminCheck = await requireAdmin();
     if ("error" in adminCheck)
@@ -246,6 +251,8 @@ export async function PUT(request: Request) {
 
 // ── DELETE /api/admin/users ───────────────────────────────────────────────────
 export async function DELETE(request: Request) {
+  const managed = managedInCentralResponse();
+  if (managed) return managed;
   try {
     const adminCheck = await requireAdmin();
     if ("error" in adminCheck)

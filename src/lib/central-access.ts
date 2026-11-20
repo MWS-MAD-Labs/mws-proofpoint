@@ -41,6 +41,9 @@ export type CentralEntitlement = {
   organization_id: string;
   role: string;
   permissions: string[];
+  // Units the role reaches, chosen in Central (Access Standard AS-8). Empty or
+  // missing means the person's own unit.
+  scope_unit_ids?: string[];
   version: number;
   is_active: boolean;
 };
@@ -300,4 +303,88 @@ export async function listCentralEntitlements(): Promise<CentralDirectoryEntitle
   }
 
   return rows;
+}
+
+export type CentralDirectoryEmployee = CentralEmployeeProfile & {
+  employee_id?: string | null;
+  job_position?: string | null;
+  unit?: string | null;
+  unit_id?: string | null;
+};
+
+// A short key that changes whenever who may use ProofPoint, or what Central keeps
+// about their access, changes. One small call, so it can be asked every minute.
+export async function getCentralEntitlementKey(): Promise<string | null> {
+  const base = centralApiBase();
+  const token = centralApiToken();
+  const organizationId = centralOrganizationId();
+  if (!base || !token || !organizationId) {
+    throw new CentralUnavailableError("Central API configuration is incomplete");
+  }
+
+  const url = new URL(`${base}/application-entitlements/version`);
+  url.searchParams.set("application_id", process.env.HUB_SSO_APP_ID?.trim() || "proofpoint");
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { ...centralAuthHeaders(token), accept: "application/json" },
+      signal: AbortSignal.timeout(5_000),
+      cache: "no-store",
+    });
+  } catch (error) {
+    console.error("[central-sync] Entitlement version lookup failed", error instanceof Error ? error.message : error);
+    throw new CentralUnavailableError();
+  }
+
+  const body = (await response.json().catch(() => null)) as
+    | { data?: { key?: string | null } | null }
+    | null;
+  if (!response.ok || !body || !("data" in body)) {
+    throw new CentralUnavailableError("Central entitlement version lookup failed");
+  }
+  return body.data?.key ?? null;
+}
+
+// Every active employee in Central. Throws on any page failure instead of
+// returning a partial list, so callers never act on an incomplete roster.
+export async function listActiveCentralEmployees(): Promise<CentralDirectoryEmployee[]> {
+  const base = centralApiBase();
+  const token = centralApiToken();
+  const organizationId = centralOrganizationId();
+  if (!base || !token || !organizationId) {
+    throw new CentralUnavailableError("Central API configuration is incomplete");
+  }
+
+  const employees: CentralDirectoryEmployee[] = [];
+  for (let page = 1; ; page += 1) {
+    const url = new URL(`${base}/employees`);
+    url.searchParams.set("status", "ACTIVE");
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("size", "100");
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: { ...centralAuthHeaders(token), accept: "application/json" },
+        signal: AbortSignal.timeout(15_000),
+        cache: "no-store",
+      });
+    } catch (error) {
+      console.error("[central-sync] Employee directory failed", error instanceof Error ? error.message : error);
+      throw new CentralUnavailableError();
+    }
+
+    const body = (await response.json().catch(() => null)) as
+      | { data?: CentralDirectoryEmployee[]; paging?: { total_page: number }; errors?: unknown }
+      | null;
+    if (!response.ok || !body?.data || !body.paging) {
+      const detail = typeof body?.errors === "string" ? `: ${body.errors}` : "";
+      throw new CentralUnavailableError(`Central employee directory lookup failed (HTTP ${response.status})${detail}`);
+    }
+
+    employees.push(...body.data);
+    if (page >= body.paging.total_page) break;
+  }
+  return employees;
 }

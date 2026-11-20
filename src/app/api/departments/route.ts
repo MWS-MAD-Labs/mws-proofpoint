@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { managedInCentralResponse } from "@/lib/central-sync";
 import { auth } from "@/lib/auth";
 import { pool, query, queryOne } from "@/lib/db";
 
@@ -73,6 +74,8 @@ export async function GET() {
 
 // POST /api/departments - Create department (admin only)
 export async function POST(request: Request) {
+  const managed = managedInCentralResponse();
+  if (managed) return managed;
     try {
         const session = await auth();
         if (!session?.user?.id) {
@@ -119,6 +122,8 @@ export async function POST(request: Request) {
 
 // PUT /api/departments - Update department (admin only)
 export async function PUT(request: Request) {
+  const managed = managedInCentralResponse();
+  if (managed) return managed;
     try {
         const session = await auth();
         if (!session?.user?.id) {
@@ -164,6 +169,8 @@ export async function PUT(request: Request) {
 
 // DELETE /api/departments - Delete department (admin only)
 export async function DELETE(request: Request) {
+  const managed = managedInCentralResponse();
+  if (managed) return managed;
     try {
         const session = await auth();
         if (!session?.user?.id) {
