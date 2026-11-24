@@ -9,7 +9,6 @@ import {
   CentralUnavailableError,
   rolesFromCentralEntitlement,
   rolesWithinLocalDepartmentScope,
-  UNSCOPED_ROLES,
   type CentralEntitlement,
   type CentralEmployeeProfile,
   type ProofPointRole,
@@ -195,12 +194,7 @@ export async function resolveHubSession(
   const localUser = await dependencies.ensureLocalUser(identity, displayName);
   if (localUser.status !== "active") return null;
 
-  let memberships: LocalMembership[] = [];
-  const needsDepartmentScope = authorizedRoles.some((role) => !UNSCOPED_ROLES.has(role));
-
-  if (needsDepartmentScope) {
-    memberships = await dependencies.findMemberships(localUser.id);
-  }
+  const memberships: LocalMembership[] = await dependencies.findMemberships(localUser.id);
 
   const roles = rolesWithinLocalDepartmentScope(
     authorizedRoles,

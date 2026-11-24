@@ -42,6 +42,7 @@ const person = (overrides: Partial<StructurePerson> = {}): StructurePerson => ({
   unitId: "unit-es",
   roles: ["staff"],
   scopeUnitIds: [],
+  unitAssignments: [],
   ...overrides,
 });
 
@@ -73,6 +74,13 @@ describe("planCentralStructure departments", () => {
     assert.deepEqual(plan.renames, [{ departmentId: "d-mad", from: "MAD Lab", to: "MAD Labs" }]);
   });
 
+  it("keeps and reports a department whose linked Central unit was removed", () => {
+    const plan = planCentralStructure([], [], local());
+    assert.ok(plan.warnings.some((warning) => /MAD Lab points to a Central unit that is no longer listed; it is kept/.test(warning)));
+    assert.deepEqual(plan.renames, []);
+    assert.deepEqual(plan.creates, []);
+  });
+
   it("refuses to guess between two departments with the same name", () => {
     const plan = planCentralStructure(
       units.slice(0, 1),
@@ -86,7 +94,7 @@ describe("planCentralStructure departments", () => {
 });
 
 describe("planCentralStructure memberships", () => {
-  it("makes everyone with access staff of their own unit and fixes the profile department", () => {
+  it("applies an explicit staff capability to the person's unit and fixes the profile department", () => {
     const plan = planCentralStructure(units, [person()], local({ users: [user("u-1", "p-1")] }));
     assert.deepEqual(plan.adds.map(({ userId, unitId, role }) => ({ userId, unitId, role })), [
       { userId: "u-1", unitId: "unit-es", role: "staff" },
@@ -95,7 +103,7 @@ describe("planCentralStructure memberships", () => {
     assert.deepEqual(plan.removes, []);
   });
 
-  it("gives a manager the units Central picked, or their own unit when none were picked", () => {
+  it("gives a manager only the units Central picked, or their own unit when none were picked", () => {
     const picked = planCentralStructure(
       units,
       [person({ roles: ["manager"], scopeUnitIds: ["unit-es", "unit-jh"] })],
@@ -103,11 +111,94 @@ describe("planCentralStructure memberships", () => {
     );
     assert.deepEqual(
       picked.adds.map(({ unitId, role }) => `${unitId}:${role}`).sort(),
-      ["unit-es:manager", "unit-es:staff", "unit-jh:manager"],
+      ["unit-es:manager", "unit-jh:manager"],
     );
 
     const own = planCentralStructure(units, [person({ roles: ["manager"] })], local({ users: [user("u-1", "p-1", "d-es")] }));
-    assert.deepEqual(own.adds.map(({ unitId, role }) => `${unitId}:${role}`).sort(), ["unit-es:manager", "unit-es:staff"]);
+    assert.deepEqual(own.adds.map(({ unitId, role }) => `${unitId}:${role}`).sort(), ["unit-es:manager"]);
+  });
+
+  it("keeps a global admin global while applying its manager capability to selected units", () => {
+    const plan = planCentralStructure(
+      units,
+      [person({ roles: ["admin", "manager"], scopeUnitIds: ["unit-mad"] })],
+      local({ users: [user("u-1", "p-1", "d-es")] }),
+    );
+    assert.deepEqual(
+      plan.adds.map(({ unitId, role }) => `${unitId}:${role}`).sort(),
+      ["unit-es:staff", "unit-mad:manager"],
+    );
+    assert.deepEqual(plan.profileUnits, []);
+  });
+
+  it("keeps an application admin as staff of their home unit", () => {
+    const plan = planCentralStructure(
+      units,
+      [person({ roles: ["admin"] })],
+      local({ users: [user("u-1", "p-1", "d-es")] }),
+    );
+
+    assert.deepEqual(plan.adds.map(({ unitId, role }) => `${unitId}:${role}`), ["unit-es:staff"]);
+  });
+
+  it("uses an explicit home-unit leadership assignment instead of default staff", () => {
+    const plan = planCentralStructure(
+      units,
+      [person({
+        roles: ["admin"],
+        unitAssignments: [{ unitId: "unit-es", role: "manager" }],
+      })],
+      local({ users: [user("u-1", "p-1", "d-es")] }),
+    );
+
+    assert.deepEqual(plan.adds.map(({ unitId, role }) => `${unitId}:${role}`), ["unit-es:manager"]);
+  });
+
+  it("treats a managed staff list as authoritative, including when it is empty", () => {
+    const plan = planCentralStructure(
+      units,
+      [person({ roles: ["admin"] })],
+      local({ users: [user("u-1", "p-1", "d-es")] }),
+      [{ unitId: "unit-es", role: "staff" }],
+    );
+
+    assert.deepEqual(plan.adds, []);
+  });
+
+  it("does not hold an intentional bulk removal from an explicitly managed role list", () => {
+    const plan = planCentralStructure(
+      units,
+      [person({ roles: ["admin"] })],
+      local({
+        users: [user("u-1", "p-1", "d-es")],
+        memberships: [{ userId: "u-1", departmentRoleId: "r-es-staff" }],
+      }),
+      [{ unitId: "unit-es", role: "staff" }],
+    );
+
+    assert.equal(plan.removes[0]?.explicitlyManaged, true);
+    assert.equal(structurePlanRemovesTooMuch(plan), false);
+  });
+
+  it("assigns a global admin as manager of multiple units without changing the global role", () => {
+    const plan = planCentralStructure(
+      units,
+      [person({
+        unitId: null,
+        roles: ["admin"],
+        unitAssignments: [
+          { unitId: "unit-mad", role: "manager" },
+          { unitId: "unit-jh", role: "manager" },
+        ],
+      })],
+      local({ users: [user("u-1", "p-1")] }),
+    );
+    assert.deepEqual(
+      plan.adds.map(({ unitId, role }) => `${unitId}:${role}`).sort(),
+      ["unit-jh:manager", "unit-mad:manager"],
+    );
+    assert.deepEqual(plan.profileUnits, []);
+    assert.equal(plan.warnings.some((warning) => /has no unit in Central/.test(warning)), false);
   });
 
   it("keeps memberships that already match and removes the ones Central no longer gives", () => {
@@ -179,8 +270,8 @@ describe("centralStructureInput", () => {
   it("takes units from employees, skips the legacy unit, and reads roles and picked units", () => {
     const { units: found, people } = centralStructureInput(
       [
-        { person_id: "p-1", role: "MANAGER", permissions: ["proofpoint.access"], scope_unit_ids: ["unit-jh"] },
-        { person_id: "p-2", role: "STAFF", permissions: ["proofpoint.access"] },
+        { person_id: "p-1", role: "ADMIN_MANAGER", permissions: ["proofpoint.access", "proofpoint.admin", "proofpoint.manager"], scope_unit_ids: ["unit-jh"] },
+        { person_id: "p-2", role: "STAFF", permissions: ["proofpoint.access", "proofpoint.staff"] },
       ] as CentralDirectoryEntitlement[],
       [
         { person_id: "p-1", unit_id: "unit-es", unit: "Elementary" },
@@ -190,8 +281,50 @@ describe("centralStructureInput", () => {
     );
     assert.deepEqual(found, [{ id: "unit-es", name: "Elementary" }, { id: "unit-jh", name: "Junior High" }]);
     assert.deepEqual(people, [
-      { personId: "p-1", unitId: "unit-es", roles: ["manager"], scopeUnitIds: ["unit-jh"] },
-      { personId: "p-2", unitId: null, roles: ["staff"], scopeUnitIds: [] },
+      { personId: "p-1", unitId: "unit-es", roles: ["admin", "manager"], scopeUnitIds: ["unit-jh"], unitAssignments: [] },
+      { personId: "p-2", unitId: null, roles: ["staff"], scopeUnitIds: [], unitAssignments: [] },
     ]);
+  });
+
+  it("includes Central units that have no active employees", () => {
+    const { units: found } = centralStructureInput(
+      [],
+      [],
+      [
+        { id: "unit-es", name: "Elementary" },
+        { id: "unit-empty", name: "New Empty Unit" },
+      ],
+    );
+    assert.deepEqual(found, [
+      { id: "unit-es", name: "Elementary" },
+      { id: "unit-empty", name: "New Empty Unit" },
+    ]);
+  });
+
+  it("keeps department assignments separate from the entitlement role", () => {
+    const { people } = centralStructureInput(
+      [{
+        person_id: "p-1",
+        role: "ADMIN",
+        permissions: ["proofpoint.access", "proofpoint.admin"],
+      }] as CentralDirectoryEntitlement[],
+      [{ person_id: "p-1", unit_id: "unit-es", unit: "Elementary" }] as CentralDirectoryEmployee[],
+      units,
+      [
+        { person_id: "p-1", unit_id: "unit-mad", permission_key: "proofpoint.manager" },
+        { person_id: "p-1", unit_id: "unit-jh", permission_key: "proofpoint.manager" },
+      ],
+    );
+
+    assert.deepEqual(people[0], {
+      personId: "p-1",
+      unitId: "unit-es",
+      roles: ["admin"],
+      scopeUnitIds: [],
+      unitAssignments: [
+        { unitId: "unit-mad", role: "manager" },
+        { unitId: "unit-jh", role: "manager" },
+      ],
+    });
   });
 });

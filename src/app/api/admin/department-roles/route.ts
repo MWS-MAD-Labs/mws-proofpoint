@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { managedInCentralResponse } from "@/lib/central-sync";
 import { auth } from "@/lib/auth";
 import { pool, query, queryOne } from "@/lib/db";
 import {
@@ -80,6 +81,8 @@ export async function GET(request: Request) {
 
 // POST /api/admin/department-roles - Create department role configuration
 export async function POST(request: Request) {
+    const managed = managedInCentralResponse();
+    if (managed) return managed;
     try {
         const adminCheck = await requireAdmin();
         if ("error" in adminCheck) {
@@ -171,6 +174,8 @@ export async function PUT(request: Request) {
 
 // DELETE /api/admin/department-roles - Delete department role configuration
 export async function DELETE(request: Request) {
+    const managed = managedInCentralResponse();
+    if (managed) return managed;
     try {
         const adminCheck = await requireAdmin();
         if ("error" in adminCheck) {

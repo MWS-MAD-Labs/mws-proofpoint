@@ -200,6 +200,8 @@ describe("runCentralSync", () => {
         } as CentralDirectoryEntitlement];
       },
       listEmployees: async () => [],
+      listUnits: async () => [{ id: "unit-es", name: "Elementary" }],
+      listUnitAssignments: async () => ({ assignments: [], managed: [] }),
       store: {
         listLocalUsers: async () => [localUser()],
         apply: async (action) => {
@@ -302,6 +304,28 @@ describe("runCentralSync", () => {
     const result = await runCentralSync({ dependencies: nobody.deps });
     assert.equal(nobody.structureApplied(), 0);
     if (result.status === "synced") assert.ok(result.warnings.some((w) => /Departments skipped/.test(w)));
+  });
+
+  it("leaves departments alone when the organization unit directory cannot be read", async () => {
+    const { deps, structureApplied } = dependencies({
+      listUnits: async () => {
+        throw new Error("organization unit directory unavailable");
+      },
+    });
+    const result = await runCentralSync({ dependencies: deps });
+    assert.equal(structureApplied(), 0);
+    if (result.status === "synced") {
+      assert.ok(result.warnings.some((warning) => /Departments skipped: organization unit directory unavailable/.test(warning)));
+    }
+  });
+
+  it("leaves departments alone when Central returns an empty organization unit directory", async () => {
+    const { deps, structureApplied } = dependencies({ listUnits: async () => [] });
+    const result = await runCentralSync({ dependencies: deps });
+    assert.equal(structureApplied(), 0);
+    if (result.status === "synced") {
+      assert.ok(result.warnings.some((warning) => /Central listed no organization units/.test(warning)));
+    }
   });
 
   it("does nothing while another instance holds the lock", async () => {

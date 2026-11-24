@@ -8,8 +8,23 @@
 ## Progres (2026-11-20)
 
 - [x] **Fase 1, Central** (branch `feat/field-unit`): `scope_unit_ids` di entitlement, pilihan "Units Managed" di Add Exception dan Change Role or Units, dikirim di API dan ikut kunci versi, standar akses v1.2, unit yang masih dipegang tidak bisa dihapus.
-- [x] **Fase 2 dan 3, ProofPoint** (branch `feature/central-directory-sync`): `departments.central_unit_id`, `src/lib/central-structure-sync.ts`. Dengan login Hub, departemen dan membership selalu dari Central. Tab Users dan Departments tetap tampil tapi hanya-baca (tanpa tombol tambah, edit, hapus, assign), dan API tulisnya 409. Tidak ada flag.
+- [x] **Fase 2 dan 3, ProofPoint** (branch `feature/central-directory-sync`): `departments.central_unit_id`, `src/lib/central-structure-sync.ts`. Dengan login Hub, departemen dan membership selalu dari Central. Tab Users dan Departments tetap tampil hanya-baca, dan API tulisnya 409. Tidak ada flag.
 - [ ] **Fase 4, rollout**: lihat di bawah.
+
+## Progres (2026-11-23)
+
+- Central menyediakan directory resmi `GET /api/internal/organization-units` dan version key-nya. ProofPoint tidak lagi menyimpulkan daftar departemen hanya dari unit karyawan aktif, sehingga unit kosong tetap dibuat sebagai department lokal.
+- Create, rename, dan delete Unit tetap melalui **Master Data → Employment → Units** di Central. ProofPoint mempertahankan department lokal yang unit Central-nya hilang agar referensi historis tidak rusak, lalu menampilkan warning.
+- Sync membuat definisi role manager, supervisor, dan staff untuk setiap department Central, termasuk department yang belum punya anggota.
+- ProofPoint membaca capability dari permission entitlement, bukan nama role Central. Role Central dapat menggabungkan permission global dan department, misalnya `proofpoint.admin` + `proofpoint.manager` dengan MAD Lab di **Units Managed**.
+
+## Progres (2026-11-24)
+
+- Central mempunyai tab **Department Assignments** dari metadata manifest: pilih Unit, lalu kelola Manager dan Supervisor. Staff ditampilkan dari home Unit dan tidak diedit manual.
+- Role aplikasi tetap terpisah dari assignment department. Admin global dapat menjadi Manager di beberapa Unit tanpa role gabungan.
+- Setiap daftar Unit dan role yang pernah disimpan menjadi sumber kebenaran, termasuk daftar kosong. Unit yang belum pernah dikelola tetap memakai fallback lama selama rollout.
+- ProofPoint membaca assignment lewat `/api/internal/application-entitlements/unit-assignments`, lalu memproyeksikannya ke `department_role_memberships`. Layar Users dan Departments tetap tersedia sebagai directory hanya-baca.
+- Create, rename, dan delete department tetap dilakukan sebagai Unit melalui **Master Data → Employment → Units** di Central.
 
 ## Langkah rollout
 
@@ -40,8 +55,9 @@ Karena tidak ada mode preview, perubahan langsung berlaku begitu ProofPoint baru
 
 ## Aturan membership yang dipakai
 
-- Semua orang dengan akses ProofPoint menjadi **staff** di unit Central-nya sendiri, termasuk admin, director, dan coach. Ini hanya membuat mereka bisa diobservasi di unit itu, tidak memberi hak apa pun.
-- MANAGER dan SUPERVISOR memegang role-nya di `scope_unit_ids`, atau di unit sendiri bila kosong.
+- Permission scoped tidak berlaku global. `proofpoint.manager` dan `proofpoint.supervisor` efektif melalui assignment Unit; `proofpoint.staff` diturunkan dari home Unit.
+- Global permission `proofpoint.admin`, `proofpoint.director`, dan `proofpoint.instructional_coach` tidak membuat membership department.
+- Application role dan assignment Unit independen. User dengan role Admin dapat menjadi Manager pada Unit yang dipilih tanpa role gabungan.
 - Akun yang tertaut ke Central tapi tidak lagi punya akses: membership departemennya dilepas.
 - Akun yang belum tertaut ke Central tidak disentuh, hanya diperingatkan.
 - Membership global (`admin` tanpa departemen) tidak disentuh.
@@ -51,7 +67,7 @@ Karena tidak ada mode preview, perubahan langsung berlaku begitu ProofPoint baru
 Central menjadi satu-satunya tempat mengatur:
 
 - **User:** siapa yang boleh masuk, nama, email, NIY, jabatan
-- **Role:** Admin, Director, Instructional Coach, Manager, Supervisor, Staff
+- **Role:** kumpulan permission untuk Admin, Director, Instructional Coach, Manager, Supervisor, dan Staff. Satu role Central boleh menggabungkan beberapa capability.
 - **Departemen:** diambil dari unit Central, dan staf otomatis masuk sesuai unitnya
 - **Kepala unit:** unit mana yang dipegang Manager/Supervisor
 
@@ -103,11 +119,11 @@ Tambahan kecil ini bisa dipakai semua aplikasi, tidak hanya ProofPoint.
    - Nama departemen ikut diganti kalau nama unit di Central berubah.
 2. **Membership otomatis.** Setiap sync, membership dihitung ulang dari Central:
 
-   | Role Central | Masuk departemen |
+   | Permission Central | Masuk departemen |
    |---|---|
-   | STAFF | Unit karyawan itu |
-   | MANAGER / SUPERVISOR | `unit_ids` yang dipilih di Central, atau unit karyawan itu sendiri kalau kosong |
-   | ADMIN / DIRECTOR / INSTRUCTIONAL_COACH | Tidak perlu, karena sudah global |
+   | `proofpoint.staff` | `unit_ids` yang dipilih, atau unit karyawan itu sendiri kalau kosong |
+   | `proofpoint.manager` / `proofpoint.supervisor` | `unit_ids` yang dipilih, atau unit karyawan itu sendiri kalau kosong |
+   | `proofpoint.admin` / `proofpoint.director` / `proofpoint.instructional_coach` | Tidak perlu, karena global |
 
    - Membership yang tidak ada lagi di Central dihapus. Membership baru dibuat. `department_roles` dibuat otomatis kalau belum ada untuk kombinasi departemen dan role tersebut.
    - `profiles.department_id` ikut diisi dari unit karyawan.
@@ -159,7 +175,7 @@ Tambahan kecil ini bisa dipakai semua aplikasi, tidak hanya ProofPoint.
 - [ ] Director dan Instructional Coach tetap bisa mengobservasi semua staf
 - [ ] Role yang dicabut di Central membuat membership terkait hilang dan akses tertolak
 - [ ] Central tidak bisa diakses: membership tidak berubah dan error tampil di status sync
-- [ ] Menu Users dan Departments hanya-baca, dan API perubahan menolak dengan 409
+- [x] Menu Users dan Departments hanya-baca pada mode Hub, dan API perubahan menolak dengan 409
 - [ ] Workflow, rubrik, dan notifikasi tetap bisa diedit
 - [ ] Observasi dan appraisal lama tetap tampil dan terhubung ke departemen yang benar
 

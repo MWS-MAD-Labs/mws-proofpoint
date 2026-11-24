@@ -2,24 +2,29 @@ import bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import type { PoolClient } from "pg";
 import {
-  getCentralEntitlementKey,
+  getCentralDirectoryKey,
   listActiveCentralEmployees,
   listCentralEntitlements,
+  listCentralOrganizationUnits,
+  listCentralUnitAssignments,
   type CentralDirectoryEmployee,
   type CentralDirectoryEntitlement,
+  type CentralOrganizationUnit,
+  type CentralUnitAssignmentDirectory,
 } from "@/lib/central-access";
 import {
   centralStructureInput,
   describeStructurePlan,
   pgStructureStore,
   planCentralStructure,
+  structureGuardedRemovalCount,
   structurePlanRemovesTooMuch,
   type CentralStructureStore,
 } from "@/lib/central-structure-sync";
 import { isHubAuthEnabled } from "@/lib/hub-session";
 
 // Keeps ProofPoint's local accounts in line with Central by itself, the same way
-// Daily Check-in does. Each tick asks Central for one small key; the full access
+// Daily Check-in does. Each tick asks Central for small directory keys; the full access
 // list is read only when that key moves. Employee profile fields (email, name,
 // employee ID, job position) are re-read every few minutes. Access itself is still
 // decided live at login, so this never grants or revokes anything: it only links,
@@ -363,6 +368,8 @@ export type CentralSyncDependencies = {
   getKey(): Promise<string | null>;
   listEntitlements(): Promise<CentralDirectoryEntitlement[]>;
   listEmployees(): Promise<CentralDirectoryEmployee[]>;
+  listUnits(): Promise<CentralOrganizationUnit[]>;
+  listUnitAssignments(): Promise<CentralUnitAssignmentDirectory>;
   store: CentralSyncStore;
   structureStore: CentralStructureStore;
   withLock<T>(run: () => Promise<T>): Promise<T | "locked">;
@@ -409,9 +416,11 @@ export function managedInCentralResponse(): Response | null {
 }
 
 const defaultDependencies: CentralSyncDependencies = {
-  getKey: getCentralEntitlementKey,
+  getKey: getCentralDirectoryKey,
   listEntitlements: listCentralEntitlements,
   listEmployees: listActiveCentralEmployees,
+  listUnits: listCentralOrganizationUnits,
+  listUnitAssignments: listCentralUnitAssignments,
   store: prismaStore,
   structureStore: pgStructureStore,
   withLock: withAdvisoryLock,
@@ -419,29 +428,43 @@ const defaultDependencies: CentralSyncDependencies = {
 
 const MAX_LISTED_CHANGES = 300;
 
-// Departments and memberships from Central. Needs the employee list for units, and
-// never runs on an empty access list, so a Central hiccup cannot empty departments.
+// Departments and memberships from Central. Needs complete employee and unit
+// directories, and never runs on an empty access list, so a Central hiccup cannot
+// empty departments.
 async function syncStructure(
   dependencies: CentralSyncDependencies,
   entitlements: CentralDirectoryEntitlement[],
   employees: CentralDirectoryEmployee[] | null,
+  units: CentralOrganizationUnit[] | null,
+  assignmentDirectory: CentralUnitAssignmentDirectory | null,
   warnings: string[],
 ): Promise<CentralStructureStatus | null> {
-  if (!employees) return null;
+  if (!employees || !units || !assignmentDirectory) return null;
   if (entitlements.length === 0) {
     warnings.push("Departments skipped: Central listed nobody with ProofPoint access");
     return null;
   }
-  const { units, people } = centralStructureInput(entitlements, employees);
+  if (units.length === 0) {
+    warnings.push("Departments skipped: Central listed no organization units");
+    return null;
+  }
+  const { units: structureUnits, people, managedAssignments } = centralStructureInput(
+    entitlements,
+    employees,
+    units,
+    assignmentDirectory.assignments,
+    assignmentDirectory.managed,
+  );
   const local = await dependencies.structureStore.load();
-  const plan = planCentralStructure(units, people, local);
+  const plan = planCentralStructure(structureUnits, people, local, managedAssignments);
   warnings.push(...plan.warnings);
   const changes = describeStructurePlan(plan);
   let mode: CentralStructureStatus["mode"] = "applied";
   if (structurePlanRemovesTooMuch(plan)) {
     mode = "held";
+    const guardedRemovals = structureGuardedRemovalCount(plan);
     warnings.push(
-      `Departments held: ${plan.removes.length} of ${plan.managedCount} memberships would be removed at once. Check Central, then fix or apply by hand`,
+      `Departments held: ${guardedRemovals} of ${plan.managedCount} unmanaged memberships would be removed at once. Check Central, then fix or apply by hand`,
     );
   }
   if (mode === "applied" && changes.length) {
@@ -492,6 +515,14 @@ export async function runCentralSync({
         warnings.push(`Employee profiles skipped: ${error instanceof Error ? error.message : String(error)}`);
         return null;
       });
+      const units = await dependencies.listUnits().catch((error: unknown) => {
+        warnings.push(`Departments skipped: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      });
+      const unitAssignments = await dependencies.listUnitAssignments().catch((error: unknown) => {
+        warnings.push(`Department assignments skipped: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      });
 
       const users = await dependencies.store.listLocalUsers();
       const plan = planCentralSync(centralSyncPeople(entitlements, employees), users);
@@ -517,7 +548,7 @@ export async function runCentralSync({
       }
 
       try {
-        const structure = await syncStructure(dependencies, entitlements, employees, warnings);
+        const structure = await syncStructure(dependencies, entitlements, employees, units, unitAssignments, warnings);
         if (structure) current.structure = structure;
       } catch (error) {
         warnings.push(`Departments failed: ${error instanceof Error ? error.message : String(error)}`);

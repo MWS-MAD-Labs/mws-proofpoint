@@ -4,17 +4,20 @@ import {
   rolesFromCentralEntitlement,
   type CentralDirectoryEmployee,
   type CentralDirectoryEntitlement,
+  type CentralOrganizationUnit,
+  type CentralUnitAssignment,
+  type CentralUnitAssignmentSet,
   type ProofPointRole,
 } from "@/lib/central-access";
 
 // Departments and department memberships taken from Central. A department mirrors
-// a Central unit. Everyone with ProofPoint access is staff of their own unit;
-// managers and supervisors also hold their role in the units Central picked for
-// them (scope_unit_ids), or in their own unit when none were picked.
+// a Central unit. Manager and supervisor memberships come from Central's explicit
+// unit assignments. The entitlement scope remains as a compatibility fallback,
+// and staff without an explicit assignment follows the person's own unit.
 // Departments are never deleted, and accounts not linked to Central are left alone.
 
 const LEGACY_UNIT_NAME = "unknown / legacy";
-const SCOPED_ROLES = ["manager", "supervisor"] as const;
+const LEGACY_SCOPED_LEADERSHIP_ROLES = ["manager", "supervisor"] as const;
 const DEPARTMENTAL_ROLES = new Set(["manager", "supervisor", "staff"]);
 // A plan that would drop more than this share of the memberships it manages is not applied.
 const MAX_REMOVAL_SHARE = 0.5;
@@ -26,7 +29,10 @@ export type StructurePerson = {
   unitId: string | null;
   roles: ProofPointRole[];
   scopeUnitIds: string[];
+  unitAssignments: { unitId: string; role: string }[];
 };
+
+export type StructureManagedAssignment = { unitId: string; role: string };
 
 export type StructureLocal = {
   departments: { id: string; name: string; centralUnitId: string | null }[];
@@ -42,6 +48,7 @@ export type StructureMembershipRemove = {
   departmentRoleId: string;
   departmentName: string;
   role: string;
+  explicitlyManaged: boolean;
 };
 
 export type StructurePlan = {
@@ -58,34 +65,59 @@ export type StructurePlan = {
 
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCase();
 
-// Units and people as Central has them. Units come from the employee list, so a
-// unit nobody works in has no department.
+// Units and people as Central has them. The directory includes empty units; the
+// employee list supplies each person's own unit.
 export function centralStructureInput(
   entitlements: readonly CentralDirectoryEntitlement[],
   employees: readonly CentralDirectoryEmployee[],
-): { units: StructureUnit[]; people: StructurePerson[] } {
+  directoryUnits?: readonly CentralOrganizationUnit[],
+  assignments: readonly CentralUnitAssignment[] = [],
+  managedAssignmentSets: readonly CentralUnitAssignmentSet[] = [],
+): { units: StructureUnit[]; people: StructurePerson[]; managedAssignments: StructureManagedAssignment[] } {
   const units = new Map<string, StructureUnit>();
   const unitByPerson = new Map<string, string>();
+  for (const unit of directoryUnits ?? []) {
+    const id = unit.id.trim();
+    const name = unit.name.trim();
+    if (!id || !name || normalize(name) === LEGACY_UNIT_NAME) continue;
+    units.set(id, { id, name });
+  }
   for (const employee of employees) {
     const id = employee.unit_id?.trim();
     const name = employee.unit?.trim();
     if (!id || !name || normalize(name) === LEGACY_UNIT_NAME) continue;
-    units.set(id, { id, name });
+    if (directoryUnits === undefined) units.set(id, { id, name });
     unitByPerson.set(employee.person_id, id);
   }
+  const roleOfPermission = new Map([
+    ["proofpoint.manager", "manager"],
+    ["proofpoint.supervisor", "supervisor"],
+    ["proofpoint.staff", "staff"],
+  ]);
   const people = entitlements.map((entitlement) => ({
     personId: entitlement.person_id,
     unitId: unitByPerson.get(entitlement.person_id) ?? null,
     roles: rolesFromCentralEntitlement(entitlement.role, entitlement.permissions),
     scopeUnitIds: entitlement.scope_unit_ids ?? [],
+    unitAssignments: assignments
+      .filter((assignment) => assignment.person_id === entitlement.person_id)
+      .flatMap((assignment) => {
+        const role = roleOfPermission.get(assignment.permission_key);
+        return role ? [{ unitId: assignment.unit_id, role }] : [];
+      }),
   }));
-  return { units: [...units.values()], people };
+  const managedAssignments = managedAssignmentSets.flatMap((assignment) => {
+    const role = roleOfPermission.get(assignment.permission_key);
+    return role ? [{ unitId: assignment.unit_id, role }] : [];
+  });
+  return { units: [...units.values()], people, managedAssignments };
 }
 
 export function planCentralStructure(
   units: readonly StructureUnit[],
   people: readonly StructurePerson[],
   local: StructureLocal,
+  managedAssignments: readonly StructureManagedAssignment[] = [],
 ): StructurePlan {
   const warnings: string[] = [];
   const unitById = new Map(units.map((unit) => [unit.id, unit]));
@@ -129,7 +161,9 @@ export function planCentralStructure(
     unitDepartment.set(unit.id, null);
   }
   for (const department of local.departments) {
-    if (!departmentUnit.has(department.id) && !department.centralUnitId) {
+    if (department.centralUnitId && !unitById.has(department.centralUnitId)) {
+      warnings.push(`Department ${department.name} points to a Central unit that is no longer listed; it is kept`);
+    } else if (!departmentUnit.has(department.id) && !department.centralUnitId) {
       warnings.push(`Department ${department.name} has no Central unit; it is kept, and Central does not fill it`);
     }
   }
@@ -144,6 +178,12 @@ export function planCentralStructure(
     membershipsByUser.set(membership.userId, [...(membershipsByUser.get(membership.userId) ?? []), membership.departmentRoleId]);
   }
   const personById = new Map(people.map((person) => [person.personId, person]));
+  const managedUnitRoles = new Set(managedAssignments.map((item) => `${item.unitId}:${item.role}`));
+  for (const person of people) {
+    for (const assignment of person.unitAssignments) {
+      managedUnitRoles.add(`${assignment.unitId}:${assignment.role}`);
+    }
+  }
 
   const adds: StructureMembershipAdd[] = [];
   const removes: StructureMembershipRemove[] = [];
@@ -159,7 +199,8 @@ export function planCentralStructure(
     }
     const person = personById.get(user.centralPersonId);
     const roles = person?.roles ?? [];
-    if (person && roles.length && !person.unitId) {
+    const hasAccess = Boolean(person);
+    if (hasAccess && person && !person.unitId && person.unitAssignments.length === 0) {
       warnings.push(`${user.email} has no unit in Central; their departments are left as they are`);
       continue;
     }
@@ -169,21 +210,39 @@ export function planCentralStructure(
     const wanted = new Map<string, Set<string>>();
     const want = (unitId: string, role: string) => {
       if (!unitById.has(unitId)) {
-        warnings.push(`${user.email}: Central unit ${unitId} has no employees, so it has no department; skipped`);
+        warnings.push(`${user.email}: Central unit ${unitId} is not in the organization unit directory; skipped`);
         return;
       }
       wanted.set(unitId, (wanted.get(unitId) ?? new Set()).add(role));
     };
-    if (person && roles.length && person.unitId) {
-      want(person.unitId, "staff");
-      for (const role of SCOPED_ROLES) {
+    if (hasAccess && person) {
+      for (const assignment of person.unitAssignments) want(assignment.unitId, assignment.role);
+      // Compatibility for Central deployments that still express department
+      // leadership through entitlement permissions and scope_unit_ids.
+      for (const role of LEGACY_SCOPED_LEADERSHIP_ROLES) {
         if (!roles.includes(role)) continue;
+        if (!person.unitId) continue;
         const scope = person.scopeUnitIds.length ? person.scopeUnitIds : [person.unitId];
-        for (const unitId of scope) want(unitId, role);
+        for (const unitId of scope) {
+          if (!managedUnitRoles.has(`${unitId}:${role}`)) want(unitId, role);
+        }
       }
-      const ownDepartment = unitDepartment.get(person.unitId);
-      if (ownDepartment !== undefined && ownDepartment !== user.profileDepartmentId) {
-        profileUnits.push({ userId: user.id, unitId: person.unitId });
+      if (person.unitId) {
+        // Application role and department membership are independent. Every
+        // covered employee belongs to their home unit as staff unless Central
+        // explicitly makes them a manager or supervisor of that same unit.
+        const homeRoles = wanted.get(person.unitId);
+        if (
+          !managedUnitRoles.has(`${person.unitId}:staff`) &&
+          !homeRoles?.has("manager") &&
+          !homeRoles?.has("supervisor")
+        ) {
+          want(person.unitId, "staff");
+        }
+        const ownDepartment = unitDepartment.get(person.unitId);
+        if (ownDepartment !== undefined && ownDepartment !== user.profileDepartmentId) {
+          profileUnits.push({ userId: user.id, unitId: person.unitId });
+        }
       }
     }
 
@@ -197,6 +256,7 @@ export function planCentralStructure(
         departmentRoleId,
         departmentName: departmentName.get(role.departmentId) ?? role.departmentId,
         role: role.role,
+        explicitlyManaged: Boolean(unitId && managedUnitRoles.has(`${unitId}:${role.role}`)),
       });
     }
     for (const [unitId, unitRoles] of wanted) {
@@ -214,7 +274,11 @@ export function planCentralStructure(
 
 // True when the plan would remove too much at once to apply without a person looking.
 export function structurePlanRemovesTooMuch(plan: StructurePlan): boolean {
-  return plan.managedCount > 0 && plan.removes.length > plan.managedCount * MAX_REMOVAL_SHARE;
+  return plan.managedCount > 0 && structureGuardedRemovalCount(plan) > plan.managedCount * MAX_REMOVAL_SHARE;
+}
+
+export function structureGuardedRemovalCount(plan: StructurePlan): number {
+  return plan.removes.filter((item) => !item.explicitlyManaged).length;
 }
 
 export function describeStructurePlan(plan: StructurePlan): string[] {
@@ -308,6 +372,22 @@ export const pgStructureStore: CentralStructureStore = {
         `SELECT id::text, central_unit_id AS "unitId" FROM departments WHERE central_unit_id IS NOT NULL`,
       );
       const departmentOfUnit = new Map(linked.rows.map((row) => [row.unitId, row.id]));
+
+      // Keep the role definitions the old ProofPoint department flow created,
+      // even before the first person is assigned to a new Central unit.
+      for (const departmentId of departmentOfUnit.values()) {
+        for (const role of ["manager", "supervisor", "staff"]) {
+          await client.query(
+            `INSERT INTO department_roles (id, department_id, role, created_at, updated_at)
+             SELECT gen_random_uuid(), $1::uuid, $2::public.app_role, NOW(), NOW()
+              WHERE NOT EXISTS (
+                SELECT 1 FROM department_roles
+                 WHERE department_id = $1::uuid AND role = $2::public.app_role
+              )`,
+            [departmentId, role],
+          );
+        }
+      }
 
       for (const item of plan.removes) {
         await client.query(

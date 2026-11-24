@@ -78,6 +78,28 @@ describe("resolveHubSession", () => {
     assert.equal(projectedName, centralEmployee.full_name);
   });
 
+  it("combines a global admin capability with a scoped manager capability", async () => {
+    const session = await resolveHubSession("hub_at=test", dependencies({
+      lookupEntitlement: async () => ({
+        ...entitlement("ADMIN"),
+        role: "ADMIN_MANAGER",
+        permissions: ["proofpoint.access", "proofpoint.admin", "proofpoint.manager"],
+        scope_unit_ids: ["unit-mad"],
+      }),
+      findMemberships: async () => [{
+        departmentRole: {
+          role: "manager",
+          departmentId: "department-mad",
+        },
+      }],
+    }));
+
+    assert.ok(session);
+    assert.equal(session.user.centralRole, "ADMIN_MANAGER");
+    assert.deepEqual(session.user.roles, ["admin", "manager"]);
+    assert.deepEqual(session.user.departmentIds, ["department-mad"]);
+  });
+
   it("fails closed when the local account cannot be projected", async () => {
     await assert.rejects(
       resolveHubSession("hub_at=test", dependencies({
@@ -124,7 +146,7 @@ describe("resolveHubSession", () => {
     assert.deepEqual(session.user.departmentIds, []);
   });
 
-  it("grants the Central instructional coach role without reading department memberships", async () => {
+  it("keeps a global instructional coach role while checking scoped memberships", async () => {
     let membershipsRead = false;
     const session = await resolveHubSession("hub_at=test", dependencies({
       lookupEntitlement: async () => entitlement("INSTRUCTIONAL_COACH"),
@@ -138,7 +160,7 @@ describe("resolveHubSession", () => {
     assert.equal(session.user.centralRole, "INSTRUCTIONAL_COACH");
     assert.deepEqual(session.user.roles, ["instructional_coach"]);
     assert.deepEqual(session.user.departmentIds, []);
-    assert.equal(membershipsRead, false);
+    assert.equal(membershipsRead, true);
   });
 
   it("applies an existing local department membership without making it the identity source", async () => {

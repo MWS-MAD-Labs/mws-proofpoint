@@ -10,6 +10,12 @@ import { isHubAuthEnabled } from "@/lib/hub-session";
 import type { Prisma } from "@prisma/client";
 import { isCanonicalRoleAssignment } from "@/lib/organization-access";
 import {
+  listCentralEntitlements,
+  rolesFromCentralEntitlement,
+  rolesWithinLocalDepartmentScope,
+  type CentralDirectoryEntitlement,
+} from "@/lib/central-access";
+import {
   buildUserProfileUpdate,
   normalizeUserIds,
   validateCentralManagedProfileUpdate,
@@ -64,7 +70,8 @@ export async function GET(request: Request) {
         },
       });
       if (!user) return NextResponse.json({ data: null });
-      return NextResponse.json({ data: formatUser(user) });
+      const entitlements = await loadCentralRoleDirectory();
+      return NextResponse.json({ data: formatUser(user, entitlementFor(user, entitlements)) });
     }
 
     const users = await prisma.user.findMany({
@@ -80,7 +87,10 @@ export async function GET(request: Request) {
       orderBy: { profile: { fullName: "asc" } },
     });
 
-    return NextResponse.json({ data: users.map(formatUser) });
+    const entitlements = await loadCentralRoleDirectory();
+    return NextResponse.json({
+      data: users.map((user) => formatUser(user, entitlementFor(user, entitlements))),
+    });
   } catch (error) {
     console.error("Admin users GET error:", error);
     return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
@@ -334,7 +344,28 @@ export async function DELETE(request: Request) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function formatUser(user: UserWithOrganizationAssignments) {
+async function loadCentralRoleDirectory(): Promise<Map<string, CentralDirectoryEntitlement> | undefined> {
+  if (!isHubAuthEnabled()) return undefined;
+  try {
+    return new Map((await listCentralEntitlements()).map((entitlement) => [entitlement.person_id, entitlement]));
+  } catch (error) {
+    console.error("Admin users could not load Central roles", error);
+    return undefined;
+  }
+}
+
+function entitlementFor(
+  user: UserWithOrganizationAssignments,
+  entitlements: Map<string, CentralDirectoryEntitlement> | undefined,
+): CentralDirectoryEntitlement | null | undefined {
+  if (!entitlements) return undefined;
+  return user.centralPersonId ? entitlements.get(user.centralPersonId) ?? null : null;
+}
+
+function formatUser(
+  user: UserWithOrganizationAssignments,
+  entitlement: CentralDirectoryEntitlement | null | undefined = undefined,
+) {
   const assignments = user.departmentRoleMemberships
     .filter(({ departmentRole }) =>
       isCanonicalRoleAssignment(departmentRole.role, departmentRole.departmentId),
@@ -360,6 +391,16 @@ function formatUser(user: UserWithOrganizationAssignments) {
     ).values(),
   );
 
+  const membershipRoles = Array.from(new Set(assignments.map((assignment) => assignment.role)));
+  const roles = entitlement === undefined
+    ? membershipRoles
+    : entitlement === null
+      ? []
+      : rolesWithinLocalDepartmentScope(
+          rolesFromCentralEntitlement(entitlement.role, entitlement.permissions),
+          membershipRoles,
+        );
+
   return {
     id: user.id,
     email: user.email,
@@ -371,6 +412,6 @@ function formatUser(user: UserWithOrganizationAssignments) {
     job_title: user.profile?.jobTitle ?? null,
     assignments,
     departments,
-    roles: Array.from(new Set(assignments.map((assignment) => assignment.role))),
+    roles,
   };
 }

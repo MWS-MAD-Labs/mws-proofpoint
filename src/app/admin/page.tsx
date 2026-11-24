@@ -123,7 +123,7 @@ function AdminContent() {
     const [statusFilter, setStatusFilter] = useState('all');
     const [roleFilter, setRoleFilter] = useState('all');
     const [activeTab, setActiveTab] = useState('users');
-    // Central owns users and departments: their tabs only show them (Access Standard AS-1).
+    // Central owns users and departments: their tabs remain visible but read-only.
     const [managedByCentral, setManagedByCentral] = useState(false);
     const handleCentralStatus = useCallback((status: CentralSyncStatusResponse) => {
         setManagedByCentral(status.managesDepartments);
@@ -321,7 +321,7 @@ function AdminContent() {
                         Control Center
                     </div>
                     <h1 className="text-4xl font-bold tracking-tight">Administration</h1>
-                    <p className="text-muted-foreground">Manage users, departments, and approval workflows.</p>
+                    <p className="text-muted-foreground">Review users and departments, and manage approval workflows.</p>
                 </div>
 
                 <div className="flex w-full flex-col gap-3 sm:flex-row md:w-auto md:items-center">

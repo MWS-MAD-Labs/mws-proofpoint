@@ -18,14 +18,14 @@ export type ProofPointRole =
   | "staff"
   | "instructional_coach";
 
-export const CENTRAL_ROLE: Record<string, ProofPointRole> = {
-  ADMIN: "admin",
-  DIRECTOR: "director",
-  MANAGER: "manager",
-  SUPERVISOR: "supervisor",
-  STAFF: "staff",
-  INSTRUCTIONAL_COACH: "instructional_coach",
-};
+const ROLE_PERMISSION: ReadonlyArray<readonly [string, ProofPointRole]> = [
+  ["proofpoint.admin", "admin"],
+  ["proofpoint.director", "director"],
+  ["proofpoint.manager", "manager"],
+  ["proofpoint.supervisor", "supervisor"],
+  ["proofpoint.staff", "staff"],
+  ["proofpoint.instructional_coach", "instructional_coach"],
+];
 
 // Roles that apply across the organization without a local department membership.
 export const UNSCOPED_ROLES: ReadonlySet<ProofPointRole> = new Set([
@@ -33,6 +33,7 @@ export const UNSCOPED_ROLES: ReadonlySet<ProofPointRole> = new Set([
   "director",
   "instructional_coach",
 ]);
+const SCOPED_ROLES: ReadonlySet<ProofPointRole> = new Set(["manager", "supervisor", "staff"]);
 
 export type CentralEntitlement = {
   id: string;
@@ -53,6 +54,22 @@ export type CentralDirectoryEntitlement = CentralEntitlement & {
     email: string;
     full_name: string | null;
   };
+};
+
+export type CentralUnitAssignment = {
+  person_id: string;
+  unit_id: string;
+  permission_key: string;
+};
+
+export type CentralUnitAssignmentSet = {
+  unit_id: string;
+  permission_key: string;
+};
+
+export type CentralUnitAssignmentDirectory = {
+  assignments: CentralUnitAssignment[];
+  managed: CentralUnitAssignmentSet[];
 };
 
 export type CentralEmployeeProfile = {
@@ -84,22 +101,29 @@ export function clearCentralEntitlementCacheForTest(): void {
 }
 
 export function rolesFromCentralEntitlement(
-  role: string,
+  _role: string,
   permissions: readonly string[],
 ): ProofPointRole[] {
   if (!permissions.includes("proofpoint.access")) return [];
-  const configuredRole = CENTRAL_ROLE[role];
-  return configuredRole ? [configuredRole] : [];
+  const granted = new Set(permissions);
+  return ROLE_PERMISSION.flatMap(([permission, role]) =>
+    granted.has(permission) ? [role] : [],
+  );
+}
+
+export function hasProofPointAccess(permissions: readonly string[]): boolean {
+  return permissions.includes("proofpoint.access");
 }
 
 export function rolesWithinLocalDepartmentScope(
   entitledRoles: readonly ProofPointRole[],
   membershipRoles: readonly string[],
 ): ProofPointRole[] {
-  const localRoles = new Set(membershipRoles);
-  return entitledRoles.filter((role) =>
-    UNSCOPED_ROLES.has(role) || localRoles.has(role),
+  const globalRoles = entitledRoles.filter((role) => UNSCOPED_ROLES.has(role));
+  const scopedRoles = membershipRoles.filter(
+    (role): role is ProofPointRole => SCOPED_ROLES.has(role as ProofPointRole),
   );
+  return [...new Set([...globalRoles, ...scopedRoles])];
 }
 
 export function validateCentralEntitlement(
@@ -188,7 +212,7 @@ export async function lookupCentralEntitlement(personId: string): Promise<Centra
     return null;
   }
   validateCentralEntitlement(personId, entitlement);
-  if (rolesFromCentralEntitlement(entitlement.role, entitlement.permissions).length === 0) {
+  if (!hasProofPointAccess(entitlement.permissions)) {
     cache.delete(personId);
     return null;
   }
@@ -294,7 +318,7 @@ export async function listCentralEntitlements(): Promise<CentralDirectoryEntitle
 
     for (const entitlement of body.data) {
       validateCentralEntitlement(entitlement.person_id, entitlement);
-      if (rolesFromCentralEntitlement(entitlement.role, entitlement.permissions).length > 0) {
+      if (hasProofPointAccess(entitlement.permissions)) {
         rows.push(entitlement);
       }
     }
@@ -310,6 +334,13 @@ export type CentralDirectoryEmployee = CentralEmployeeProfile & {
   job_position?: string | null;
   unit?: string | null;
   unit_id?: string | null;
+};
+
+export type CentralOrganizationUnit = {
+  id: string;
+  name: string;
+  created_at?: string;
+  updated_at?: string;
 };
 
 // A short key that changes whenever who may use ProofPoint, or what Central keeps
@@ -344,6 +375,107 @@ export async function getCentralEntitlementKey(): Promise<string | null> {
     throw new CentralUnavailableError("Central entitlement version lookup failed");
   }
   return body.data?.key ?? null;
+}
+
+export async function getCentralOrganizationUnitKey(): Promise<string | null> {
+  const base = centralApiBase();
+  const token = centralApiToken();
+  const organizationId = centralOrganizationId();
+  if (!base || !token || !organizationId) {
+    throw new CentralUnavailableError("Central API configuration is incomplete");
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${base}/organization-units/version`, {
+      headers: { ...centralAuthHeaders(token), accept: "application/json" },
+      signal: AbortSignal.timeout(5_000),
+      cache: "no-store",
+    });
+  } catch (error) {
+    console.error("[central-sync] Organization unit version lookup failed", error instanceof Error ? error.message : error);
+    throw new CentralUnavailableError();
+  }
+
+  const body = (await response.json().catch(() => null)) as
+    | { data?: { key?: string | null } | null }
+    | null;
+  if (!response.ok || !body || !("data" in body)) {
+    throw new CentralUnavailableError("Central organization unit version lookup failed");
+  }
+  return body.data?.key ?? null;
+}
+
+export async function getCentralDirectoryKey(): Promise<string | null> {
+  const [entitlementKey, unitKey] = await Promise.all([
+    getCentralEntitlementKey(),
+    getCentralOrganizationUnitKey(),
+  ]);
+  return entitlementKey === null && unitKey === null
+    ? null
+    : `${entitlementKey ?? ""}:${unitKey ?? ""}`;
+}
+
+export async function listCentralOrganizationUnits(): Promise<CentralOrganizationUnit[]> {
+  const base = centralApiBase();
+  const token = centralApiToken();
+  const organizationId = centralOrganizationId();
+  if (!base || !token || !organizationId) {
+    throw new CentralUnavailableError("Central API configuration is incomplete");
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${base}/organization-units`, {
+      headers: { ...centralAuthHeaders(token), accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+      cache: "no-store",
+    });
+  } catch (error) {
+    console.error("[central-sync] Organization unit directory failed", error instanceof Error ? error.message : error);
+    throw new CentralUnavailableError();
+  }
+
+  const body = (await response.json().catch(() => null)) as
+    | { data?: CentralOrganizationUnit[] }
+    | null;
+  if (!response.ok || !Array.isArray(body?.data)) {
+    throw new CentralUnavailableError(`Central organization unit directory lookup failed (HTTP ${response.status})`);
+  }
+  for (const unit of body.data) {
+    if (!unit || typeof unit.id !== "string" || !unit.id.trim() || typeof unit.name !== "string" || !unit.name.trim()) {
+      throw new CentralUnavailableError("Central returned an invalid organization unit");
+    }
+  }
+  return body.data;
+}
+
+export async function listCentralUnitAssignments(): Promise<CentralUnitAssignmentDirectory> {
+  const base = centralApiBase();
+  const token = centralApiToken();
+  if (!base || !token || !centralOrganizationId()) {
+    throw new CentralUnavailableError("Central API configuration is incomplete");
+  }
+  let response: Response;
+  try {
+    const applicationId = process.env.HUB_SSO_APP_ID?.trim() || "proofpoint";
+    response = await fetch(`${base}/application-entitlements/unit-assignments?application_id=${encodeURIComponent(applicationId)}`, {
+      headers: { ...centralAuthHeaders(token), accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+      cache: "no-store",
+    });
+  } catch (error) {
+    console.error("[central-sync] Unit assignments failed", error instanceof Error ? error.message : error);
+    throw new CentralUnavailableError();
+  }
+  const body = (await response.json().catch(() => null)) as {
+    data?: CentralUnitAssignment[];
+    managed?: CentralUnitAssignmentSet[];
+  } | null;
+  if (!response.ok || !Array.isArray(body?.data) || !Array.isArray(body.managed)) {
+    throw new CentralUnavailableError(`Central unit assignment lookup failed (HTTP ${response.status})`);
+  }
+  return { assignments: body.data, managed: body.managed };
 }
 
 // Every active employee in Central. Throws on any page failure instead of

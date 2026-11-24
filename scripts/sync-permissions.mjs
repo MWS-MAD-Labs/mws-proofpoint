@@ -12,32 +12,50 @@ export const permissionManifest = [
   },
   {
     key: "proofpoint.admin",
-    description: "Central role marker for the ProofPoint ADMIN role",
+    description: "Administer ProofPoint settings and access all administration features",
     requires: ["proofpoint.access"],
   },
   {
     key: "proofpoint.director",
-    description: "Central role marker for the ProofPoint DIRECTOR role",
+    description: "Use ProofPoint director features across the organization",
     requires: ["proofpoint.access"],
   },
   {
     key: "proofpoint.manager",
-    description: "Central role marker for the ProofPoint MANAGER role",
+    description: "Manage ProofPoint work within the units selected in Central",
     requires: ["proofpoint.access"],
+    unit_assignment: {
+      scope: "unit",
+      label: "Managers",
+      mode: "explicit",
+      exclusive_group: "proofpoint.department_role",
+    },
   },
   {
     key: "proofpoint.supervisor",
-    description: "Central role marker for the ProofPoint SUPERVISOR role",
+    description: "Supervise ProofPoint work within the units selected in Central",
     requires: ["proofpoint.access"],
+    unit_assignment: {
+      scope: "unit",
+      label: "Supervisors",
+      mode: "explicit",
+      exclusive_group: "proofpoint.department_role",
+    },
   },
   {
     key: "proofpoint.staff",
-    description: "Central role marker for the ProofPoint STAFF role",
+    description: "Use ProofPoint as staff within the units selected in Central",
     requires: ["proofpoint.access"],
+    unit_assignment: {
+      scope: "unit",
+      label: "Staff",
+      mode: "derived_home_unit",
+      exclusive_group: "proofpoint.department_role",
+    },
   },
   {
     key: "proofpoint.instructional_coach",
-    description: "Central role marker for the ProofPoint INSTRUCTIONAL_COACH role",
+    description: "Use ProofPoint instructional coaching features across the organization",
     requires: ["proofpoint.access"],
   },
 ];
@@ -107,6 +125,17 @@ function comparePermissions(registered, usage) {
       [...requires].sort(),
     ]),
   );
+  const assignmentByKey = new Map(
+    permissionManifest.map(({ key, unit_assignment = null }) => [key, unit_assignment]),
+  );
+  const assignmentShape = (value) => value
+    ? {
+        scope: value.scope,
+        label: value.label,
+        mode: value.mode,
+        exclusive_group: value.exclusive_group ?? null,
+      }
+    : null;
   return {
     missingInCentral: [...codeKeys].filter(
       (key) => !current.some((row) => row.key === key),
@@ -121,6 +150,14 @@ function comparePermissions(registered, usage) {
         (row) =>
           [...(row.requires ?? [])].sort().join(",") !==
           requirementsByKey.get(row.key).join(","),
+      )
+      .map((row) => row.key),
+    unitAssignmentsDiffer: current
+      .filter((row) => assignmentByKey.has(row.key))
+      .filter(
+        (row) =>
+          JSON.stringify(assignmentShape(row.unit_assignment)) !==
+          JSON.stringify(assignmentShape(assignmentByKey.get(row.key))),
       )
       .map((row) => row.key),
   };
