@@ -1,0 +1,47 @@
+{
+  "application_id": "proofpoint",
+  "roles": [
+    {
+      "key": "ADMIN",
+      "label": "Admin",
+      "permissions": ["proofpoint.access", "proofpoint.admin"],
+      "allows_employees": true
+    },
+    {
+      "key": "ADMIN_MANAGER",
+      "label": "Admin + Manager",
+      "permissions": ["proofpoint.access", "proofpoint.admin", "proofpoint.manager"],
+      "allows_employees": true
+    },
+    {
+      "key": "DIRECTOR",
+      "label": "Director",
+      "permissions": ["proofpoint.access", "proofpoint.director"],
+      "allows_employees": true
+    },
+    {
+      "key": "MANAGER",
+      "label": "Manager",
+      "permissions": ["proofpoint.access", "proofpoint.manager"],
+      "allows_employees": true
+    },
+    {
+      "key": "SUPERVISOR",
+      "label": "Supervisor",
+      "permissions": ["proofpoint.access", "proofpoint.supervisor"],
+      "allows_employees": true
+    },
+    {
+      "key": "STAFF",
+      "label": "Staff",
+      "permissions": ["proofpoint.access", "proofpoint.staff"],
+      "allows_employees": true
+    },
+    {
+      "key": "INSTRUCTIONAL_COACH",
+      "label": "Instructional Coach",
+      "permissions": ["proofpoint.access", "proofpoint.instructional_coach"],
+      "allows_employees": true
+    }
+  ]
+}

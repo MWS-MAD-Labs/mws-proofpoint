@@ -151,7 +151,7 @@ Important authorization rules include:
 | Validation and forms | Zod, React Hook Form |
 | Data fetching | TanStack Query |
 | UI | Tailwind CSS, Radix UI, Lucide icons |
-| Email | Nodemailer with configurable SMTP delivery |
+| Email | Gmail API service-account delivery with SMTP fallback |
 | Container runtime | Docker and Docker Compose |
 | CI/CD | GitHub Actions, GitHub Container Registry, Komodo |
 

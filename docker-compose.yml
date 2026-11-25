@@ -47,7 +47,12 @@ services:
       # Email
       EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
       EMAIL_DEBUG: ${EMAIL_DEBUG:-false}
-      EMAIL_SERVICE: ${EMAIL_SERVICE:-nodemailer}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
+      GMAIL_CREDENTIALS_FILE: ${GMAIL_CREDENTIALS_FILE:-}
+      Proofpoint_GMAIL_CREDENTIALS_FILE: ${Proofpoint_GMAIL_CREDENTIALS_FILE:-}
+      GMAIL_CREDENTIALS_JSON: ${GMAIL_CREDENTIALS_JSON:-}
+      GMAIL_SENDER_EMAIL: ${GMAIL_SENDER_EMAIL:-}
+      GMAIL_SENDER_NAME: ${GMAIL_SENDER_NAME:-ProofPoint Notifications}
       EMAIL_FROM: ${EMAIL_FROM:-noreply@proofpoint.local}
       EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-ProofPoint Dashboard}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}

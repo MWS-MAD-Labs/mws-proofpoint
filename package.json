@@ -20,6 +20,7 @@
     "db:studio": "prisma studio",
     "test:observations": "node --import tsx --test src/features/observations/server/notificationSettings.test.ts src/features/observations/server/observation-domain.test.ts src/features/observations/server/observation-update-route.test.ts src/lib/notifications/observation-notifications.test.ts src/app/api/admin/observation-notification-settings/route.test.ts",
     "test:central-auth": "node --import tsx --test src/lib/central-access.test.ts src/lib/application-url.test.ts src/lib/hub-auth.test.ts src/lib/central-sync.test.ts src/lib/central-structure-sync.test.ts src/lib/rubric-authorization.test.ts src/features/assessments/server/permissions.test.ts",
+    "test:email": "node --import tsx --test src/lib/email/client.test.ts",
     "test:observations:integration": "node scripts/run-observation-integration-tests.mjs",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:milestone1": "tsx prisma/seed-milestone1.ts",

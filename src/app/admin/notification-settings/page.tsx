@@ -436,7 +436,7 @@ function NotificationSettingsContent() {
               <SettingToggle
                 id="notifications-enabled"
                 label="Enable observation workflow notifications"
-                description="Master switch for observation workflow email events and acknowledgement automation processing. SMTP delivery still depends on deployment email configuration."
+                description="Master switch for observation workflow email events and acknowledgement automation processing. Email delivery still depends on the deployment provider configuration."
                 checked={settings.notificationsEnabled}
                 onCheckedChange={(checked) => updateBoolean('notificationsEnabled', checked)}
               />

@@ -64,7 +64,12 @@ test("admin metadata edits use the unchanged observer's Central entitlement", as
         assert.equal(url.searchParams.get("person_id"), "central-coach");
         return Response.json({ data: {
           id: "entitlement", person_id: "central-coach", application_id: "proofpoint",
-          organization_id: "test-org", role, permissions: ["proofpoint.access"],
+          organization_id: "test-org", role, permissions: [
+            "proofpoint.access",
+            role === "INSTRUCTIONAL_COACH"
+              ? "proofpoint.instructional_coach"
+              : "proofpoint.staff",
+          ],
           version: 1, is_active: true,
         } });
       });

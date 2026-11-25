@@ -52,6 +52,7 @@ backend/.env
 
 # Local database exports and sensitive migration data
 /backups/
+secret/gmail-service-account.json
 *.dump
 *.backup
 *.sql.gz

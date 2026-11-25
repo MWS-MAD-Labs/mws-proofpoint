@@ -1,4 +1,4 @@
-export type EmailProvider = 'nodemailer' | 'resend' | 'sendgrid' | 'ses';
+export type EmailProvider = 'gmail' | 'smtp';
 
 export interface EmailParams {
   to: string | string[];

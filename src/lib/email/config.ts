@@ -1,7 +1,7 @@
 export const emailConfig = {
   enabled: process.env.EMAIL_ENABLED === 'true',
   debug: process.env.EMAIL_DEBUG === 'true',
-  service: process.env.EMAIL_SERVICE || 'nodemailer',
+  provider: process.env.EMAIL_PROVIDER || 'smtp',
   from: {
     email: process.env.EMAIL_FROM || 'noreply@proofpoint.local',
     name: process.env.EMAIL_FROM_NAME || 'ProofPoint Dashboard',
@@ -13,8 +13,14 @@ export const emailConfig = {
     user: process.env.SMTP_USER,
     password: process.env.SMTP_PASSWORD,
   },
-  resend: {
-    apiKey: process.env.RESEND_API_KEY,
+  gmail: {
+    credentialsFile:
+      process.env.GMAIL_CREDENTIALS_FILE ||
+      process.env.PROOFPOINT_GMAIL_CREDENTIALS_FILE ||
+      process.env.Proofpoint_GMAIL_CREDENTIALS_FILE,
+    credentialsJson: process.env.GMAIL_CREDENTIALS_JSON,
+    senderEmail: process.env.GMAIL_SENDER_EMAIL,
+    senderName: process.env.GMAIL_SENDER_NAME || 'ProofPoint Notifications',
   },
 } as const;
 
