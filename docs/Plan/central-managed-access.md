@@ -1,6 +1,6 @@
 # Rencana: Semua Akses ProofPoint Diatur dari Central
 
-- **Status:** Rencana, belum dikerjakan
+- **Status:** Implemented; hierarchy rollout pending
 - **Tanggal:** 2026-11-19
 - **Repo terkait:** `mws-proofpoint`, `mws-central-database-user`
 - **Lanjutan dari:** branch `feature/central-directory-sync` (sync akun, email, nama, NIY, dan jabatan dari Central)
@@ -26,6 +26,16 @@
 - ProofPoint membaca assignment lewat `/api/internal/application-entitlements/unit-assignments`, lalu memproyeksikannya ke `department_role_memberships`. Layar Users dan Departments tetap tersedia sebagai directory hanya-baca.
 - Create, rename, dan delete department tetap dilakukan sebagai Unit melalui **Master Data → Employment → Units** di Central.
 
+## Progres (2026-11-25)
+
+- Unit Central sekarang dapat memiliki parent. Untuk ProofPoint, `MAD Lab` adalah parent dari `Fullstack` dan `IT Support`.
+- Assignment Manager pada parent otomatis diproyeksikan ke seluruh child Unit. Supervisor tetap hanya pada Unit yang dipilih.
+- Staff berasal dari home Unit dan bersifat tambahan: seorang karyawan dapat tetap Staff sekaligus menjadi Manager atau Supervisor.
+- ProofPoint menyalin hierarchy ke `departments.parent_id`; layar Users dan Departments tetap hanya-baca.
+- Manager tidak ditawarkan sebagai stafnya sendiri ketika memulai appraisal, dan endpoint pembuatan appraisal juga menolak self-target.
+- Migration ProofPoint menormalkan nama `Mad Labs` menjadi `MAD Lab` dengan mempertahankan ID dan seluruh riwayat.
+- Pipeline deployment mem-publish permission manifest ke Central sebelum Komodo deploy, termasuk metadata cakupan child Unit.
+
 ## Langkah rollout
 
 Karena tidak ada mode preview, perubahan langsung berlaku begitu ProofPoint baru jalan. Urutannya penting.
@@ -37,17 +47,7 @@ Karena tidak ada mode preview, perubahan langsung berlaku begitu ProofPoint baru
    - romasta: Elementary, Junior High, Kindergarten
    - faisal: Directorate, MAD Lab
 3. Pastikan token ProofPoint punya scope `employees:read`. Tanpa itu, departemen tidak disentuh sama sekali.
-4. Backup DB ProofPoint, lalu jalankan:
-
-   ```sql
-   BEGIN;
-   -- Nama sama dengan unit Central, supaya sync menautkannya.
-   UPDATE departments SET name = 'MAD Lab', updated_at = NOW() WHERE name = 'Mad Labs';
-   -- IT Support dilebur: anggotanya sudah staff di Mad Labs. Departemennya tetap ada,
-   -- sync melepas membership-nya.
-   UPDATE departments SET parent_id = NULL, updated_at = NOW() WHERE name = 'IT Support';
-   COMMIT;
-   ```
+4. Di **Master Data → Employment → Units**, buat/pastikan `MAD Lab`, `Fullstack`, dan `IT Support`; pilih `MAD Lab` sebagai Parent Unit untuk dua child tersebut. Pemisahan home Unit karyawan dapat dilakukan kemudian setelah data resminya tersedia.
 
 5. Deploy ProofPoint. Di Admin, kotak **Central sync** menampilkan hasil run pertama. Klik **Show department changes** untuk melihat semua yang berubah.
 6. Bila satu run akan menghapus lebih dari separuh membership, run itu ditahan (`held`) dan tidak diterapkan. Cek Central, perbaiki, lalu **Sync now**.
@@ -58,6 +58,8 @@ Karena tidak ada mode preview, perubahan langsung berlaku begitu ProofPoint baru
 - Permission scoped tidak berlaku global. `proofpoint.manager` dan `proofpoint.supervisor` efektif melalui assignment Unit; `proofpoint.staff` diturunkan dari home Unit.
 - Global permission `proofpoint.admin`, `proofpoint.director`, dan `proofpoint.instructional_coach` tidak membuat membership department.
 - Application role dan assignment Unit independen. User dengan role Admin dapat menjadi Manager pada Unit yang dipilih tanpa role gabungan.
+- Manager pada parent Unit juga memegang semua descendant Unit. Supervisor hanya memegang Unit yang dipilih.
+- Staff home Unit tidak digantikan oleh leadership assignment; Staff + Manager/Supervisor adalah kombinasi yang valid.
 - Akun yang tertaut ke Central tapi tidak lagi punya akses: membership departemennya dilepas.
 - Akun yang belum tertaut ke Central tidak disentuh, hanya diperingatkan.
 - Membership global (`admin` tanpa departemen) tidak disentuh.

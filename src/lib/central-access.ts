@@ -339,6 +339,7 @@ export type CentralDirectoryEmployee = CentralEmployeeProfile & {
 export type CentralOrganizationUnit = {
   id: string;
   name: string;
+  parent_unit_id?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -445,6 +446,9 @@ export async function listCentralOrganizationUnits(): Promise<CentralOrganizatio
   for (const unit of body.data) {
     if (!unit || typeof unit.id !== "string" || !unit.id.trim() || typeof unit.name !== "string" || !unit.name.trim()) {
       throw new CentralUnavailableError("Central returned an invalid organization unit");
+    }
+    if (unit.parent_unit_id !== undefined && unit.parent_unit_id !== null && typeof unit.parent_unit_id !== "string") {
+      throw new CentralUnavailableError("Central returned an invalid parent organization unit");
     }
   }
   return body.data;

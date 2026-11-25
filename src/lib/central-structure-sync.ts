@@ -22,7 +22,7 @@ const DEPARTMENTAL_ROLES = new Set(["manager", "supervisor", "staff"]);
 // A plan that would drop more than this share of the memberships it manages is not applied.
 const MAX_REMOVAL_SHARE = 0.5;
 
-export type StructureUnit = { id: string; name: string };
+export type StructureUnit = { id: string; name: string; parentUnitId?: string | null };
 
 export type StructurePerson = {
   personId: string;
@@ -35,7 +35,7 @@ export type StructurePerson = {
 export type StructureManagedAssignment = { unitId: string; role: string };
 
 export type StructureLocal = {
-  departments: { id: string; name: string; centralUnitId: string | null }[];
+  departments: { id: string; name: string; centralUnitId: string | null; parentId?: string | null }[];
   departmentRoles: { id: string; departmentId: string; role: string }[];
   memberships: { userId: string; departmentRoleId: string }[];
   users: { id: string; email: string; centralPersonId: string | null; profileDepartmentId: string | null }[];
@@ -55,6 +55,7 @@ export type StructurePlan = {
   links: { departmentId: string; unitId: string; name: string }[];
   renames: { departmentId: string; from: string; to: string }[];
   creates: StructureUnit[];
+  parents: { unitId: string; parentUnitId: string | null }[];
   adds: StructureMembershipAdd[];
   removes: StructureMembershipRemove[];
   profileUnits: { userId: string; unitId: string }[];
@@ -80,7 +81,11 @@ export function centralStructureInput(
     const id = unit.id.trim();
     const name = unit.name.trim();
     if (!id || !name || normalize(name) === LEGACY_UNIT_NAME) continue;
-    units.set(id, { id, name });
+    units.set(id, {
+      id,
+      name,
+      ...(unit.parent_unit_id !== undefined ? { parentUnitId: unit.parent_unit_id } : {}),
+    });
   }
   for (const employee of employees) {
     const id = employee.unit_id?.trim();
@@ -94,6 +99,26 @@ export function centralStructureInput(
     ["proofpoint.supervisor", "supervisor"],
     ["proofpoint.staff", "staff"],
   ]);
+  const childrenByUnit = new Map<string, string[]>();
+  for (const unit of units.values()) {
+    if (!unit.parentUnitId) continue;
+    childrenByUnit.set(unit.parentUnitId, [...(childrenByUnit.get(unit.parentUnitId) ?? []), unit.id]);
+  }
+  const unitAndDescendants = (unitId: string) => {
+    const found: string[] = [];
+    const pending = [unitId];
+    const seen = new Set<string>();
+    while (pending.length) {
+      const current = pending.shift() as string;
+      if (seen.has(current)) continue;
+      seen.add(current);
+      found.push(current);
+      pending.push(...(childrenByUnit.get(current) ?? []));
+    }
+    return found;
+  };
+  const expand = (unitId: string, role: string) =>
+    (role === "manager" ? unitAndDescendants(unitId) : [unitId]).map((id) => ({ unitId: id, role }));
   const people = entitlements.map((entitlement) => ({
     personId: entitlement.person_id,
     unitId: unitByPerson.get(entitlement.person_id) ?? null,
@@ -103,13 +128,16 @@ export function centralStructureInput(
       .filter((assignment) => assignment.person_id === entitlement.person_id)
       .flatMap((assignment) => {
         const role = roleOfPermission.get(assignment.permission_key);
-        return role ? [{ unitId: assignment.unit_id, role }] : [];
-      }),
+        return role ? expand(assignment.unit_id, role) : [];
+      })
+      .filter((assignment, index, rows) =>
+        rows.findIndex((item) => item.unitId === assignment.unitId && item.role === assignment.role) === index),
   }));
   const managedAssignments = managedAssignmentSets.flatMap((assignment) => {
     const role = roleOfPermission.get(assignment.permission_key);
-    return role ? [{ unitId: assignment.unit_id, role }] : [];
-  });
+    return role ? expand(assignment.unit_id, role) : [];
+  }).filter((assignment, index, rows) =>
+    rows.findIndex((item) => item.unitId === assignment.unitId && item.role === assignment.role) === index);
   return { units: [...units.values()], people, managedAssignments };
 }
 
@@ -165,6 +193,20 @@ export function planCentralStructure(
       warnings.push(`Department ${department.name} points to a Central unit that is no longer listed; it is kept`);
     } else if (!departmentUnit.has(department.id) && !department.centralUnitId) {
       warnings.push(`Department ${department.name} has no Central unit; it is kept, and Central does not fill it`);
+    }
+  }
+  const departmentById = new Map(local.departments.map((department) => [department.id, department]));
+  const parents: StructurePlan["parents"] = [];
+  for (const unit of units) {
+    const departmentId = unitDepartment.get(unit.id);
+    if (departmentId === undefined) continue;
+    const department = departmentId ? departmentById.get(departmentId) : null;
+    const currentParentUnitId = department?.parentId
+      ? departmentById.get(department.parentId)?.centralUnitId ?? null
+      : null;
+    const wantedParentUnitId = unit.parentUnitId ?? null;
+    if (departmentId === null ? wantedParentUnitId !== null : currentParentUnitId !== wantedParentUnitId) {
+      parents.push({ unitId: unit.id, parentUnitId: wantedParentUnitId });
     }
   }
 
@@ -229,14 +271,9 @@ export function planCentralStructure(
       }
       if (person.unitId) {
         // Application role and department membership are independent. Every
-        // covered employee belongs to their home unit as staff unless Central
-        // explicitly makes them a manager or supervisor of that same unit.
-        const homeRoles = wanted.get(person.unitId);
-        if (
-          !managedUnitRoles.has(`${person.unitId}:staff`) &&
-          !homeRoles?.has("manager") &&
-          !homeRoles?.has("supervisor")
-        ) {
+        // covered employee belongs to their home unit as staff. Leadership is
+        // an additional responsibility, not a replacement for staff membership.
+        if (!managedUnitRoles.has(`${person.unitId}:staff`)) {
           want(person.unitId, "staff");
         }
         const ownDepartment = unitDepartment.get(person.unitId);
@@ -269,7 +306,7 @@ export function planCentralStructure(
     warnings.push(`${unlinkedWithMemberships} account(s) with departments are not linked to Central; their departments are left as they are`);
   }
 
-  return { links, renames, creates, adds, removes, profileUnits, managedCount, warnings };
+  return { links, renames, creates, parents, adds, removes, profileUnits, managedCount, warnings };
 }
 
 // True when the plan would remove too much at once to apply without a person looking.
@@ -286,6 +323,9 @@ export function describeStructurePlan(plan: StructurePlan): string[] {
     ...plan.links.map((item) => `Link department ${item.name} to its Central unit`),
     ...plan.renames.map((item) => `Rename department ${item.from} to ${item.to}`),
     ...plan.creates.map((unit) => `Create department ${unit.name}`),
+    ...plan.parents.map((item) => item.parentUnitId
+      ? `Set department ${item.unitId} under its Central parent`
+      : `Move department ${item.unitId} to the top level`),
     ...plan.adds.map((item) => `Add ${item.email} as ${item.role} of ${item.unitName}`),
     ...plan.removes.map((item) => `Remove ${item.email} as ${item.role} of ${item.departmentName}`),
   ];
@@ -298,7 +338,7 @@ export type CentralStructureStore = {
 
 async function loadStructure(client: PoolClient): Promise<StructureLocal> {
   const [departments, departmentRoles, memberships, users] = await Promise.all([
-    client.query(`SELECT id::text, name, central_unit_id AS "centralUnitId" FROM departments`),
+    client.query(`SELECT id::text, name, central_unit_id AS "centralUnitId", parent_id::text AS "parentId" FROM departments`),
     client.query(
       `SELECT id::text, department_id::text AS "departmentId", role::text AS role
          FROM department_roles WHERE department_id IS NOT NULL`,
@@ -372,6 +412,17 @@ export const pgStructureStore: CentralStructureStore = {
         `SELECT id::text, central_unit_id AS "unitId" FROM departments WHERE central_unit_id IS NOT NULL`,
       );
       const departmentOfUnit = new Map(linked.rows.map((row) => [row.unitId, row.id]));
+
+      for (const item of plan.parents) {
+        const departmentId = departmentOfUnit.get(item.unitId);
+        if (!departmentId) continue;
+        const parentDepartmentId = item.parentUnitId ? departmentOfUnit.get(item.parentUnitId) ?? null : null;
+        if (item.parentUnitId && !parentDepartmentId) continue;
+        await client.query(
+          `UPDATE departments SET parent_id = $2::uuid, updated_at = NOW() WHERE id::text = $1`,
+          [departmentId, parentDepartmentId],
+        );
+      }
 
       // Keep the role definitions the old ProofPoint department flow created,
       // even before the first person is assigned to a new Central unit.

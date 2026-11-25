@@ -333,6 +333,12 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { template_id, manager_id, director_id, staff_id } = body;
     const roles = ((session.user as { roles?: string[] }).roles ?? []) as string[];
+    if (typeof staff_id === "string" && staff_id === session.user.id) {
+      return NextResponse.json(
+        { error: "You cannot start a manager-led appraisal for yourself. Use self appraisal instead." },
+        { status: 400 },
+      );
+    }
     const isManagerLed = typeof staff_id === "string" && staff_id !== session.user.id;
     if (isManagerLed && !roles.some((role) => role === "manager" || role === "admin")) {
       return NextResponse.json({ error: "Only managers can initiate staff appraisals" }, { status: 403 });

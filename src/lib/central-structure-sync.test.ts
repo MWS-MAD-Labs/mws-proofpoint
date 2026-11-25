@@ -111,11 +111,14 @@ describe("planCentralStructure memberships", () => {
     );
     assert.deepEqual(
       picked.adds.map(({ unitId, role }) => `${unitId}:${role}`).sort(),
-      ["unit-es:manager", "unit-jh:manager"],
+      ["unit-es:manager", "unit-es:staff", "unit-jh:manager"],
     );
 
     const own = planCentralStructure(units, [person({ roles: ["manager"] })], local({ users: [user("u-1", "p-1", "d-es")] }));
-    assert.deepEqual(own.adds.map(({ unitId, role }) => `${unitId}:${role}`).sort(), ["unit-es:manager"]);
+    assert.deepEqual(
+      own.adds.map(({ unitId, role }) => `${unitId}:${role}`).sort(),
+      ["unit-es:manager", "unit-es:staff"],
+    );
   });
 
   it("keeps a global admin global while applying its manager capability to selected units", () => {
@@ -141,7 +144,7 @@ describe("planCentralStructure memberships", () => {
     assert.deepEqual(plan.adds.map(({ unitId, role }) => `${unitId}:${role}`), ["unit-es:staff"]);
   });
 
-  it("uses an explicit home-unit leadership assignment instead of default staff", () => {
+  it("keeps staff membership when an employee also leads their home unit", () => {
     const plan = planCentralStructure(
       units,
       [person({
@@ -151,7 +154,10 @@ describe("planCentralStructure memberships", () => {
       local({ users: [user("u-1", "p-1", "d-es")] }),
     );
 
-    assert.deepEqual(plan.adds.map(({ unitId, role }) => `${unitId}:${role}`), ["unit-es:manager"]);
+    assert.deepEqual(
+      plan.adds.map(({ unitId, role }) => `${unitId}:${role}`).sort(),
+      ["unit-es:manager", "unit-es:staff"],
+    );
   });
 
   it("treats a managed staff list as authoritative, including when it is empty", () => {
@@ -326,5 +332,48 @@ describe("centralStructureInput", () => {
         { unitId: "unit-jh", role: "manager" },
       ],
     });
+  });
+
+  it("expands a parent Manager assignment to every child Unit", () => {
+    const hierarchy = [
+      { id: "unit-mad", name: "MAD Lab", parent_unit_id: null },
+      { id: "unit-fullstack", name: "Fullstack", parent_unit_id: "unit-mad" },
+      { id: "unit-it", name: "IT Support", parent_unit_id: "unit-mad" },
+    ];
+    const { people, managedAssignments } = centralStructureInput(
+      [{ person_id: "p-1", role: "ADMIN", permissions: ["proofpoint.access", "proofpoint.admin"] }] as CentralDirectoryEntitlement[],
+      [{ person_id: "p-1", unit_id: "unit-mad", unit: "MAD Lab" }] as CentralDirectoryEmployee[],
+      hierarchy,
+      [{ person_id: "p-1", unit_id: "unit-mad", permission_key: "proofpoint.manager" }],
+      [{ unit_id: "unit-mad", permission_key: "proofpoint.manager" }],
+    );
+
+    assert.deepEqual(
+      people[0]?.unitAssignments.map(({ unitId, role }) => `${unitId}:${role}`).sort(),
+      ["unit-fullstack:manager", "unit-it:manager", "unit-mad:manager"],
+    );
+    assert.deepEqual(
+      managedAssignments.map(({ unitId, role }) => `${unitId}:${role}`).sort(),
+      ["unit-fullstack:manager", "unit-it:manager", "unit-mad:manager"],
+    );
+  });
+
+  it("plans the ProofPoint department hierarchy from Central Units", () => {
+    const hierarchyUnits: StructureUnit[] = [
+      { id: "unit-mad", name: "MAD Lab", parentUnitId: null },
+      { id: "unit-it", name: "IT Support", parentUnitId: "unit-mad" },
+    ];
+    const plan = planCentralStructure(
+      hierarchyUnits,
+      [],
+      local({
+        departments: [
+          { id: "d-mad", name: "MAD Lab", centralUnitId: "unit-mad", parentId: null },
+          { id: "d-it", name: "IT Support", centralUnitId: "unit-it", parentId: null },
+        ],
+      }),
+    );
+
+    assert.deepEqual(plan.parents, [{ unitId: "unit-it", parentUnitId: "unit-mad" }]);
   });
 });

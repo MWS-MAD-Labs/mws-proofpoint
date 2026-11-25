@@ -29,6 +29,7 @@ export const permissionManifest = [
       label: "Managers",
       mode: "explicit",
       exclusive_group: "proofpoint.department_role",
+      include_descendants: true,
     },
   },
   {
@@ -50,7 +51,6 @@ export const permissionManifest = [
       scope: "unit",
       label: "Staff",
       mode: "derived_home_unit",
-      exclusive_group: "proofpoint.department_role",
     },
   },
   {
@@ -134,6 +134,7 @@ function comparePermissions(registered, usage) {
         label: value.label,
         mode: value.mode,
         exclusive_group: value.exclusive_group ?? null,
+        include_descendants: value.include_descendants ?? false,
       }
     : null;
   return {

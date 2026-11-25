@@ -64,6 +64,7 @@ export async function GET() {
           LIMIT 1
        ) active_assessment ON TRUE
       WHERE u.status = 'active'
+        AND u.id <> $2
         AND (SELECT COUNT(*) FROM workflow_steps WHERE workflow_id = wd.id) = 3
         AND EXISTS (
           SELECT 1 FROM workflow_steps
